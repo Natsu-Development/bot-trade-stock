@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  # Python gRPC Stock Data Service
+  broker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.broker
+    container_name: trading-broker
+    ports:
+      - "50051:50051"
+    networks:
+      - trading-network
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import grpc; channel = grpc.insecure_channel('localhost:50051'); channel.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Go Trading Bot Service
+  bot-trade:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.bot-trade
+    container_name: trading-bot
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - GRPC_SERVER_ADDR=broker:50051  # Override for Docker networking
+    env_file:
+      - ../bot-trade/.env
+    depends_on:
+      broker:
+        condition: service_healthy
+    networks:
+      - trading-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+networks:
+  trading-network:
+    driver: bridge
+

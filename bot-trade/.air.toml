@@ -1,0 +1,94 @@
+root = "."
+testdata_dir = "testdata" 
+tmp_dir = "tmp"
+
+[build]
+  # Binary to run
+  args_bin = []
+  bin = "./tmp/main"
+  
+  # Build command optimized for Go 1.23.2
+  cmd = "go build -o ./tmp/main cmd/server/main.go"
+  
+  # Delay before restart (ms) - optimized for development
+  delay = 1000
+  
+  # Directories to exclude from watching
+  exclude_dir = [
+    "assets", 
+    "tmp", 
+    "vendor", 
+    "testdata", 
+    "node_modules", 
+    ".git",
+    ".idea",
+    ".vscode",
+    "scripts"
+  ]
+  
+  # Files to exclude
+  exclude_file = []
+  
+  # Regex patterns to exclude (optimized for Go 1.23.2)
+  exclude_regex = ["_test.go", "_gen.go", ".pb.go", ".*_templ.go"]
+  
+  # Watch configuration - optimized for hot reloading
+  exclude_unchanged = true
+  follow_symlink = false
+  full_bin = ""
+  
+  # Directories to watch (empty means watch root)
+  include_dir = []
+  
+  # File extensions to watch (Go 1.23.2 compatible)
+  include_ext = ["go", "mod", "sum"]
+  
+  # Specific files to watch
+  include_file = []
+  
+  # Kill delay before stopping old process - reduced for faster restarts
+  kill_delay = "1s"
+  
+  # Log file for build errors
+  log = "build-errors.log"
+  
+  # Use polling for file watching (false for better performance)
+  poll = false
+  poll_interval = 0
+  
+  # Commands to run after successful build
+  post_cmd = []
+  
+  # Commands to run before build
+  pre_cmd = ["echo '🔥 Air: Building with Go 1.23.2...'"]
+  
+  # Rerun on crashes - disabled for cleaner development
+  rerun = false
+  rerun_delay = 500
+  
+  # Send interrupt signal for graceful shutdown
+  send_interrupt = true
+  
+  # Stop on root directory changes
+  stop_on_root = false
+
+[color]
+  app = "blue"
+  build = "yellow"
+  main = "magenta"
+  runner = "green" 
+  watcher = "cyan"
+
+[log]
+  # Show timestamps in logs
+  main_only = false
+  time = true
+
+[misc]
+  # Clean binary on exit
+  clean_on_exit = true
+
+[screen]
+  # Clear screen on rebuild for better visibility
+  clear_on_rebuild = true
+  keep_scroll = false

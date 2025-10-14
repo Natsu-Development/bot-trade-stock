@@ -1,0 +1,19 @@
+# Documentation
+*.md
+
+# Build artifacts
+server
+main
+.air.toml
+
+# Environment files
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+

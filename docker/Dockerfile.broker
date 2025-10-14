@@ -1,0 +1,32 @@
+# Use Python 3.10 as base image
+FROM python:3.10-slim
+
+# Set working directory
+WORKDIR /app
+
+# Copy dockerignore for this service
+COPY docker/.dockerignore.broker .dockerignore
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements file
+COPY broker/requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy gRPC generated files
+COPY broker/grpc-broker/vnstock/ ./grpc-broker/vnstock/
+
+# Copy server script
+COPY broker/vnstock_server.py .
+
+# Expose gRPC port
+EXPOSE 50051
+
+# Run the gRPC server
+CMD ["python3", "vnstock_server.py"]
+

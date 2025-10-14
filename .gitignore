@@ -1,0 +1,38 @@
+# Environment Files (sensitive data)
+.env
+.env.*
+!.env.example
+
+# AI Context Files
+.cursor/
+.kiro/
+
+# Go Build Artifacts
+main
+server
+bot-trade/main
+bot-trade/server
+*.test
+*.out
+tmp/
+
+# Python
+__pycache__/
+*.pyc
+broker/venv/
+
+# Logs
+*.log
+logs/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary Files
+*.tmp
+*.bak
