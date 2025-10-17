@@ -44,7 +44,15 @@ echo "" >> "$OUTPUT_FILE"
 # Extract and add each variable
 VARS_COUNT=$(echo "$VARS_JSON" | jq '.variables | length')
 if [ "$VARS_COUNT" -gt 0 ]; then
-    echo "$VARS_JSON" | jq -r '.variables[] | "\(.name)=\(.value)"' >> "$OUTPUT_FILE"
+    # Write variables and validate each line
+    while IFS= read -r var_line; do
+        # Only write lines that look like valid environment variables (NAME=VALUE)
+        if [[ "$var_line" =~ ^[A-Za-z_][A-Za-z0-9_]*=.* ]]; then
+            echo "$var_line" >> "$OUTPUT_FILE"
+        else
+            echo "⚠️  Skipping invalid variable: $var_line"
+        fi
+    done < <(echo "$VARS_JSON" | jq -r '.variables[] | "\(.name)=\(.value)"')
     echo "📋 Found $VARS_COUNT GitHub variables"
 else
     echo "⚠️  No GitHub variables found"

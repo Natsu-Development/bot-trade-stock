@@ -36,8 +36,24 @@ echo "🏷️  Tag: $IMAGE_TAG"
 
 # Load environment variables
 echo "📥 Loading environment variables..."
+
+# Function to safely load env file (skip comments and empty lines)
+load_env_file() {
+    local env_file="$1"
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip comments and empty lines
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        
+        # Only process valid environment variable assignments
+        if [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*=.* ]]; then
+            export "$line"
+        fi
+    done < "$env_file"
+}
+
 set -a  # Automatically export all variables
-source "$ENV_FILE"
+load_env_file "$ENV_FILE"
 
 # Override with registry and image tag
 export DOCKER_REGISTRY="$REGISTRY"
@@ -46,7 +62,7 @@ export IMAGE_TAG="$IMAGE_TAG"
 # Load secrets if provided
 if [ -n "$SECRETS_ENV_FILE" ] && [ -f "$SECRETS_ENV_FILE" ]; then
     echo "🔒 Loading secrets from: $SECRETS_ENV_FILE"
-    source "$SECRETS_ENV_FILE"
+    load_env_file "$SECRETS_ENV_FILE"
 fi
 
 set +a  # Stop automatically exporting variables
