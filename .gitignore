@@ -7,12 +7,9 @@
 .cursor/
 .kiro/
 
-# Go Build Artifacts
-main
-server
+# Go Build Artifacts (only at root level of bot-trade)
 bot-trade/main
 bot-trade/server
-!bot-trade/cmd/
 *.test
 *.out
 tmp/
