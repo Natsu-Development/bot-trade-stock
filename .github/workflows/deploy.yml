@@ -19,8 +19,8 @@ on:
         options: [oracle, aws, generic]
 
 env:
-  DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY || vars.DOCKER_REGISTRY || 'docker.io' }}
-  DOCKER_NAMESPACE: ${{ secrets.DOCKER_NAMESPACE || vars.DOCKER_NAMESPACE }}
+  DOCKER_REGISTRY: ${{ vars.DOCKER_REGISTRY }}
+  DOCKER_NAMESPACE: ${{ vars.DOCKER_NAMESPACE }}
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
@@ -279,6 +279,7 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     needs: [build-images, build-config]
+    environment: production
     if: always() && vars.TELEGRAM_ENABLED == 'true'
     
     steps:

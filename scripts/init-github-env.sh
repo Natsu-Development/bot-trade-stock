@@ -313,61 +313,7 @@ echo "   3. Check GitHub Actions for build results"
 echo "   4. When ready, uncomment deploy job in workflow"
 echo ""
 
-# Create a summary file in project root
-cat > ../github-setup-summary.md << EOF
-# GitHub Environment Setup Summary
-
-Generated on: $(date)
-Repository: $REPO_OWNER/$REPO_NAME
-
-## ✅ Variables Created
-
-The following variables were automatically created in your GitHub repository:
-
-### 🌐 ${ENVIRONMENT^} Environment Variables
-Environment variables were created for the ${ENVIRONMENT^} environment.
-
-## 🌍 Environment Configuration
-
-### ${ENVIRONMENT^} Environment
-- **Status**: Created/Verified
-- **Branch Policies**: Unrestricted
-- **Reviewers**: None
-- **Wait Timer**: 0 seconds
-
-## 🔒 Secrets Still Needed
-
-You need to manually create these secrets in GitHub:
-
-### Docker Hub
-- \`DOCKER_USERNAME\`: Your Docker Hub username
-- \`DOCKER_PASSWORD\`: Your Docker Hub token
-
-### Application Secrets
-- \`TELEGRAM_BOT_TOKEN\`: Your Telegram bot token
-- \`TELEGRAM_CHAT_ID\`: Your Telegram chat ID
-- \`GITHUB_TOKEN\`: Your GitHub token
-
-### Cloud Provider Secrets (choose one or more)
-
-#### Oracle Cloud (OCI)
-- \`OCI_HOST\`: Your Oracle instance IP
-- \`OCI_USER\`: ubuntu
-- \`OCI_SSH_KEY\`: Your private SSH key
-
-#### AWS EC2
-- \`AWS_HOST\`: Your EC2 instance IP
-- \`AWS_USER\`: ec2-user
-- \`AWS_SSH_KEY\`: Your EC2 private key
-
-#### Generic VPS
-- \`VPS_HOST\`: Your VPS IP
-- \`VPS_USER\`: root
-- \`VPS_SSH_KEY\`: Your VPS private key
-
-EOF
-
-echo "📚 For detailed setup instructions, see ../github-setup-summary.md"
+echo "📚 Setup completed! Check your GitHub repository environment settings."
 echo ""
 echo "🎯 Next steps:"
 echo "   1. Go to https://github.com/$REPO_OWNER/$REPO_NAME/settings/secrets/actions"
