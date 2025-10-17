@@ -1,9 +1,9 @@
 # Documentation
 *.md
 
-# Build artifacts
-server
-main
+# Build artifacts (only at root level)
+/server
+/main
 .air.toml
 
 # Environment files

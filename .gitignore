@@ -12,6 +12,7 @@ main
 server
 bot-trade/main
 bot-trade/server
+!bot-trade/cmd/
 *.test
 *.out
 tmp/
