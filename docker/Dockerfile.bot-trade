@@ -10,14 +10,17 @@ WORKDIR /app
 # Copy dockerignore for this service
 COPY docker/.dockerignore.bot-trade .dockerignore
 
-# Copy go mod files
+# Copy go mod files first for better layer caching
 COPY bot-trade/go.mod bot-trade/go.sum ./
 
 # Download dependencies
 RUN go mod download
 
-# Copy source code
+# Copy all source code including pkg, internal, and cmd
 COPY bot-trade/ .
+
+# Verify directory structure
+RUN ls -la && ls -la cmd/ && ls -la cmd/server/
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server ./cmd/server
