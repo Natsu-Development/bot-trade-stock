@@ -54,6 +54,12 @@ git commit -m "Deploy trading bot"
 git push origin master
 ```
 
+**What happens:**
+1. ✅ Builds Docker images → Pushes to Docker Hub
+2. ✅ Creates deployment package (NO secrets inside)
+3. ✅ Deploys to cloud provider (secrets injected via SSH)
+4. ✅ Sends Telegram notification
+
 ## 🐳 Local Development
 
 ### Docker Compose (Recommended)
@@ -111,13 +117,43 @@ TELEGRAM_ENABLED=true
 
 ## 🌩️ Cloud Deployment
 
-The system supports multiple cloud providers:
-
+### Supported Providers
 - **Oracle Cloud Infrastructure (OCI)**
 - **AWS EC2**
 - **Generic VPS**
 
-Deployment is automated via GitHub Actions. Push to `master` branch to deploy to production.
+### Deployment Flow (Secure & Automated)
+
+```
+┌─────────────────────────────────────────────┐
+│ GitHub Actions (Build)                      │
+│ • Build Docker images                       │
+│ • Push to Docker Hub                        │
+│ • Create deployment package (NO secrets)    │
+└─────────────────────────────────────────────┘
+                    ↓ SSH
+┌─────────────────────────────────────────────┐
+│ Production VM (Deploy)                      │
+│ • Download artifact                         │
+│ • Inject secrets via SSH                    │
+│ • Create .env.secrets (chmod 600)           │
+│ • Start containers                          │
+└─────────────────────────────────────────────┘
+```
+
+**Security:** Secrets are NEVER stored in artifacts, only injected via SSH during deployment.
+
+### Deploy Commands
+
+```bash
+# Automatic deployment
+git push origin master
+
+# Manual deployment from artifact
+# 1. Download artifact from GitHub Actions
+# 2. SSH to your server
+# 3. Run: ./scripts/deploy-generic.sh <provider>
+```
 
 ## 🔧 Development Commands
 
@@ -144,25 +180,56 @@ The bot analyzes RSI divergences:
 
 Analysis runs on scheduled intervals and sends notifications via Telegram.
 
+## 🔒 Security Features
+
+- ✅ **Secure Secret Management**: Secrets injected via SSH, never in artifacts
+- ✅ **Automatic Verification**: Build fails if secrets detected in artifact
+- ✅ **Encrypted Transmission**: All secrets passed via encrypted SSH connection
+- ✅ **Secure Storage**: `.env.secrets` on VM with chmod 600 permissions
+- ✅ **No Git Exposure**: Secrets never committed to repository
+- ✅ **Industry Standard**: Follows DevOps best practices (KISS principle)
+
 ## 🛠️ Troubleshooting
 
-### Common Issues
+### Local Development Issues
 
 **Services not starting:**
 ```bash
-make docker-logs  # Check logs
-make docker-restart  # Restart services
+make docker-logs        # Check logs
+make docker-restart     # Restart services
+make docker-clean       # Clean rebuild
 ```
 
 **API not responding:**
 ```bash
-make docker-test  # Test endpoints
+make docker-test        # Test endpoints
+make docker-ps          # Check container status
 ```
 
-**GitHub deployment fails:**
-- Check all required secrets are set
-- Verify GitHub token has `repo` permissions
-- Review GitHub Actions logs
+### Deployment Issues
+
+**GitHub Actions build fails:**
+- ✅ Check GitHub Variables are configured (Settings → Secrets and variables → Variables)
+- ✅ Check required Secrets are set (Settings → Secrets and variables → Secrets)
+- ✅ Review GitHub Actions logs for specific errors
+
+**Deployment to cloud fails:**
+- ✅ Verify cloud provider secrets (OCI_HOST, OCI_USER, OCI_SSH_KEY, etc.)
+- ✅ Check SSH key format (should be private key, no passphrase)
+- ✅ Ensure VM has Docker and docker-compose installed
+
+**Containers not starting on VM:**
+```bash
+# SSH to your VM
+ssh user@your-server
+
+# Check if .env.secrets exists
+ls -la /opt/trading-app/.env.secrets
+
+# Check container logs
+cd /opt/trading-app
+docker-compose logs
+```
 
 ## 📚 Project Structure
 

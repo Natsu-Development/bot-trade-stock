@@ -110,6 +110,30 @@ else
     exit 1
 fi
 
+# 🔒 SECURITY: Create .env.secrets file from environment variables
+echo "🔐 Setting up secrets..."
+if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+    echo "✅ Creating .env.secrets from environment variables..."
+    cat > .env.secrets << EOF
+# Secrets (injected during deployment)
+TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
+EOF
+    chmod 600 .env.secrets
+    echo "✅ Secrets file created with secure permissions (600)"
+elif [ -f .env.secrets ]; then
+    echo "✅ Using existing .env.secrets file"
+    chmod 600 .env.secrets
+else
+    echo "❌ ERROR: No secrets provided!"
+    echo "   Secrets must be passed via environment variables:"
+    echo "   - TELEGRAM_BOT_TOKEN"
+    echo "   - TELEGRAM_CHAT_ID"
+    echo ""
+    echo "   Or create .env.secrets file manually in $APP_DIR"
+    exit 1
+fi
+
 # Pull latest images
 echo "📥 Pulling Docker images..."
 $DOCKER_COMPOSE_CMD pull

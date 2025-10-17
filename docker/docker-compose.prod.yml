@@ -25,6 +25,11 @@ services:
     container_name: trading-bot
     ports:
       - "8080:8080"
+    
+    # 🔒 SECURITY: Secrets loaded from external file (created during deployment)
+    env_file:
+      - .env.secrets  # Created on VM, NEVER in artifact
+    
     environment:
       # System Configuration
       - NODE_ENV=${NODE_ENV:-production}
@@ -95,10 +100,9 @@ services:
       # Logging Configuration
       - LOG_LEVEL=${LOG_LEVEL}
       
-      # Telegram Configuration
+      # Telegram Configuration (non-sensitive)
       - TELEGRAM_ENABLED=${TELEGRAM_ENABLED}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      # 🔒 TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID loaded from .env.secrets
       
     depends_on:
       broker:

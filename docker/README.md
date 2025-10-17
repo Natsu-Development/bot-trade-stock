@@ -1,18 +1,20 @@
-# Docker Configuration
+# Docker Configuration 🐳
 
-This directory contains all Docker-related configuration files for the Trading project, organized for easy maintenance.
+Docker configuration for the Trading Bot System with secure deployment practices.
 
 ## 📁 Directory Structure
 
 ```
 docker/
-├── docker-compose.yml          # Main compose configuration
-├── README.md                   # This documentation
-├── Dockerfile.broker           # Python gRPC broker service
-├── Dockerfile.bot-trade        # Go trading bot service
-├── .dockerignore.broker        # Broker service ignore rules
-└── .dockerignore.bot-trade     # Bot-trade service ignore rules
+├── docker-compose.yml          # Development compose (with .env)
+├── docker-compose.prod.yml     # Production template (uses env_file)
+├── docker-compose.secure.yml   # Secure compose (optional)
+└── README.md                   # This documentation
 ```
+
+**Note:** Dockerfiles are in respective service directories:
+- `bot-trade/Dockerfile` - Go trading bot service
+- `broker/Dockerfile` - Python gRPC broker service
 
 ## 🚀 Quick Start
 
@@ -40,13 +42,37 @@ make docker-down        # Stop all services
 
 ## ⚙️ Configuration
 
-### Environment Files
-- **../bot-trade/env.example**: Environment template for bot-trade service
-- **../bot-trade/.env**: Actual bot-trade environment file (git-ignored)
+### Local Development
+Uses `docker-compose.yml` with environment from `bot-trade/.env` file:
 
-### Docker Ignore Files
-- **.dockerignore.broker**: Excludes Python cache, venv, logs
-- **.dockerignore.bot-trade**: Excludes Go binaries, build artifacts
+```bash
+# Create .env from template
+cp bot-trade/env.example bot-trade/.env
+# Edit with your values
+nano bot-trade/.env
+```
+
+### Production Deployment
+Uses `docker-compose.prod.yml` with secure secret injection:
+
+```yaml
+# docker-compose.prod.yml structure
+services:
+  bot-trade:
+    env_file:
+      - .env.secrets  # Created during deployment, NOT in artifact
+    environment:
+      # Non-secret config substituted from GitHub Variables
+      - RSI_PERIOD=${RSI_PERIOD}
+      - HTTP_PORT=${HTTP_PORT}
+```
+
+**Security:** Secrets are injected via SSH during deployment, never stored in artifacts.
+
+### Environment Files
+- `bot-trade/env.example` - Template with all variables
+- `bot-trade/.env` - Local development (git-ignored)
+- `.env.secrets` - Production secrets (created on VM only)
 
 ## 🐳 Docker Commands
 
@@ -83,53 +109,101 @@ make docker-shell-broker # Shell into broker container
   - Bot API: `http://localhost:8080`
   - Broker gRPC: `localhost:50051`
 
-## 🔒 Security Notes
+## 🔒 Security Best Practices
 
-1. **Environment Files**: Never commit `.env` files with sensitive data
-2. **Docker Ignore**: Properly configured to exclude sensitive files
-## 📦 Build Contexts and .dockerignore
+### Local Development
+1. ✅ **Never commit** `.env` files with real secrets
+2. ✅ Use `.env.example` as template only
+3. ✅ `.dockerignore` properly configured in each service directory
 
-- We use per-service build contexts so each service can own its ignore rules.
-  - Bot-Trade image: context is `bot-trade/`, Dockerfile at `docker/Dockerfile.bot-trade`, rules in `bot-trade/.dockerignore` (implicit via context).
-  - Broker image: context is `broker/`, Dockerfile at `docker/Dockerfile.broker`, rules in `broker/.dockerignore` (implicit via context).
-- The files in `docker/.dockerignore.*` document suggested ignores and can be copied into each service directory as `.dockerignore` when needed.
+### Production Deployment
+1. ✅ **Secrets in artifacts**: NEVER - secrets injected via SSH
+2. ✅ **Secret storage**: `.env.secrets` on VM only (chmod 600)
+3. ✅ **GitHub Variables**: Non-secret config only
+4. ✅ **GitHub Secrets**: Sensitive data (TELEGRAM_BOT_TOKEN, etc.)
 
-3. **Network Isolation**: Services communicate only within Docker network
-4. **Health Checks**: Both services have health monitoring
-
-## 🛠 Maintenance
-
-### Adding New Services
-1. Create `Dockerfile.servicename`
-2. Add corresponding `.dockerignore.servicename`
-3. Update `docker-compose.yml`
-4. Update this README
-
-### Updating Configuration
-1. Modify environment template in `../bot-trade/env.example`
-2. Update environment variables in `../bot-trade/.env`
-3. Rebuild images: `make docker-rebuild`
-
-### Troubleshooting
-```bash
-# Check service status
-make docker-ps
-
-# View specific service logs
-make docker-logs-bot
-
-# Test connectivity
-make docker-test
-
-# Clean rebuild
-make docker-clean && make docker-up
+### Security Flow (Production)
+```
+GitHub Actions (Build)
+  ↓ Creates artifact (NO secrets)
+SSH to Production VM
+  ↓ Injects secrets
+Create .env.secrets (chmod 600)
+  ↓ Only on VM, never in artifact
+Docker containers read .env.secrets
+  ✅ Secure!
 ```
 
-## 📋 Environment Variables
+### Network & Health
+- ✅ **Network Isolation**: Services communicate only within Docker network
+- ✅ **Health Checks**: Both services monitored automatically
+- ✅ **Restart Policy**: `unless-stopped` for high availability
 
-### Service-Level (bot-trade/.env)
-- `GRPC_SERVER_ADDR`: Overridden to `broker:50051` for Docker
-- `HTTP_PORT`: Internal service port
-- Trading-specific configuration (see `../bot-trade/env.example`)
+## 🛠 Maintenance & Troubleshooting
 
-This organized structure makes Docker configuration maintainable and scalable! 🎯
+### Updating Configuration
+
+**Local Development:**
+```bash
+# 1. Edit .env file
+nano bot-trade/.env
+
+# 2. Restart services
+make docker-restart
+```
+
+**Production:**
+```bash
+# 1. Update GitHub Variables (non-secret config)
+# 2. Update GitHub Secrets (sensitive data)
+# 3. Push to trigger new deployment
+git push origin master
+```
+
+### Common Issues
+
+**Services won't start:**
+```bash
+make docker-ps              # Check status
+make docker-logs            # View all logs
+make docker-logs-bot        # Bot service only
+make docker-clean && make docker-up  # Clean rebuild
+```
+
+**Environment variables not working:**
+```bash
+# Local: Check .env file
+cat bot-trade/.env
+
+# Production: Check .env.secrets on VM
+ssh user@server
+cat /opt/trading-app/.env.secrets
+```
+
+**Network connectivity issues:**
+```bash
+# Test from bot to broker
+make docker-shell-bot
+# Inside container:
+nc -zv broker 50051
+```
+
+## 📋 Key Environment Variables
+
+**Non-secret (GitHub Variables):**
+- `RSI_PERIOD` - RSI calculation period (default: 14)
+- `HTTP_PORT` - API server port (default: 8080)
+- `GRPC_SERVER_ADDR` - Broker address (local: `localhost:50051`, docker: `broker:50051`)
+- `LOG_LEVEL` - Logging level (debug, info, warn, error)
+- `BEARISH_1D_ENABLED` - Enable daily bearish analysis
+- `DEFAULT_SYMBOLS` - Comma-separated stock symbols
+
+**Secrets (GitHub Secrets, production only):**
+- `TELEGRAM_BOT_TOKEN` - Telegram bot authentication token
+- `TELEGRAM_CHAT_ID` - Telegram chat ID for notifications
+
+See `bot-trade/env.example` for complete list of all variables.
+
+---
+
+🎯 **Simple, Secure, and Scalable Docker Configuration!**
