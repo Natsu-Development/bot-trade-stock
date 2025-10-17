@@ -1,0 +1,333 @@
+name: Build Trading App (Deploy Disabled)
+
+on:
+  push:
+    branches: [master, develop]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'production'
+        type: choice
+        options: [production, staging]
+      cloud_provider:
+        description: 'Cloud provider for deployment'
+        required: true
+        default: 'oracle'
+        type: choice
+        options: [oracle, aws, generic]
+
+env:
+  DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY || vars.DOCKER_REGISTRY || 'docker.io' }}
+  DOCKER_NAMESPACE: ${{ secrets.DOCKER_NAMESPACE || vars.DOCKER_NAMESPACE }}
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  # Build and push Docker images to Docker Hub
+  build-images:
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      registry: ${{ env.DOCKER_REGISTRY }}
+      namespace: ${{ env.DOCKER_NAMESPACE }}
+      broker-image: ${{ env.DOCKER_NAMESPACE }}/trading-broker:${{ env.IMAGE_TAG }}
+      bot-image: ${{ env.DOCKER_NAMESPACE }}/trading-bot:${{ env.IMAGE_TAG }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push broker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.broker
+          push: true
+          tags: |
+            ${{ env.DOCKER_NAMESPACE }}/trading-broker:${{ env.IMAGE_TAG }}
+            ${{ env.DOCKER_NAMESPACE }}/trading-broker:latest
+          labels: |
+            org.opencontainers.image.title=Trading Broker
+            org.opencontainers.image.description=Python gRPC Stock Data Service
+            org.opencontainers.image.source=${{ github.repositoryUrl }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push bot image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.bot-trade
+          push: true
+          tags: |
+            ${{ env.DOCKER_NAMESPACE }}/trading-bot:${{ env.IMAGE_TAG }}
+            ${{ env.DOCKER_NAMESPACE }}/trading-bot:latest
+          labels: |
+            org.opencontainers.image.title=Trading Bot
+            org.opencontainers.image.description=Go Trading Bot Service
+            org.opencontainers.image.source=${{ github.repositoryUrl }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Build deployment configuration
+  build-config:
+    runs-on: ubuntu-latest
+    needs: build-images
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq curl gettext-base
+
+      - name: Fetch GitHub environment variables
+        run: |
+          echo "🔍 Fetching GitHub repository variables..."
+          chmod +x scripts/fetch-github-vars.sh
+          ./scripts/fetch-github-vars.sh \
+            "${{ github.repository_owner }}" \
+            "${{ github.event.repository.name }}" \
+            "${{ secrets.GIT_TOKEN }}" \
+            "github-vars.env"
+
+      - name: Create secrets environment file
+        run: |
+          echo "🔒 Creating secrets environment file..."
+          cat > secrets.env << 'EOF'
+          # Secrets from GitHub (injected during deployment)
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
+          EOF
+
+      - name: Build docker-compose configuration
+        run: |
+          echo "🐳 Building docker-compose configuration..."
+          chmod +x scripts/build-config.sh
+          ./scripts/build-config.sh \
+            "docker/docker-compose.prod.yml" \
+            "github-vars.env" \
+            "${{ env.DOCKER_NAMESPACE }}" \
+            "${{ env.IMAGE_TAG }}" \
+            "secrets.env" \
+            "docker-compose.final.yml"
+
+      - name: Create deployment package
+        run: |
+          echo "📦 Creating deployment package..."
+          mkdir -p deployment-package
+          
+          # Copy final docker-compose file
+          cp docker-compose.final.yml deployment-package/docker-compose.yml
+          
+          # Copy deployment scripts
+          cp -r scripts/ deployment-package/scripts/
+          chmod +x deployment-package/scripts/*.sh
+          
+          # Create deployment metadata
+          cat > deployment-package/deployment-info.json << EOF
+          {
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "git_sha": "${{ github.sha }}",
+            "git_ref": "${{ github.ref }}",
+            "environment": "${{ github.ref_name == 'master' && 'production' || 'staging' }}",
+            "registry": "${{ env.DOCKER_REGISTRY }}",
+            "namespace": "${{ env.DOCKER_NAMESPACE }}",
+            "images": {
+              "broker": "${{ needs.build-images.outputs.broker-image }}",
+              "bot": "${{ needs.build-images.outputs.bot-image }}"
+            }
+          }
+          EOF
+          
+          echo "📋 Deployment package contents:"
+          find deployment-package -type f -exec ls -la {} \;
+
+      - name: Upload deployment artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-package-${{ github.sha }}
+          path: deployment-package/
+          retention-days: 30
+          compression-level: 6
+
+  # Deploy to cloud provider
+  # 🚧 DEPLOY JOB DISABLED FOR TESTING 🚧
+  # Uncomment the entire deploy job below when ready to test deployment
+  # Make sure to:
+  # 1. Configure cloud provider secrets (OCI_*, AWS_*, VPS_*)  
+  # 2. Update notify job to depend on deploy again: needs: [deploy]
+  # 3. Uncomment cleanup job if needed
+  # deploy:
+  #   runs-on: ubuntu-latest
+  #   needs: [build-images, build-config]
+  #   environment: ${{ github.ref_name == 'master' && 'production' || 'staging' }}
+    
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         - provider: ${{ github.event.inputs.cloud_provider || 'oracle' }}
+    
+  #   steps:
+  #     - name: Download deployment package
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: deployment-package-${{ github.sha }}
+  #         path: deployment-package
+
+  #     - name: Prepare deployment
+  #       run: |
+  #         echo "🚀 Preparing deployment to ${{ matrix.provider }}"
+  #         chmod +x deployment-package/scripts/*.sh
+          
+  #         # Show deployment info
+  #         echo "📋 Deployment Information:"
+  #         cat deployment-package/deployment-info.json | jq '.'
+
+  #     - name: Deploy to Oracle Cloud
+  #       if: matrix.provider == 'oracle'
+  #       uses: appleboy/scp-action@v0.1.7
+  #       with:
+  #         host: ${{ secrets.OCI_HOST }}
+  #         username: ${{ secrets.OCI_USER }}
+  #         key: ${{ secrets.OCI_SSH_KEY }}
+  #         source: "deployment-package/*"
+  #         target: "/tmp/"
+  #         strip_components: 1
+
+  #     - name: Execute Oracle Cloud deployment
+  #       if: matrix.provider == 'oracle'
+  #       uses: appleboy/ssh-action@v1.0.0
+  #       with:
+  #         host: ${{ secrets.OCI_HOST }}
+  #         username: ${{ secrets.OCI_USER }}
+  #         key: ${{ secrets.OCI_SSH_KEY }}
+  #         script_stop: true
+  #         script: |
+  #           cd /tmp
+  #           chmod +x scripts/deploy-generic.sh
+  #           ./scripts/deploy-generic.sh oracle
+
+  #     - name: Deploy to AWS EC2
+  #       if: matrix.provider == 'aws'
+  #       uses: appleboy/scp-action@v0.1.7
+  #       with:
+  #         host: ${{ secrets.AWS_HOST }}
+  #         username: ${{ secrets.AWS_USER }}
+  #         key: ${{ secrets.AWS_SSH_KEY }}
+  #         source: "deployment-package/*"
+  #         target: "/tmp/"
+  #         strip_components: 1
+
+  #     - name: Execute AWS EC2 deployment
+  #       if: matrix.provider == 'aws'
+  #       uses: appleboy/ssh-action@v1.0.0
+  #       with:
+  #         host: ${{ secrets.AWS_HOST }}
+  #         username: ${{ secrets.AWS_USER }}
+  #         key: ${{ secrets.AWS_SSH_KEY }}
+  #         script_stop: true
+  #         script: |
+  #           cd /tmp
+  #           chmod +x scripts/deploy-generic.sh
+  #           ./scripts/deploy-generic.sh aws
+
+  #     - name: Deploy to Generic VPS
+  #       if: matrix.provider == 'generic'
+  #       uses: appleboy/scp-action@v0.1.7
+  #       with:
+  #         host: ${{ secrets.VPS_HOST }}
+  #         username: ${{ secrets.VPS_USER }}
+  #         key: ${{ secrets.VPS_SSH_KEY }}
+  #         source: "deployment-package/*"
+  #         target: "/tmp/"
+  #         strip_components: 1
+
+  #     - name: Execute Generic VPS deployment
+  #       if: matrix.provider == 'generic'
+  #       uses: appleboy/ssh-action@v1.0.0
+  #       with:
+  #         host: ${{ secrets.VPS_HOST }}
+  #         username: ${{ secrets.VPS_USER }}
+  #         key: ${{ secrets.VPS_SSH_KEY }}
+  #         script_stop: true
+  #         script: |
+  #           cd /tmp
+  #           chmod +x scripts/deploy-generic.sh
+  #           ./scripts/deploy-generic.sh generic
+
+  # Notification and cleanup
+  notify:
+    runs-on: ubuntu-latest
+    needs: [build-images, build-config]
+    if: always() && vars.TELEGRAM_ENABLED == 'true'
+    
+    steps:
+      - name: Notify deployment status
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            🔧 Trading App Build Test
+            
+            Status: ${{ needs.build-images.result == 'success' && needs.build-config.result == 'success' && '✅ Build Success' || '❌ Build Failed' }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Environment: ${{ github.ref_name == 'master' && 'Production' || 'Staging' }} (Build Only)
+            Registry: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_NAMESPACE }}
+            
+            Images Built:
+            • Broker: trading-broker:${{ env.IMAGE_TAG }}
+            • Bot: trading-bot:${{ env.IMAGE_TAG }}
+            
+            Artifacts Generated:
+            • Docker Compose: ✅
+            • Deployment Package: ✅
+            
+            ${{ needs.build-images.result == 'success' && needs.build-config.result == 'success' && '🎉 Ready for deployment! Uncomment deploy job when ready.' || '⚠️ Build failed - check workflow logs' }}
+
+  # Cleanup old artifacts (runs only on master branch after deployment)
+  # Commented out since deploy job is disabled for testing
+  # cleanup:
+  #   runs-on: ubuntu-latest
+  #   needs: [deploy]
+  #   if: github.ref == 'refs/heads/master' && needs.deploy.result == 'success'
+  #   
+  #   steps:
+  #     - name: Clean up old Docker images
+  #       uses: appleboy/ssh-action@v1.0.0
+  #       continue-on-error: true
+  #       with:
+  #         host: ${{ secrets.OCI_HOST || secrets.AWS_HOST || secrets.VPS_HOST }}
+  #         username: ${{ secrets.OCI_USER || secrets.AWS_USER || secrets.VPS_USER }}
+  #         key: ${{ secrets.OCI_SSH_KEY || secrets.AWS_SSH_KEY || secrets.VPS_SSH_KEY }}
+  #         script: |
+  #           # Clean up old Docker images to save space
+  #           docker system prune -f
+  #           docker image prune -f --filter "until=72h"
+  #           
+  #           # Keep only last 3 backups
+  #           cd /opt/trading-app || exit 0
+  #           ls -1t docker-compose.backup.*.yml 2>/dev/null | tail -n +4 | xargs rm -f || true
+  #           
+  #           echo "🧹 Cleanup completed"

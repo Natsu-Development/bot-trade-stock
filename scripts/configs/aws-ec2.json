@@ -1,0 +1,52 @@
+{
+  "name": "Amazon Web Services EC2",
+  "provider": "aws",
+  "connection": {
+    "type": "ssh",
+    "port": 22,
+    "timeout": 30,
+    "key_format": "pem"
+  },
+  "deployment": {
+    "app_directory": "/opt/trading-app",
+    "docker_compose_command": "docker-compose",
+    "user_setup": [
+      "sudo mkdir -p /opt/trading-app",
+      "sudo chown $USER:$USER /opt/trading-app"
+    ],
+    "pre_deployment": [
+      "sudo yum update -y || sudo apt-get update -y",
+      "sudo yum install -y docker || sudo apt-get install -y docker.io",
+      "sudo systemctl enable docker",
+      "sudo systemctl start docker",
+      "sudo usermod -aG docker $USER",
+      "sudo curl -L \"https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)\" -o /usr/local/bin/docker-compose",
+      "sudo chmod +x /usr/local/bin/docker-compose"
+    ],
+    "health_check": {
+      "timeout": 300,
+      "interval": 10,
+      "services": ["trading-broker", "trading-bot"],
+      "endpoints": [
+        "http://localhost:8080/health"
+      ]
+    },
+    "post_deployment": [
+      "sudo iptables -I INPUT -p tcp --dport 8080 -j ACCEPT || echo 'iptables rule exists'",
+      "sudo iptables -I INPUT -p tcp --dport 50051 -j ACCEPT || echo 'iptables rule exists'",
+      "sudo iptables-save > /etc/iptables/rules.v4 || echo 'iptables save skipped'"
+    ]
+  },
+  "monitoring": {
+    "logs_directory": "/opt/trading-app/logs",
+    "metrics_enabled": true,
+    "backup_retention_days": 7,
+    "cloudwatch_enabled": true
+  },
+  "scaling": {
+    "auto_scaling": true,
+    "max_instances": 3,
+    "load_balancer": true,
+    "scaling_policy": "cpu"
+  }
+}

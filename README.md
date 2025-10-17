@@ -1,36 +1,77 @@
 # Trading Bot System 📈
 
-## Overview
-
 A high-performance trading bot system with microservices architecture, utilizing gRPC for efficient stock data retrieval and analysis.
 
-## System Components
+## 🏗️ Architecture
 
-### 1. Broker Service (Python)
-- gRPC server for stock data retrieval
-- Uses vnstock for Vietnamese stock market data
-- Persistent connection with caching mechanism
+### Services
+- **Broker Service** (Python): gRPC server for Vietnamese stock market data
+- **Bot-Trade Service** (Go): HTTP API for divergence analysis with scheduled jobs
 
-### 2. Bot-Trade Service (Go)
-- HTTP API for divergence analysis
-- Cron-based scheduled jobs
-- Clean Architecture implementation
+### Key Features
+- ✅ Microservices architecture with gRPC communication
+- ✅ RSI-based divergence analysis
+- ✅ Telegram notifications
+- ✅ Docker deployment ready
+- ✅ CI/CD with GitHub Actions
 
-## Deployment Options
+## 🚀 Quick Start
 
-### 🐳 Docker Compose (Recommended)
+### 1. Setup GitHub Environment Variables
+
 ```bash
-# Quick start
+# From project root
+cd scripts
+./init-github-env.sh
+```
+
+This interactive script will:
+- Auto-detect your GitHub repository
+- Create all environment variables from `bot-trade/env.example`
+- Set up production environment in GitHub
+
+### 2. Add Required Secrets
+
+Go to your GitHub repository → Settings → Secrets and variables → Actions
+
+**Required Secrets:**
+- `DOCKER_USERNAME` - Your Docker Hub username
+- `DOCKER_PASSWORD` - Your Docker Hub token
+- `TELEGRAM_BOT_TOKEN` - Your Telegram bot token
+- `TELEGRAM_CHAT_ID` - Your Telegram chat ID
+
+**Cloud Provider Secrets (choose one):**
+- `OCI_HOST`, `OCI_USER`, `OCI_SSH_KEY` (Oracle Cloud)
+- `AWS_HOST`, `AWS_USER`, `AWS_SSH_KEY` (AWS EC2)
+- `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` (Generic VPS)
+
+### 3. Deploy
+
+```bash
+# Push to master branch to trigger deployment
+git add .
+git commit -m "Deploy trading bot"
+git push origin master
+```
+
+## 🐳 Local Development
+
+### Docker Compose (Recommended)
+```bash
+# Start all services
 make docker-up
+
+# View logs
+make docker-logs
 
 # Test API
 make docker-test
 
-# View logs
-make docker-logs
+# Stop services
+make docker-down
 ```
 
-### 💻 Local Development
+### Manual Setup
 ```bash
 # Setup Python environment
 make python-setup
@@ -38,26 +79,47 @@ make python-setup
 # Generate protobuf files
 make proto-gen
 
-# Start services
+# Start development services
 make dev
 ```
 
-## Key Features
+## 📊 API Endpoints
 
-- ✅ Microservices architecture
-- ✅ gRPC communication
-- ✅ Divergence analysis
-- ✅ Telegram notifications
-- ✅ Flexible configuration
-- ✅ Docker deployment
+- `GET /health` - System health check
+- `GET /analyze/{symbol}/divergence/bullish` - Bullish divergence analysis
+- `GET /analyze/{symbol}/divergence/bearish` - Bearish divergence analysis
 
-## Deployment Methods
+## ⚙️ Configuration
 
-1. **Docker Compose**: Easiest, recommended for most users
-2. **Local Development**: For active development
-3. **Manual Setup**: For custom infrastructure
+Environment variables are configured in `bot-trade/env.example`:
 
-## Quick Commands
+```bash
+# Trading Configuration
+RSI_PERIOD=14
+RSI_OVERBOUGHT_THRESHOLD=70
+RSI_OVERSOLD_THRESHOLD=30
+DEFAULT_SYMBOLS=VIC,VCB,BID,CTG,TCB
+
+# Analysis Settings
+BEARISH_1D_ENABLED=true
+BULLISH_1D_ENABLED=true
+LOG_LEVEL=info
+
+# Telegram Notifications
+TELEGRAM_ENABLED=true
+```
+
+## 🌩️ Cloud Deployment
+
+The system supports multiple cloud providers:
+
+- **Oracle Cloud Infrastructure (OCI)**
+- **AWS EC2**
+- **Generic VPS**
+
+Deployment is automated via GitHub Actions. Push to `master` branch to deploy to production.
+
+## 🔧 Development Commands
 
 ```bash
 # Docker Management
@@ -65,94 +127,66 @@ make docker-up       # Start services
 make docker-down     # Stop services
 make docker-logs     # View logs
 make docker-test     # Test API
+make docker-restart  # Restart services
 
 # Development
-make python-setup    # Setup Python env
-make proto-gen       # Generate protobuf
-make dev             # Start development
+make python-setup    # Setup Python environment
+make proto-gen       # Generate protobuf files
+make dev             # Start development mode
 ```
 
-## Configuration
+## 📈 Trading Strategy
 
-- Environment variables in `docker.env.example`
-- Customize stock symbols, cron schedules
-- Optional Telegram notifications
+The bot analyzes RSI divergences:
 
-## API Endpoints
+1. **Bullish Divergence**: Price makes lower lows, RSI makes higher lows
+2. **Bearish Divergence**: Price makes higher highs, RSI makes lower highs
 
-- `/health`: System health check
-- `/analyze/{symbol}/divergence/bullish`: Bullish divergence
-- `/analyze/{symbol}/divergence/bearish`: Bearish divergence
+Analysis runs on scheduled intervals and sends notifications via Telegram.
 
-## Performance Optimization
+## 🛠️ Troubleshooting
 
-- Connection pooling
-- In-memory caching
-- Efficient data processing
-- Minimal overhead design
+### Common Issues
 
-## Monitoring & Logging
+**Services not starting:**
+```bash
+make docker-logs  # Check logs
+make docker-restart  # Restart services
+```
 
-- Structured logging
-- Health checks
-- Docker container monitoring
+**API not responding:**
+```bash
+make docker-test  # Test endpoints
+```
 
-## Security
+**GitHub deployment fails:**
+- Check all required secrets are set
+- Verify GitHub token has `repo` permissions
+- Review GitHub Actions logs
 
-- Isolated services
-- Configurable timeouts
-- Optional Telegram alerts
+## 📚 Project Structure
 
-## Scaling
+```
+Trading/
+├── bot-trade/           # Go trading bot service
+├── broker/              # Python gRPC broker service
+├── scripts/             # Deployment and setup scripts
+├── docker/              # Docker configurations
+├── proto/               # Protocol buffer definitions
+└── .github/workflows/   # CI/CD workflows
+```
 
-- Horizontal scaling for broker service
-- Stateless design
-- Resource-efficient
-
-## Troubleshooting
-
-- Check logs: `make docker-logs`
-- Verify services: `make docker-ps`
-- Restart: `make docker-restart`
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create feature branch
-3. Commit changes
-4. Push and create Pull Request
+2. Create a feature branch
+3. Make your changes
+4. Test with `make docker-test`
+5. Submit a pull request
 
-## License
+## 📄 License
 
 [Insert License Information]
-
-## Support
-
-- Open GitHub issues
-- Check documentation
-- Community support
-
-## Technologies
-
-- Go 1.23
-- Python 3.10
-- gRPC
-- Docker
-- vnstock
-- Protocol Buffers
-
-## Performance Metrics
-
-- Low latency stock data retrieval
-- Efficient divergence analysis
-- Minimal resource consumption
-
-## Future Roadmap
-
-- [ ] Multi-market support
-- [ ] Advanced machine learning models
-- [ ] Enhanced visualization
-- [ ] More trading strategies
 
 ---
 

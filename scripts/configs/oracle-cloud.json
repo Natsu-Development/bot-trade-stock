@@ -1,0 +1,44 @@
+{
+  "name": "Oracle Cloud Infrastructure (OCI)",
+  "provider": "oracle",
+  "connection": {
+    "type": "ssh",
+    "port": 22,
+    "timeout": 30
+  },
+  "deployment": {
+    "app_directory": "/opt/trading-app",
+    "docker_compose_command": "docker-compose",
+    "user_setup": [
+      "sudo mkdir -p /opt/trading-app",
+      "sudo chown $USER:$USER /opt/trading-app"
+    ],
+    "pre_deployment": [
+      "sudo systemctl enable docker",
+      "sudo systemctl start docker",
+      "sudo usermod -aG docker $USER"
+    ],
+    "health_check": {
+      "timeout": 300,
+      "interval": 10,
+      "services": ["trading-broker", "trading-bot"],
+      "endpoints": [
+        "http://localhost:8080/health"
+      ]
+    },
+    "post_deployment": [
+      "sudo ufw allow 8080/tcp",
+      "sudo ufw allow 50051/tcp"
+    ]
+  },
+  "monitoring": {
+    "logs_directory": "/opt/trading-app/logs",
+    "metrics_enabled": true,
+    "backup_retention_days": 7
+  },
+  "scaling": {
+    "auto_scaling": false,
+    "max_instances": 1,
+    "load_balancer": false
+  }
+}

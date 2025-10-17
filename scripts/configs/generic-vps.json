@@ -1,0 +1,74 @@
+{
+  "name": "Generic VPS/Virtual Machine",
+  "provider": "generic",
+  "connection": {
+    "type": "ssh",
+    "port": 22,
+    "timeout": 30
+  },
+  "deployment": {
+    "app_directory": "/opt/trading-app",
+    "docker_compose_command": "docker-compose",
+    "user_setup": [
+      "sudo mkdir -p /opt/trading-app",
+      "sudo chown $USER:$USER /opt/trading-app"
+    ],
+    "pre_deployment": [
+      "# Install Docker - detect OS and install accordingly",
+      "if command -v apt-get >/dev/null; then",
+      "  sudo apt-get update",
+      "  sudo apt-get install -y docker.io docker-compose",
+      "elif command -v yum >/dev/null; then",
+      "  sudo yum update -y",
+      "  sudo yum install -y docker",
+      "  sudo curl -L \"https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)\" -o /usr/local/bin/docker-compose",
+      "  sudo chmod +x /usr/local/bin/docker-compose",
+      "elif command -v dnf >/dev/null; then",
+      "  sudo dnf update -y",
+      "  sudo dnf install -y docker docker-compose",
+      "elif command -v pacman >/dev/null; then",
+      "  sudo pacman -Syu --noconfirm docker docker-compose",
+      "else",
+      "  echo 'Unsupported package manager. Please install Docker manually.'",
+      "  exit 1",
+      "fi",
+      "sudo systemctl enable docker",
+      "sudo systemctl start docker",
+      "sudo usermod -aG docker $USER"
+    ],
+    "health_check": {
+      "timeout": 300,
+      "interval": 10,
+      "services": ["trading-broker", "trading-bot"],
+      "endpoints": [
+        "http://localhost:8080/health"
+      ]
+    },
+    "post_deployment": [
+      "# Configure firewall if available",
+      "if command -v ufw >/dev/null; then",
+      "  sudo ufw allow 8080/tcp",
+      "  sudo ufw allow 50051/tcp",
+      "elif command -v firewall-cmd >/dev/null; then",
+      "  sudo firewall-cmd --permanent --add-port=8080/tcp",
+      "  sudo firewall-cmd --permanent --add-port=50051/tcp",
+      "  sudo firewall-cmd --reload",
+      "elif command -v iptables >/dev/null; then",
+      "  sudo iptables -I INPUT -p tcp --dport 8080 -j ACCEPT",
+      "  sudo iptables -I INPUT -p tcp --dport 50051 -j ACCEPT",
+      "else",
+      "  echo 'No supported firewall found. Please configure manually.'",
+      "fi"
+    ]
+  },
+  "monitoring": {
+    "logs_directory": "/opt/trading-app/logs",
+    "metrics_enabled": false,
+    "backup_retention_days": 3
+  },
+  "scaling": {
+    "auto_scaling": false,
+    "max_instances": 1,
+    "load_balancer": false
+  }
+}
