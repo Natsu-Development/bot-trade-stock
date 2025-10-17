@@ -59,10 +59,16 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Prepare broker .dockerignore
+        run: |
+          echo "📋 Copying .dockerignore for broker build..."
+          cp docker/.dockerignore.broker broker/.dockerignore
+          echo "✅ broker/.dockerignore ready"
+
       - name: Build and push broker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: broker
           file: docker/Dockerfile.broker
           push: true
           tags: |
@@ -76,10 +82,22 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Cleanup broker .dockerignore
+        if: always()
+        run: |
+          echo "🧹 Cleaning up broker/.dockerignore..."
+          rm -f broker/.dockerignore
+
+      - name: Prepare bot-trade .dockerignore
+        run: |
+          echo "📋 Copying .dockerignore for bot-trade build..."
+          cp docker/.dockerignore.bot-trade bot-trade/.dockerignore
+          echo "✅ bot-trade/.dockerignore ready"
+
       - name: Build and push bot image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: bot-trade
           file: docker/Dockerfile.bot-trade
           push: true
           tags: |
@@ -92,6 +110,12 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Cleanup bot-trade .dockerignore
+        if: always()
+        run: |
+          echo "🧹 Cleaning up bot-trade/.dockerignore..."
+          rm -f bot-trade/.dockerignore
 
   # Build deployment configuration
   build-config:

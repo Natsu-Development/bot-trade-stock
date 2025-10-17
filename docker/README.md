@@ -87,6 +87,13 @@ make docker-shell-broker # Shell into broker container
 
 1. **Environment Files**: Never commit `.env` files with sensitive data
 2. **Docker Ignore**: Properly configured to exclude sensitive files
+## 📦 Build Contexts and .dockerignore
+
+- We use per-service build contexts so each service can own its ignore rules.
+  - Bot-Trade image: context is `bot-trade/`, Dockerfile at `docker/Dockerfile.bot-trade`, rules in `bot-trade/.dockerignore` (implicit via context).
+  - Broker image: context is `broker/`, Dockerfile at `docker/Dockerfile.broker`, rules in `broker/.dockerignore` (implicit via context).
+- The files in `docker/.dockerignore.*` document suggested ignores and can be copied into each service directory as `.dockerignore` when needed.
+
 3. **Network Isolation**: Services communicate only within Docker network
 4. **Health Checks**: Both services have health monitoring
 

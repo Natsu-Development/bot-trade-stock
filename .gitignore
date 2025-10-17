@@ -12,6 +12,7 @@ main
 server
 bot-trade/main
 bot-trade/server
+!bot-trade/cmd/
 *.test
 *.out
 tmp/
@@ -36,3 +37,7 @@ Thumbs.db
 # Temporary Files
 *.tmp
 *.bak
+
+# Temporary .dockerignore files (managed by CI/CD)
+bot-trade/.dockerignore
+broker/.dockerignore
