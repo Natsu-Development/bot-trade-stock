@@ -265,34 +265,54 @@ jobs:
           echo "📋 Deployment Information:"
           cat deployment-package/deployment-info.json | jq '.'
 
+      - name: Setup SSH connection
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Add host to known_hosts
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
       - name: Copy deployment package to VPS
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: 'deployment-package/'
-          target: '/tmp/deployment-package'
-          rm: true
-          overwrite: true
+        run: |
+          echo "📦 Copying deployment package to VPS..."
+          cd deployment-package
+          tar czf ../deployment.tar.gz .
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ../deployment.tar.gz ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/deployment.tar.gz
+          echo "✅ Deployment package copied successfully"
 
       - name: Execute VPS deployment (with secrets injection)
-        uses: appleboy/ssh-action@v1.0.0
         env:
           # 🔒 SECRETS: Retrieved from GitHub Secrets and passed via SSH
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script_stop: true
-          envs: TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID
-          script: |
-            cd /tmp/deployment-package/deployment-package
+        run: |
+          echo "🚀 Executing deployment on VPS..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+            set -e
+            
+            echo "📦 Extracting deployment package..."
+            mkdir -p /tmp/deployment-package
+            cd /tmp/deployment-package
+            tar xzf /tmp/deployment.tar.gz
+            
+            echo "🔧 Making scripts executable..."
             chmod +x scripts/*.sh
-            # Simple deployment: just copy files, create secrets, start containers
+            
+            echo "🔒 Creating secrets file..."
+            cat > .env.secrets << 'EOF'
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
+          EOF
+            
+            echo "🚀 Running deployment script..."
             ./scripts/deploy-vps.sh
+            
+            echo "🧹 Cleaning up..."
+            rm -f /tmp/deployment.tar.gz
+            
+            echo "✅ Deployment completed successfully!"
+          ENDSSH
 
   # Notification and cleanup
   notify:
