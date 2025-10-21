@@ -267,327 +267,52 @@ jobs:
 
       - name: Setup SSH connection
         run: |
-          set -e
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          
-          echo "🔍 Setting up SSH key..."
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          
-          # Debug: Check if secret exists and is not empty
-          if [ -z "${{ secrets.VPS_SSH_KEY }}" ]; then
-            echo "❌ FATAL: VPS_SSH_KEY secret is EMPTY or NOT SET!"
-            echo ""
-            echo "📋 FIX THIS:"
-            echo "1. Go to: GitHub Repository → Settings → Secrets and variables → Actions"
-            echo "2. Click on 'VPS_SSH_KEY' secret"
-            echo "3. Make sure it contains your ACTUAL private key"
-            echo "4. The key should start with: -----BEGIN OPENSSH PRIVATE KEY-----"
-            exit 1
-          fi
-          
-          # Method 1: Try echo -e (handles \n escape sequences)
-          echo "📝 Method 1: Using echo -e..."
           echo -e "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          
-          # Debug output (safe - doesn't expose key)
-          KEY_SIZE=$(wc -c < ~/.ssh/deploy_key)
-          KEY_LINES=$(wc -l < ~/.ssh/deploy_key)
-          KEY_FIRST=$(head -c 50 ~/.ssh/deploy_key)
-          KEY_LAST=$(tail -c 50 ~/.ssh/deploy_key | head -c 30)
-          
-          echo "   Size: ${KEY_SIZE} bytes"
-          echo "   Lines: ${KEY_LINES}"
-          echo "   Starts with: ${KEY_FIRST}"
-          echo "   Ends with: ...${KEY_LAST}"
-          
-          # Validate Method 1
-          if ssh-keygen -l -f ~/.ssh/deploy_key 2>/dev/null; then
-            echo "✅ Method 1 SUCCESS!"
-            ssh-keygen -l -f ~/.ssh/deploy_key
-          else
-            echo "❌ Method 1 failed"
-            
-            # Method 2: Try printf %b (alternative escape handling)
-            echo ""
-            echo "📝 Method 2: Using printf..."
-            printf '%b\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
-            chmod 600 ~/.ssh/deploy_key
-            
-            KEY_SIZE=$(wc -c < ~/.ssh/deploy_key)
-            KEY_LINES=$(wc -l < ~/.ssh/deploy_key)
-            echo "   Size: ${KEY_SIZE} bytes"
-            echo "   Lines: ${KEY_LINES}"
-            
-            if ssh-keygen -l -f ~/.ssh/deploy_key 2>/dev/null; then
-              echo "✅ Method 2 SUCCESS!"
-              ssh-keygen -l -f ~/.ssh/deploy_key
-            else
-              echo "❌ Method 2 failed"
-              
-              # Method 3: Try sed conversion (literal \n to newline)
-              echo ""
-              echo "📝 Method 3: Using sed..."
-              echo "${{ secrets.VPS_SSH_KEY }}" | sed 's/\\n/\n/g' > ~/.ssh/deploy_key
-              chmod 600 ~/.ssh/deploy_key
-              
-              KEY_SIZE=$(wc -c < ~/.ssh/deploy_key)
-              KEY_LINES=$(wc -l < ~/.ssh/deploy_key)
-              echo "   Size: ${KEY_SIZE} bytes"
-              echo "   Lines: ${KEY_LINES}"
-              
-              if ssh-keygen -l -f ~/.ssh/deploy_key 2>/dev/null; then
-                echo "✅ Method 3 SUCCESS!"
-                ssh-keygen -l -f ~/.ssh/deploy_key
-              else
-                echo "❌ Method 3 failed"
-                
-                # Method 4: Try base64 decode (if stored as base64)
-                echo ""
-                echo "📝 Method 4: Trying base64 decode..."
-                if echo "${{ secrets.VPS_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key 2>/dev/null; then
-                  chmod 600 ~/.ssh/deploy_key
-                  
-                  KEY_SIZE=$(wc -c < ~/.ssh/deploy_key)
-                  KEY_LINES=$(wc -l < ~/.ssh/deploy_key)
-                  echo "   Size: ${KEY_SIZE} bytes"
-                  echo "   Lines: ${KEY_LINES}"
-                  
-                  if ssh-keygen -l -f ~/.ssh/deploy_key 2>/dev/null; then
-                    echo "✅ Method 4 SUCCESS!"
-                    ssh-keygen -l -f ~/.ssh/deploy_key
-                  else
-                    echo "❌ Method 4 failed"
-                    echo ""
-                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                    echo "❌ ALL METHODS FAILED - SSH KEY IS INVALID!"
-                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                    echo ""
-                    echo "🔍 DIAGNOSIS:"
-                    echo "   Your VPS_SSH_KEY secret is NOT a valid SSH private key!"
-                    echo ""
-                    echo "   Current content (safe preview):"
-                    echo "   - First 80 chars: $(head -c 80 ~/.ssh/deploy_key)"
-                    echo "   - Last 80 chars: $(tail -c 80 ~/.ssh/deploy_key)"
-                    echo "   - Total size: ${KEY_SIZE} bytes (should be 2500-3500 for RSA, 400-600 for ED25519)"
-                    echo "   - Lines: ${KEY_LINES} (should be 25-40 for RSA, 5-10 for ED25519)"
-                    echo ""
-                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                    echo "🔧 HOW TO FIX:"
-                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                    echo ""
-                    echo "Step 1: Get your ACTUAL private key from your local machine"
-                    echo "   Run this command on YOUR COMPUTER:"
-                    echo "   $ cat ~/.ssh/id_rsa"
-                    echo "   (or ~/.ssh/id_ed25519 if you use ED25519)"
-                    echo ""
-                    echo "Step 2: Copy the ENTIRE output including:"
-                    echo "   -----BEGIN OPENSSH PRIVATE KEY-----"
-                    echo "   (all the encrypted content)"
-                    echo "   -----END OPENSSH PRIVATE KEY-----"
-                    echo ""
-                    echo "Step 3: Update GitHub Secret"
-                    echo "   1. Go to: https://github.com/${{ github.repository }}/settings/secrets/actions"
-                    echo "   2. Click 'VPS_SSH_KEY' → Update"
-                    echo "   3. Paste the COMPLETE key (including BEGIN/END lines)"
-                    echo "   4. Click 'Update secret'"
-                    echo ""
-                    echo "Step 4: Verify on VPS that the public key is in authorized_keys"
-                    echo "   SSH to your VPS and check:"
-                    echo "   $ cat ~/.ssh/authorized_keys"
-                    echo "   Should contain the public key matching your private key"
-                    echo ""
-                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                    exit 1
-                  fi
-                else
-                  echo "❌ Base64 decode failed"
-                  echo ""
-                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                  echo "❌ ALL METHODS FAILED!"
-                  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                  echo ""
-                  echo "Your VPS_SSH_KEY secret appears to be invalid."
-                  echo "Please follow the instructions above to fix it."
-                  exit 1
-                fi
-              fi
-            fi
-          fi
-          
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "✅ SSH KEY VALIDATED SUCCESSFULLY"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-          
-          # Add host to known_hosts
-          echo "🔍 Adding VPS host to known_hosts..."
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
-          echo "✅ SSH connection setup completed"
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Copy deployment package to VPS
         run: |
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "📦 COPYING DEPLOYMENT PACKAGE TO VPS"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          
           cd deployment-package
           tar czf ../deployment.tar.gz .
-          
-          PACKAGE_SIZE=$(du -h ../deployment.tar.gz | cut -f1)
-          echo "📦 Package size: ${PACKAGE_SIZE}"
-          echo "🎯 Target: ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/deployment.tar.gz"
-          echo ""
-          echo "🔄 Starting transfer..."
-          
-          # SCP with progress and better error messages
-          if scp -v -i ~/.ssh/deploy_key \
+          scp -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
-            -o IdentitiesOnly=yes \
-            -o ConnectTimeout=30 \
             ../deployment.tar.gz \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/deployment.tar.gz 2>&1 | tee /tmp/scp_output.log; then
-            echo ""
-            echo "✅ Deployment package copied successfully (${PACKAGE_SIZE})"
-          else
-            echo ""
-            echo "❌ SCP FAILED!"
-            echo ""
-            echo "Error output:"
-            cat /tmp/scp_output.log
-            echo ""
-            echo "Common issues:"
-            echo "  - SSH key doesn't match the public key on VPS"
-            echo "  - User '${{ secrets.VPS_USER }}' doesn't exist or no shell access"
-            echo "  - Firewall blocking SSH port"
-            echo "  - Wrong VPS_HOST address"
-            exit 1
-          fi
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/deployment.tar.gz
 
-      - name: Execute VPS deployment (with secrets injection)
+      - name: Execute VPS deployment
         env:
-          # 🔒 SECRETS: Retrieved from GitHub Secrets and passed via SSH
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "🚀 EXECUTING VPS DEPLOYMENT"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          
-          # Test SSH connection first
-          echo ""
-          echo "🔍 Testing SSH connection to VPS..."
-          if ssh -i ~/.ssh/deploy_key \
-            -o StrictHostKeyChecking=no \
-            -o UserKnownHostsFile=/dev/null \
-            -o IdentitiesOnly=yes \
-            -o ConnectTimeout=10 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "echo '✅ SSH connection successful'" 2>&1; then
-            echo "✅ SSH connection test passed"
-          else
-            echo "❌ SSH connection test FAILED!"
-            echo ""
-            echo "Troubleshooting:"
-            echo "  1. Check if VPS_HOST is correct: ${{ secrets.VPS_HOST }}"
-            echo "  2. Check if VPS_USER exists on VPS: ${{ secrets.VPS_USER }}"
-            echo "  3. Check if public key is in ~/.ssh/authorized_keys on VPS"
-            echo "  4. Try manually: ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}"
-            exit 1
-          fi
-          
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "📦 STARTING DEPLOYMENT SCRIPT ON VPS"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-          
-          # Execute deployment
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
-            -o IdentitiesOnly=yes \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash << 'ENDSSH'
             set -e
-            set -o pipefail
             
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "📦 Step 1: Extract deployment package"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            # Extract package
             mkdir -p /tmp/deployment-package
             cd /tmp/deployment-package
-            
-            if [ -f /tmp/deployment.tar.gz ]; then
-              echo "✅ Found deployment package"
-              tar xzf /tmp/deployment.tar.gz
-              echo "✅ Package extracted"
-              echo "   Files:"
-              ls -lah | head -20
-            else
-              echo "❌ deployment.tar.gz not found!"
-              exit 1
-            fi
-            
-            echo ""
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🔧 Step 2: Prepare deployment scripts"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            tar xzf /tmp/deployment.tar.gz
             chmod +x scripts/*.sh
-            echo "✅ Scripts are now executable"
             
-            echo ""
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🔒 Step 3: Create secrets file"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            cat > .env.secrets << 'ENVEOF'
-          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
-          ENVEOF
+            # Copy docker-compose.yml to expected location
+            cp docker-compose.yml /tmp/docker-compose.yml
             
-            if [ -f .env.secrets ]; then
-              echo "✅ Secrets file created"
-              echo "   Variables: $(grep -c '=' .env.secrets) secrets"
-            else
-              echo "❌ Failed to create secrets file!"
-              exit 1
-            fi
+            # Export secrets for deploy script
+            export TELEGRAM_BOT_TOKEN='${{ secrets.TELEGRAM_BOT_TOKEN }}'
+            export TELEGRAM_CHAT_ID='${{ secrets.TELEGRAM_CHAT_ID }}'
             
-            echo ""
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🚀 Step 4: Run deployment script"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo ""
+            # Run deployment
+            ./scripts/deploy-vps.sh
             
-            if [ -f ./scripts/deploy-vps.sh ]; then
-              ./scripts/deploy-vps.sh
-            else
-              echo "❌ deploy-vps.sh not found!"
-              echo "Available files:"
-              find . -type f
-              exit 1
-            fi
-            
-            echo ""
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🧹 Step 5: Cleanup"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            rm -f /tmp/deployment.tar.gz
-            echo "✅ Cleanup completed"
-            
-            echo ""
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "✅ DEPLOYMENT COMPLETED SUCCESSFULLY!"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            # Cleanup
+            rm -f /tmp/deployment.tar.gz /tmp/docker-compose.yml
           ENDSSH
-          
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "🎉 ALL DEPLOYMENT STEPS COMPLETED!"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
   # Notification and cleanup
   notify:
@@ -634,28 +359,18 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%b\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          echo -e "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Clean up old Docker images
         continue-on-error: true
         run: |
-          echo "🧹 Starting cleanup on VPS..."
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
-            -o IdentitiesOnly=yes \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash << 'ENDSSH'
-            # Clean up old Docker images to save space
-            echo "🐳 Pruning Docker system..."
             docker system prune -f
             docker image prune -f --filter "until=72h"
-
-            # Keep only last 3 backups
-            echo "📦 Cleaning old backups..."
-            cd /opt/trading-app || exit 0
-            ls -1t docker-compose.backup.*.yml 2>/dev/null | tail -n +4 | xargs rm -f || true
-
-            echo "✅ Cleanup completed"
+            cd /opt/trading-app && ls -1t docker-compose.backup.*.yml 2>/dev/null | tail -n +4 | xargs rm -f || true
           ENDSSH
