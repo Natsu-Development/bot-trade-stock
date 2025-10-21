@@ -266,14 +266,15 @@ jobs:
           cat deployment-package/deployment-info.json | jq '.'
 
       - name: Copy deployment package to VPS
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: 'deployment-package/*'
-          target: '/tmp/'
-          strip_components: 1
+          source: 'deployment-package/'
+          target: '/tmp/deployment-package'
+          rm: true
+          overwrite: true
 
       - name: Execute VPS deployment (with secrets injection)
         uses: appleboy/ssh-action@v1.0.0
@@ -286,10 +287,10 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script_stop: true
-          envs: TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID # Pass secrets to remote shell
+          envs: TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID
           script: |
-            cd /tmp
-            chmod +x scripts/deploy-vps.sh
+            cd /tmp/deployment-package/deployment-package
+            chmod +x scripts/*.sh
             # Simple deployment: just copy files, create secrets, start containers
             ./scripts/deploy-vps.sh
 
