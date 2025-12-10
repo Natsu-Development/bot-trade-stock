@@ -1,3 +1,6 @@
+// Package logger provides zap logger factory functions.
+// This package is a pure factory with no interface knowledge.
+// The application layer defines interfaces, infrastructure adapts them.
 package logger
 
 import (
@@ -5,27 +8,17 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// Config holds logger configuration
+// Config holds logger configuration.
 type Config struct {
 	Level       string // debug, info, warn, error
 	Environment string // development, production
-	Encoding    string // json, console
 }
 
-// DefaultConfig returns default logger configuration
-func DefaultConfig() *Config {
-	return &Config{
-		Level:       "info",
-		Environment: "development",
-		Encoding:    "console",
-	}
-}
-
-// New creates a new zap logger with the specified configuration
-func New(config *Config) (*zap.Logger, error) {
+// New creates a new zap logger with the specified configuration.
+func New(cfg Config) (*zap.Logger, error) {
 	var zapConfig zap.Config
 
-	if config.Environment == "production" {
+	if cfg.Environment == "production" {
 		zapConfig = zap.NewProductionConfig()
 		zapConfig.Encoding = "json"
 	} else {
@@ -34,32 +27,27 @@ func New(config *Config) (*zap.Logger, error) {
 		zapConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	}
 
-	// Override encoding if specified
-	if config.Encoding != "" {
-		zapConfig.Encoding = config.Encoding
-	}
-
-	// Set log level
-	level, err := zapcore.ParseLevel(config.Level)
+	level, err := zapcore.ParseLevel(cfg.Level)
 	if err != nil {
 		level = zapcore.InfoLevel
 	}
 	zapConfig.Level.SetLevel(level)
 
-	logger, err := zapConfig.Build()
-	if err != nil {
-		return nil, err
-	}
-
-	return logger, nil
+	return zapConfig.Build()
 }
 
-// NewWithDefaults creates a new logger with default configuration
-func NewWithDefaults() (*zap.Logger, error) {
-	return New(DefaultConfig())
+// NewDevelopment creates a development logger with sensible defaults.
+func NewDevelopment() (*zap.Logger, error) {
+	return New(Config{
+		Level:       "debug",
+		Environment: "development",
+	})
 }
 
-// SetGlobal sets the global zap logger
-func SetGlobal(logger *zap.Logger) {
-	zap.ReplaceGlobals(logger)
+// NewProduction creates a production logger with sensible defaults.
+func NewProduction() (*zap.Logger, error) {
+	return New(Config{
+		Level:       "info",
+		Environment: "production",
+	})
 }
