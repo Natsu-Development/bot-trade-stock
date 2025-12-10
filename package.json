@@ -1,0 +1,19 @@
+{
+    "name": "trading-app",
+    "version": "1.0.0",
+    "description": "Trading Bot with Divergence Analysis",
+    "private": true,
+    "scripts": {
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "format:yml": "prettier --write '.github/**/*.yml'",
+        "format:json": "prettier --write '**/*.json'"
+    },
+    "devDependencies": {
+        "prettier": "^3.1.0"
+    },
+    "engines": {
+        "node": ">=16.0.0"
+    }
+}
+

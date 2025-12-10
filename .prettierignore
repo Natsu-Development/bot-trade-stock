@@ -1,0 +1,66 @@
+# Dependencies
+node_modules
+venv
+vendor
+
+# Build outputs
+dist
+build
+target
+*.min.js
+*.min.css
+
+# Logs
+*.log
+logs
+
+# Generated files
+*.pb.go
+*_pb2.py
+*_pb2_grpc.py
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose*.yml
+
+# Go
+go.sum
+go.mod
+
+# Coverage
+coverage
+*.coverage
+htmlcov
+
+# Cache
+.cache
+__pycache__
+*.pyc
+.pytest_cache
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Others
+*.md
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
