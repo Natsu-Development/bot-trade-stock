@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"time"
 
+	"bot-trade/domain/aggregate/analysis"
 	"bot-trade/infrastructure/port"
 )
 
@@ -35,7 +36,7 @@ func NewNotifier(botToken, chatID string, enabled bool) *Notifier {
 // SendMessage sends a message to Telegram
 func (n *Notifier) SendMessage(message string) error {
 	if !n.enabled {
-		return nil // Silently skip if disabled
+		return nil
 	}
 
 	if n.botToken == "" || n.chatID == "" {
@@ -67,13 +68,21 @@ func (n *Notifier) IsEnabled() bool {
 	return n.enabled
 }
 
-// SendDivergenceAlert sends a formatted divergence alert via Telegram.
-// The formatting is handled by the infrastructure layer's formatter.
-func (n *Notifier) SendDivergenceAlert(alert port.DivergenceAlert) error {
-	if !n.enabled {
+// HandleDivergenceResult processes a divergence result and sends notification.
+func (n *Notifier) HandleDivergenceResult(
+	divergenceType analysis.DivergenceType,
+	interval, symbol string,
+	result *analysis.DivergenceResult,
+) error {
+	if result == nil || !result.DivergenceFound() || !n.enabled {
 		return nil
 	}
 
-	message := FormatDivergenceAlert(alert.Type, alert.Interval, alert.Symbol, alert.Description)
-	return n.SendMessage(message)
+	message := FormatDivergenceAlert(divergenceType.String(), interval, symbol, result.Description())
+	if err := n.SendMessage(message); err != nil {
+		return fmt.Errorf("failed to send %s notification for %s [%s]: %w", 
+			divergenceType.String(), symbol, interval, err)
+	}
+
+	return nil
 }

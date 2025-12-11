@@ -21,7 +21,7 @@ type BaseCronScheduler struct {
 	predefinedSymbols []string
 	isRunning         bool
 	mu                sync.RWMutex
-	schedulerType     string
+	divergenceType    analysis.DivergenceType
 	startDateOffset   int
 }
 
@@ -30,7 +30,7 @@ func NewBaseCronScheduler(
 	logger *zap.Logger,
 	notifier infraPort.Notifier,
 	symbols []string,
-	schedulerType string,
+	divergenceType analysis.DivergenceType,
 	startDateOffset int,
 ) *BaseCronScheduler {
 	return &BaseCronScheduler{
@@ -39,7 +39,7 @@ func NewBaseCronScheduler(
 		notifier:          notifier,
 		predefinedSymbols: symbols,
 		isRunning:         false,
-		schedulerType:     schedulerType,
+		divergenceType:    divergenceType,
 		startDateOffset:   startDateOffset,
 	}
 }
@@ -52,7 +52,7 @@ func (bcs *BaseCronScheduler) Stop() {
 	if bcs.isRunning {
 		bcs.cron.Stop()
 		bcs.isRunning = false
-		bcs.logger.Info("Cron scheduler stopped", zap.String("type", bcs.schedulerType))
+		bcs.logger.Info("Cron scheduler stopped", zap.String("type", bcs.divergenceType.String()))
 	}
 }
 
@@ -88,9 +88,9 @@ func (bcs *BaseCronScheduler) GetLogger() *zap.Logger {
 	return bcs.logger
 }
 
-// GetSchedulerType returns the scheduler type string
-func (bcs *BaseCronScheduler) GetSchedulerType() string {
-	return bcs.schedulerType
+// GetDivergenceType returns the divergence type
+func (bcs *BaseCronScheduler) GetDivergenceType() analysis.DivergenceType {
+	return bcs.divergenceType
 }
 
 // GetStartDateOffset returns the start date offset for date range calculations
@@ -171,24 +171,16 @@ func (bcs *BaseCronScheduler) ProcessSymbolsConcurrently(
 	return results, errors
 }
 
-// NotifyDivergence sends a notification for a divergence detection.
-func (bcs *BaseCronScheduler) NotifyDivergence(divergenceType, interval, symbol, description string) {
-	if !bcs.notifier.IsEnabled() {
-		return
-	}
-
-	alert := infraPort.DivergenceAlert{
-		Type:        divergenceType,
-		Symbol:      symbol,
-		Interval:    interval,
-		Description: description,
-	}
-
-	if err := bcs.notifier.SendDivergenceAlert(alert); err != nil {
-		bcs.logger.Error("Failed to send notification",
-			zap.String("type", divergenceType),
-			zap.String("symbol", symbol),
-			zap.Error(err),
-		)
+// HandleResult delegates result handling to the notifier.
+func (bcs *BaseCronScheduler) HandleResult(interval, symbol string, result *analysis.DivergenceResult) {
+	if bcs.notifier != nil {
+		if err := bcs.notifier.HandleDivergenceResult(bcs.divergenceType, interval, symbol, result); err != nil {
+			bcs.logger.Error("Failed to send notification",
+				zap.String("type", bcs.divergenceType.String()),
+				zap.String("symbol", symbol),
+				zap.String("interval", interval),
+				zap.Error(err),
+			)
+		}
 	}
 }

@@ -30,7 +30,7 @@ func NewBearishCronScheduler(
 ) *BearishCronScheduler {
 	return &BearishCronScheduler{
 		BaseCronScheduler: NewBaseCronScheduler(
-			logger, notifier, symbols, "Bearish", startDateOffset,
+			logger, notifier, symbols, analysis.BearishDivergence, startDateOffset,
 		),
 		analyzer:  analyzer,
 		intervals: intervals,
@@ -109,7 +109,7 @@ func (bcs *BearishCronScheduler) logSummary(interval string, results map[string]
 	var bearishSymbols []string
 
 	for symbol, result := range results {
-		if result.HasDivergence() && result.Divergence().GetTypeString() == "bearish" {
+		if result.HasDivergence() && result.Divergence().DivergenceType() == analysis.BearishDivergence {
 			bearishCount++
 			bearishSymbols = append(bearishSymbols, symbol)
 
@@ -119,7 +119,7 @@ func (bcs *BearishCronScheduler) logSummary(interval string, results map[string]
 				zap.String("description", result.Divergence().Description()),
 			)
 
-			bcs.NotifyDivergence("Bearish", interval, symbol, result.Divergence().Description())
+			bcs.HandleResult(interval, symbol, result.Divergence())
 		}
 	}
 

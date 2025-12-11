@@ -201,115 +201,6 @@ class HighPerformanceStockService(vnstock_pb2_grpc.StockDataServiceServicer):
             status=data['status']
         )
     
-    def GetMultipleStocks(self, request, context):
-        """gRPC method to get multiple stocks data with date range and interval support"""
-        symbols = request.symbols
-        start_date = request.start_date if request.start_date else ""
-        end_date = request.end_date if request.end_date else ""
-        interval = request.interval if request.interval else "1d"
-        
-        # Log request parameters
-        logger.info(f"📊 gRPC batch request for {len(symbols)} symbols from {start_date} to {end_date} with interval {interval}")
-        
-        results = {}
-        
-        for symbol in symbols:
-            data = self._get_stock_data_optimized(symbol, start_date, end_date, interval)
-            
-            if not data or data.get('status') == 'error':
-                results[symbol] = vnstock_pb2.StockResponse(
-                    symbol=symbol,
-                    timestamp=datetime.now().isoformat(),
-                    status="error",
-                    error=data.get('error', 'Failed to fetch data') if data else 'No data available'
-                )
-            else:
-                # Convert to protobuf message
-                market_data = vnstock_pb2.MarketData(
-                    latest_price=data['market_data']['latest_price'],
-                    price_change=data['market_data']['price_change'],
-                    price_change_percent=data['market_data']['price_change_percent'],
-                    current_volume=data['market_data']['current_volume'],
-                    volume_ratio=data['market_data']['volume_ratio'],
-                    price_volatility=data['market_data']['price_volatility'],
-                    trading_date=data['market_data']['trading_date']
-                )
-                
-                price_history = []
-                for price in data['price_history']:
-                    price_history.append(vnstock_pb2.PriceData(
-                        date=price['date'],
-                        close=price['close'],
-                        volume=price['volume'],
-                        high=price['high'],
-                        low=price['low']
-                    ))
-                
-                results[symbol] = vnstock_pb2.StockResponse(
-                    symbol=data['symbol'],
-                    timestamp=data['timestamp'],
-                    market_data=market_data,
-                    price_history=price_history,
-                    data_points=data['data_points'],
-                    status=data['status']
-                )
-        
-        return vnstock_pb2.MultiStockResponse(
-            timestamp=datetime.now().isoformat(),
-            total_symbols=len(symbols),
-            data=results
-        )
-    
-    def StreamStockData(self, request, context):
-        """gRPC streaming method (for future real-time updates) with date range support"""
-        symbols = request.symbols
-        interval_seconds = request.interval_seconds if request.interval_seconds > 0 else 30
-        start_date = request.start_date if request.start_date else ""
-        end_date = request.end_date if request.end_date else ""
-        data_interval = request.data_interval if request.data_interval else "1d"
-        
-        logger.info(f"📡 Starting stream for {len(symbols)} symbols, update interval: {interval_seconds}s, data interval: {data_interval}")
-        
-        while context.is_active():
-            for symbol in symbols:
-                try:
-                    data = self._get_stock_data_optimized(symbol, start_date, end_date, data_interval)
-                    
-                    if data and data.get('status') == 'success':
-                        # Convert and yield data
-                        market_data = vnstock_pb2.MarketData(
-                            latest_price=data['market_data']['latest_price'],
-                            price_change=data['market_data']['price_change'],
-                            price_change_percent=data['market_data']['price_change_percent'],
-                            current_volume=data['market_data']['current_volume'],
-                            volume_ratio=data['market_data']['volume_ratio'],
-                            price_volatility=data['market_data']['price_volatility'],
-                            trading_date=data['market_data']['trading_date']
-                        )
-                        
-                        price_history = []
-                        for price in data['price_history']:
-                            price_history.append(vnstock_pb2.PriceData(
-                                date=price['date'],
-                                close=price['close'],
-                                volume=price['volume'],
-                                high=price['high'],
-                                low=price['low']
-                            ))
-                        
-                        yield vnstock_pb2.StockResponse(
-                            symbol=data['symbol'],
-                            timestamp=data['timestamp'],
-                            market_data=market_data,
-                            price_history=price_history,
-                            data_points=data['data_points'],
-                            status=data['status']
-                        )
-                
-                except Exception as e:
-                    logger.error(f"Stream error for {symbol}: {e}")
-            
-            time.sleep(interval_seconds)
 
 def serve():
     """Start the gRPC server"""
@@ -336,16 +227,12 @@ def serve():
     print("  • In-memory caching (30s TTL)")
     print("  • Protocol Buffers (binary serialization)")
     print("  • Concurrent request handling")
-    print("  • Real-time streaming support")
     print("\n📊 Available gRPC methods:")
     print("  • GetStockData(symbol, start_date, end_date, interval)")
-    print("  • GetMultipleStocks(symbols[], start_date, end_date, interval)")
-    print("  • StreamStockData(symbols[], update_interval, data_interval)")
-    print("\n🎯 NEW: Exact Date Range Support!")
+    print("\n🎯 Date Range Support:")
     print("  • start_date/end_date: YYYY-MM-DD format")
     print("  • interval: 1d, 1h, 4h, 15m, etc.")
     print("  • All validation handled by Go client")
-    print("\n🔥 Expected 5-10x performance improvement!")
     
     try:
         while True:

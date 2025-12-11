@@ -117,3 +117,47 @@ func (pd *PriceData) IsValidData() bool {
 		pd.high.Value() >= pd.low.Value() &&
 		pd.close.Value() >= pd.low.Value()
 }
+
+// RawPriceData represents raw price data from external sources.
+type RawPriceData struct {
+	Date   string
+	Close  float64
+	High   float64
+	Low    float64
+	Volume int64
+}
+
+// NewPriceDataFromRaw creates PriceData from raw external data.
+func NewPriceDataFromRaw(raw RawPriceData) (*PriceData, error) {
+	close, err := NewPrice(raw.Close)
+	if err != nil {
+		return nil, err
+	}
+
+	high, err := NewPrice(raw.High)
+	if err != nil {
+		return nil, err
+	}
+
+	low, err := NewPrice(raw.Low)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewPriceData(raw.Date, close, high, low, raw.Volume)
+}
+
+// NewPriceHistoryFromRaw creates a slice of PriceData from raw data.
+func NewPriceHistoryFromRaw(rawData []RawPriceData) ([]*PriceData, error) {
+	priceHistory := make([]*PriceData, len(rawData))
+
+	for i, raw := range rawData {
+		priceData, err := NewPriceDataFromRaw(raw)
+		if err != nil {
+			return nil, err
+		}
+		priceHistory[i] = priceData
+	}
+
+	return priceHistory, nil
+}

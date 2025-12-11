@@ -30,7 +30,7 @@ func NewBullishCronScheduler(
 ) *BullishCronScheduler {
 	return &BullishCronScheduler{
 		BaseCronScheduler: NewBaseCronScheduler(
-			logger, notifier, symbols, "Bullish", startDateOffset,
+			logger, notifier, symbols, analysis.BullishDivergence, startDateOffset,
 		),
 		analyzer:  analyzer,
 		intervals: intervals,
@@ -109,7 +109,7 @@ func (bcs *BullishCronScheduler) logSummary(interval string, results map[string]
 	var bullishSymbols []string
 
 	for symbol, result := range results {
-		if result.HasDivergence() && result.Divergence().GetTypeString() == "bullish" {
+		if result.HasDivergence() && result.Divergence().DivergenceType() == analysis.BullishDivergence {
 			bullishCount++
 			bullishSymbols = append(bullishSymbols, symbol)
 
@@ -119,7 +119,7 @@ func (bcs *BullishCronScheduler) logSummary(interval string, results map[string]
 				zap.String("description", result.Divergence().Description()),
 			)
 
-			bcs.NotifyDivergence("Bullish", interval, symbol, result.Divergence().Description())
+			bcs.HandleResult(interval, symbol, result.Divergence())
 		}
 	}
 
