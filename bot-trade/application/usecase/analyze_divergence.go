@@ -8,8 +8,8 @@ import (
 	appPort "bot-trade/application/port"
 	"bot-trade/domain/aggregate/analysis"
 	"bot-trade/domain/aggregate/market"
-	domainPort "bot-trade/domain/port"
 	"bot-trade/domain/service/divergence"
+	infraPort "bot-trade/infrastructure/port"
 
 	"go.uber.org/zap"
 )
@@ -19,7 +19,7 @@ var _ appPort.DivergenceAnalyzer = (*AnalyzeDivergenceUseCase)(nil)
 
 // AnalyzeDivergenceUseCase orchestrates divergence analysis.
 type AnalyzeDivergenceUseCase struct {
-	marketDataRepo     domainPort.MarketDataRepository
+	marketDataGateway  infraPort.MarketDataGateway
 	divergenceDetector *divergence.Detector
 	divergenceType     analysis.DivergenceType
 	logger             *zap.Logger
@@ -29,7 +29,7 @@ type AnalyzeDivergenceUseCase struct {
 
 // NewAnalyzeDivergenceUseCase creates a new divergence analysis use case.
 func NewAnalyzeDivergenceUseCase(
-	marketDataRepo domainPort.MarketDataRepository,
+	marketDataGateway infraPort.MarketDataGateway,
 	divergenceDetector *divergence.Detector,
 	divergenceType analysis.DivergenceType,
 	logger *zap.Logger,
@@ -37,7 +37,7 @@ func NewAnalyzeDivergenceUseCase(
 	rsiPeriod int,
 ) *AnalyzeDivergenceUseCase {
 	return &AnalyzeDivergenceUseCase{
-		marketDataRepo:     marketDataRepo,
+		marketDataGateway:  marketDataGateway,
 		divergenceDetector: divergenceDetector,
 		divergenceType:     divergenceType,
 		logger:             logger,
@@ -54,14 +54,35 @@ func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.Market
 	uc.logger.Info(fmt.Sprintf("%s divergence analysis", strategyType), zap.String("symbol", symbol))
 	startTime := time.Now()
 
-	// Fetch market data
-	_, priceHistory, err := uc.marketDataRepo.GetMarketData(ctx, q)
+	// Fetch raw stock data from gateway
+	rawResponse, err := uc.marketDataGateway.FetchStockData(ctx, q)
 	if err != nil {
-		uc.logger.Error("Failed to fetch market data",
+		uc.logger.Error("Failed to fetch stock data",
 			zap.String("symbol", symbol),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("failed to fetch market data: %w", err)
+		return nil, fmt.Errorf("failed to fetch stock data: %w", err)
+	}
+
+	// Convert raw data to domain entities using domain factory
+	rawData := make([]market.RawPriceData, len(rawResponse.PriceHistory))
+	for i, pb := range rawResponse.PriceHistory {
+		rawData[i] = market.RawPriceData{
+			Date:   pb.Date,
+			Close:  pb.Close,
+			High:   pb.High,
+			Low:    pb.Low,
+			Volume: pb.Volume,
+		}
+	}
+
+	priceHistory, err := market.NewPriceHistoryFromRaw(rawData)
+	if err != nil {
+		uc.logger.Error("Failed to create price history",
+			zap.String("symbol", symbol),
+			zap.Error(err),
+		)
+		return nil, fmt.Errorf("failed to create price history: %w", err)
 	}
 
 	// Check if we have enough data

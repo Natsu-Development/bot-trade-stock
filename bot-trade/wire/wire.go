@@ -12,8 +12,8 @@ import (
 	"bot-trade/config"
 	"bot-trade/domain/aggregate/analysis"
 	"bot-trade/domain/service/divergence"
+	"bot-trade/infrastructure/adapter"
 	infraGRPC "bot-trade/infrastructure/grpc"
-	infraRepo "bot-trade/infrastructure/persistence"
 	"bot-trade/infrastructure/telegram"
 	"bot-trade/pkg/logger"
 	presHTTP "bot-trade/presentation/http"
@@ -54,7 +54,7 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	notifier := telegram.NewNotifier(cfg.TelegramBotToken, cfg.TelegramChatID, cfg.TelegramEnabled)
-	repo := infraRepo.NewGRPCMarketDataRepository(grpcConn)
+	marketDataGateway := adapter.NewMarketDataGateway(grpcConn)
 
 	// 3. Domain
 	divergenceDetector, err := newDivergenceDetector(cfg)
@@ -65,11 +65,11 @@ func New(cfg *config.Config) (*App, error) {
 
 	// 4. Application
 	bullishAnalyzer := usecase.NewAnalyzeDivergenceUseCase(
-		repo, divergenceDetector, analysis.BullishDivergence,
+		marketDataGateway, divergenceDetector, analysis.BullishDivergence,
 		appLogger, cfg.DivergenceIndicesRecent, cfg.RSIPeriod,
 	)
 	bearishAnalyzer := usecase.NewAnalyzeDivergenceUseCase(
-		repo, divergenceDetector, analysis.BearishDivergence,
+		marketDataGateway, divergenceDetector, analysis.BearishDivergence,
 		appLogger, cfg.DivergenceIndicesRecent, cfg.RSIPeriod,
 	)
 
