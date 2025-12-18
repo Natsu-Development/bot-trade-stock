@@ -1,57 +1,37 @@
 package market
 
-import (
-	"errors"
-)
+import "errors"
 
-// Interval represents a data interval value object
-type Interval struct {
-	interval string
-}
+// Interval is a value object representing a data interval.
+type Interval string
 
-// Supported intervals
+// Supported intervals.
 var supportedIntervals = map[string]bool{
-	"1m":  true, // 1 minute
-	"5m":  true, // 5 minutes
-	"15m": true, // 15 minutes
-	"30m": true, // 30 minutes
-	"1H":  true, // 1 hour
-	"4H":  true, // 4 hours
-	"1D":  true, // 1 day (default)
-	"1W":  true, // 1 week
-	"1M":  true, // 1 month
+	"1m":  true,
+	"5m":  true,
+	"15m": true,
+	"30m": true,
+	"1H":  true,
+	"4H":  true,
+	"1D":  true,
+	"1W":  true,
+	"1M":  true,
 }
 
-// NewDataInterval creates a new data interval with validation
-func NewDataInterval(interval string) (*Interval, error) {
-	// Default to daily if empty
-	if interval == "" {
-		interval = "1D"
+// NewInterval creates a validated Interval.
+func NewInterval(value string) (Interval, error) {
+	if value == "" {
+		value = "1D"
 	}
 
-	// Check if supported
-	if !supportedIntervals[interval] {
-		return nil, errors.New("unsupported interval: supported values are 1m, 5m, 15m, 30m, 1H, 4H, 1D, 1W, 1M")
+	if !supportedIntervals[value] {
+		return "", errors.New("unsupported interval: supported values are 1m, 5m, 15m, 30m, 1H, 4H, 1D, 1W, 1M")
 	}
 
-	return &Interval{interval: interval}, nil
-
+	return Interval(value), nil
 }
 
-// Value returns the interval value
-func (di *Interval) Value() string {
-	return di.interval
-}
-
-// String implements the Stringer interface.
-func (di *Interval) String() string {
-	return di.interval
-}
-
-// Equals checks if two intervals are equal.
-func (di *Interval) Equals(other *Interval) bool {
-	if other == nil {
-		return false
-	}
-	return di.interval == other.interval
+// String returns the interval value.
+func (i Interval) String() string {
+	return string(i)
 }

@@ -60,22 +60,3 @@ func (c DivergenceConfig) RangeMin() int {
 func (c DivergenceConfig) RangeMax() int {
 	return c.rangeMax
 }
-
-// MinDataPoints returns the minimum number of data points required for analysis.
-func (c DivergenceConfig) MinDataPoints() int {
-	return c.lookbackLeft + c.lookbackRight + 1
-}
-
-// Equals checks if two DivergenceConfig values are equal.
-func (c DivergenceConfig) Equals(other DivergenceConfig) bool {
-	return c.lookbackLeft == other.lookbackLeft &&
-		c.lookbackRight == other.lookbackRight &&
-		c.rangeMin == other.rangeMin &&
-		c.rangeMax == other.rangeMax
-}
-
-// String returns a string representation of the configuration.
-func (c DivergenceConfig) String() string {
-	return fmt.Sprintf("DivergenceConfig{lookbackLeft: %d, lookbackRight: %d, rangeMin: %d, rangeMax: %d}",
-		c.lookbackLeft, c.lookbackRight, c.rangeMin, c.rangeMax)
-}

@@ -29,8 +29,8 @@ func (d *Detector) createNodes(priceHistory []*market.PriceData, rsiValues []flo
 	for i := 0; i < minLen; i++ {
 		nodes[i] = priceRSINode{
 			index: i,
-			date:  priceHistory[i].Date(),
-			price: priceHistory[i].Close().Value(),
+			date:  priceHistory[i].Date,
+			price: priceHistory[i].Close,
 			rsi:   rsiValues[i],
 		}
 	}
@@ -73,14 +73,12 @@ func (d *Detector) isPivotHigh(nodes []priceRSINode, index int) bool {
 	centerRSI := nodes[index].rsi
 	rightIndex := min(index+d.config.LookbackRight(), len(nodes)-1)
 
-	// Check left side
 	for i := index - d.config.LookbackLeft(); i < index; i++ {
 		if nodes[i].rsi >= centerRSI {
 			return false
 		}
 	}
 
-	// Check right side
 	for i := index + 1; i <= rightIndex; i++ {
 		if nodes[i].rsi >= centerRSI {
 			return false
@@ -95,14 +93,12 @@ func (d *Detector) isPivotLow(nodes []priceRSINode, index int) bool {
 	centerRSI := nodes[index].rsi
 	rightIndex := min(index+d.config.LookbackRight(), len(nodes)-1)
 
-	// Check left side
 	for i := index - d.config.LookbackLeft(); i < index; i++ {
 		if nodes[i].rsi <= centerRSI {
 			return false
 		}
 	}
 
-	// Check right side
 	for i := index + 1; i <= rightIndex; i++ {
 		if nodes[i].rsi <= centerRSI {
 			return false

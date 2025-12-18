@@ -7,7 +7,6 @@ import (
 )
 
 // calculateRSI computes RSI values using Wilder's smoothing method.
-// Returns nil if insufficient data for the configured period.
 func (d *Detector) calculateRSI(priceHistory []*market.PriceData) []float64 {
 	if len(priceHistory) < d.rsiPeriod+1 {
 		return nil
@@ -22,7 +21,7 @@ func (d *Detector) calculateRSI(priceHistory []*market.PriceData) []float64 {
 func extractClosePrices(priceHistory []*market.PriceData) []float64 {
 	prices := make([]float64, len(priceHistory))
 	for i, p := range priceHistory {
-		prices[i] = p.Close().Value()
+		prices[i] = p.Close
 	}
 	return prices
 }
@@ -51,13 +50,9 @@ func calculateGainsAndLosses(prices []float64) ([]float64, []float64) {
 func computeRSI(prices, gains, losses []float64, period int) []float64 {
 	rsi := make([]float64, len(prices))
 
-	// Initial SMA for first RSI value
 	avgGain, avgLoss := initialAverages(gains, losses, period)
-
-	// First RSI value
 	rsi[period] = calculateRSIValue(avgGain, avgLoss)
 
-	// Wilder's smoothing for remaining values
 	for i := period + 1; i < len(prices) && i-1 < len(gains); i++ {
 		avgGain = wilderSmooth(avgGain, gains[i-1], period)
 		avgLoss = wilderSmooth(avgLoss, losses[i-1], period)

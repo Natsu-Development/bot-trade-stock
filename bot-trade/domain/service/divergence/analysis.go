@@ -14,20 +14,18 @@ func (d *Detector) analyzeDivergence(
 	divergenceType analysis.DivergenceType,
 ) *analysis.DivergenceResult {
 	if len(nodes) == 0 {
-		return analysis.NewNoDivergenceResult(0, 0)
+		return analysis.NewDivergenceResult(false, analysis.NoDivergence, 0, 0, "")
 	}
 
 	currentPrice := nodes[len(nodes)-1].price
 	currentRSI := nodes[len(nodes)-1].rsi
 
 	if len(pivots) < 2 {
-		return analysis.NewNoDivergenceResult(currentPrice, currentRSI)
+		return analysis.NewDivergenceResult(false, analysis.NoDivergence, currentPrice, currentRSI, "")
 	}
 
-	// Sort by index descending (most recent first)
 	sortPivotsByIndexDesc(pivots)
 
-	// Check consecutive pivot pairs for divergence
 	for i := 0; i < len(pivots)-1; i++ {
 		current := pivots[i]
 		previous := pivots[i+1]
@@ -41,7 +39,7 @@ func (d *Detector) analyzeDivergence(
 		}
 	}
 
-	return analysis.NewNoDivergenceResult(currentPrice, currentRSI)
+	return analysis.NewDivergenceResult(false, analysis.NoDivergence, currentPrice, currentRSI, "")
 }
 
 func sortPivotsByIndexDesc(pivots []pivot) {
@@ -57,13 +55,11 @@ func (d *Detector) isValidPivotDistance(current, previous pivot) bool {
 
 func (d *Detector) isDivergence(current, previous pivot, divergenceType analysis.DivergenceType) bool {
 	if divergenceType == analysis.BullishDivergence {
-		// Bullish: Price Lower Low + RSI Higher Low
 		priceLL := current.price < previous.price
 		rsiHL := current.rsi > previous.rsi
 		return priceLL && rsiHL
 	}
 
-	// Bearish: Price Higher High + RSI Lower High
 	priceHH := current.price > previous.price
 	rsiLH := current.rsi < previous.rsi
 	return priceHH && rsiLH

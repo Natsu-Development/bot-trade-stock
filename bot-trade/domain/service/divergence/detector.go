@@ -7,8 +7,6 @@ import (
 )
 
 // Detector is a domain service that detects RSI divergences.
-// It encapsulates all divergence detection logic: RSI calculation,
-// pivot detection, and divergence analysis.
 type Detector struct {
 	rsiPeriod int
 	config    analysis.DivergenceConfig
@@ -26,7 +24,7 @@ func NewDetector(rsiPeriod int, config analysis.DivergenceConfig) *Detector {
 func (d *Detector) DetectBullish(priceHistory []*market.PriceData) *analysis.DivergenceResult {
 	rsiValues := d.calculateRSI(priceHistory)
 	if len(rsiValues) == 0 {
-		return analysis.NewNoDivergenceResult(0, 0)
+		return analysis.NewDivergenceResult(false, analysis.NoDivergence, 0, 0, "")
 	}
 
 	nodes := d.createNodes(priceHistory, rsiValues)
@@ -39,7 +37,7 @@ func (d *Detector) DetectBullish(priceHistory []*market.PriceData) *analysis.Div
 func (d *Detector) DetectBearish(priceHistory []*market.PriceData) *analysis.DivergenceResult {
 	rsiValues := d.calculateRSI(priceHistory)
 	if len(rsiValues) == 0 {
-		return analysis.NewNoDivergenceResult(0, 0)
+		return analysis.NewDivergenceResult(false, analysis.NoDivergence, 0, 0, "")
 	}
 
 	nodes := d.createNodes(priceHistory, rsiValues)

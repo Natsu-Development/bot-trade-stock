@@ -5,7 +5,7 @@ import (
 )
 
 // DivergenceResult represents the result of divergence analysis.
-// This entity encapsulates whether a divergence was found and its characteristics.
+// This is a child entity of AnalysisResult aggregate.
 type DivergenceResult struct {
 	divergenceFound bool
 	divergenceType  DivergenceType
@@ -15,8 +15,7 @@ type DivergenceResult struct {
 	detectedAt      time.Time
 }
 
-// NewDivergenceResult creates a new DivergenceResult with validation.
-// This factory method ensures the result is in a valid initial state.
+// NewDivergenceResult creates a new DivergenceResult.
 func NewDivergenceResult(
 	divergenceFound bool,
 	divergenceType DivergenceType,
@@ -24,7 +23,6 @@ func NewDivergenceResult(
 	currentRSI float64,
 	description string,
 ) *DivergenceResult {
-	// Ensure consistency: if no divergence found, type should be NoDivergence
 	if !divergenceFound {
 		divergenceType = NoDivergence
 	}
@@ -35,19 +33,6 @@ func NewDivergenceResult(
 		currentPrice:    currentPrice,
 		currentRSI:      currentRSI,
 		description:     description,
-		detectedAt:      time.Now(),
-	}
-}
-
-// NewNoDivergenceResult creates a result indicating no divergence was found.
-// This is a convenience factory for the common case of no divergence.
-func NewNoDivergenceResult(currentPrice, currentRSI float64) *DivergenceResult {
-	return &DivergenceResult{
-		divergenceFound: false,
-		divergenceType:  NoDivergence,
-		currentPrice:    currentPrice,
-		currentRSI:      currentRSI,
-		description:     "",
 		detectedAt:      time.Now(),
 	}
 }
@@ -85,14 +70,4 @@ func (dr *DivergenceResult) DetectedAt() time.Time {
 // GetTypeString returns the string representation of divergence type.
 func (dr *DivergenceResult) GetTypeString() string {
 	return dr.divergenceType.String()
-}
-
-// IsDivergenceOfType checks if the result contains divergence of specific type.
-func (dr *DivergenceResult) IsDivergenceOfType(dt DivergenceType) bool {
-	return dr.divergenceFound && dr.divergenceType == dt
-}
-
-// IsActionable returns true if the divergence suggests taking action.
-func (dr *DivergenceResult) IsActionable() bool {
-	return dr.divergenceFound && dr.divergenceType.HasDivergence()
 }

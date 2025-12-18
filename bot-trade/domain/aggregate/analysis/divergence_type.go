@@ -27,16 +27,6 @@ func (dt DivergenceType) String() string {
 	}
 }
 
-// IsBullish returns true if this is a bullish divergence
-func (dt DivergenceType) IsBullish() bool {
-	return dt == BullishDivergence
-}
-
-// IsBearish returns true if this is a bearish divergence
-func (dt DivergenceType) IsBearish() bool {
-	return dt == BearishDivergence
-}
-
 // HasDivergence returns true if there is any divergence detected
 func (dt DivergenceType) HasDivergence() bool {
 	return dt != NoDivergence
