@@ -10,10 +10,9 @@ import (
 	"bot-trade/infrastructure/port"
 )
 
-// Ensure Notifier implements the port.Notifier interface
 var _ port.Notifier = (*Notifier)(nil)
 
-// Notifier sends Telegram notifications
+// Notifier sends Telegram notifications.
 type Notifier struct {
 	botToken string
 	chatID   string
@@ -21,7 +20,7 @@ type Notifier struct {
 	client   *http.Client
 }
 
-// NewNotifier creates a new Telegram notifier
+// NewNotifier creates a new Telegram notifier.
 func NewNotifier(botToken, chatID string, enabled bool) *Notifier {
 	return &Notifier{
 		botToken: botToken,
@@ -33,7 +32,7 @@ func NewNotifier(botToken, chatID string, enabled bool) *Notifier {
 	}
 }
 
-// SendMessage sends a message to Telegram
+// SendMessage sends a message to Telegram.
 func (n *Notifier) SendMessage(message string) error {
 	if !n.enabled {
 		return nil
@@ -72,15 +71,15 @@ func (n *Notifier) IsEnabled() bool {
 func (n *Notifier) HandleDivergenceResult(
 	divergenceType analysis.DivergenceType,
 	interval, symbol string,
-	result *analysis.DivergenceResult,
+	result *analysis.AnalysisResult,
 ) error {
-	if result == nil || !result.DivergenceFound() || !n.enabled {
+	if result == nil || !result.DivergenceFound || !n.enabled {
 		return nil
 	}
 
-	message := FormatDivergenceAlert(divergenceType.String(), interval, symbol, result.Description())
+	message := FormatDivergenceAlert(divergenceType.String(), interval, symbol, result.Description)
 	if err := n.SendMessage(message); err != nil {
-		return fmt.Errorf("failed to send %s notification for %s [%s]: %w", 
+		return fmt.Errorf("failed to send %s notification for %s [%s]: %w",
 			divergenceType.String(), symbol, interval, err)
 	}
 

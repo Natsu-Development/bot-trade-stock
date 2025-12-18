@@ -37,7 +37,7 @@ func NewBullishCronScheduler(
 	}
 }
 
-// Start starts the bullish cron scheduler for all enabled intervals
+// Start starts the bullish cron scheduler for all enabled intervals.
 func (bcs *BullishCronScheduler) Start() error {
 	bcs.mu.Lock()
 	defer bcs.mu.Unlock()
@@ -109,17 +109,17 @@ func (bcs *BullishCronScheduler) logSummary(interval string, results map[string]
 	var bullishSymbols []string
 
 	for symbol, result := range results {
-		if result.HasDivergence() && result.Divergence().DivergenceType() == analysis.BullishDivergence {
+		if result.HasDivergence() && result.DivergenceType == analysis.BullishDivergence {
 			bullishCount++
 			bullishSymbols = append(bullishSymbols, symbol)
 
 			bcs.logger.Info("Bullish divergence detected",
 				zap.String("interval", interval),
 				zap.String("symbol", symbol),
-				zap.String("description", result.Divergence().Description()),
+				zap.String("description", result.Description),
 			)
 
-			bcs.HandleResult(interval, symbol, result.Divergence())
+			bcs.HandleResult(interval, symbol, result)
 		}
 	}
 

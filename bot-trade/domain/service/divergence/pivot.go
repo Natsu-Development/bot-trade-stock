@@ -49,13 +49,13 @@ func (d *Detector) findPivotLows(nodes []priceRSINode) []pivot {
 
 func (d *Detector) findPivots(nodes []priceRSINode, isPivot func([]priceRSINode, int) bool) []pivot {
 	var pivots []pivot
-	minRequired := d.config.LookbackLeft() + d.config.LookbackRight() + 1
+	minRequired := d.config.LookbackLeft + d.config.LookbackRight + 1
 
 	if len(nodes) < minRequired {
 		return pivots
 	}
 
-	for i := d.config.LookbackLeft(); i < len(nodes); i++ {
+	for i := d.config.LookbackLeft; i < len(nodes); i++ {
 		if isPivot(nodes, i) {
 			pivots = append(pivots, pivot{
 				index: i,
@@ -71,9 +71,9 @@ func (d *Detector) findPivots(nodes []priceRSINode, isPivot func([]priceRSINode,
 // isPivotHigh checks if the RSI at index is higher than surrounding values.
 func (d *Detector) isPivotHigh(nodes []priceRSINode, index int) bool {
 	centerRSI := nodes[index].rsi
-	rightIndex := min(index+d.config.LookbackRight(), len(nodes)-1)
+	rightIndex := min(index+d.config.LookbackRight, len(nodes)-1)
 
-	for i := index - d.config.LookbackLeft(); i < index; i++ {
+	for i := index - d.config.LookbackLeft; i < index; i++ {
 		if nodes[i].rsi >= centerRSI {
 			return false
 		}
@@ -91,9 +91,9 @@ func (d *Detector) isPivotHigh(nodes []priceRSINode, index int) bool {
 // isPivotLow checks if the RSI at index is lower than surrounding values.
 func (d *Detector) isPivotLow(nodes []priceRSINode, index int) bool {
 	centerRSI := nodes[index].rsi
-	rightIndex := min(index+d.config.LookbackRight(), len(nodes)-1)
+	rightIndex := min(index+d.config.LookbackRight, len(nodes)-1)
 
-	for i := index - d.config.LookbackLeft(); i < index; i++ {
+	for i := index - d.config.LookbackLeft; i < index; i++ {
 		if nodes[i].rsi <= centerRSI {
 			return false
 		}

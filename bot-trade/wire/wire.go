@@ -36,7 +36,6 @@ type App struct {
 
 // New creates and wires all application dependencies.
 func New(cfg *config.Config) (*App, error) {
-	// 1. Create logger
 	appLogger, err := logger.New(logger.Config{
 		Level:       cfg.LogLevel,
 		Environment: cfg.Environment,
@@ -47,7 +46,6 @@ func New(cfg *config.Config) (*App, error) {
 
 	appLogger.Info("Initializing application")
 
-	// 2. Infrastructure
 	grpcConn, err := newGRPCConnection(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to gRPC: %w", err)
@@ -56,14 +54,12 @@ func New(cfg *config.Config) (*App, error) {
 	notifier := telegram.NewNotifier(cfg.TelegramBotToken, cfg.TelegramChatID, cfg.TelegramEnabled)
 	marketDataGateway := adapter.NewMarketDataGateway(grpcConn)
 
-	// 3. Domain
 	divergenceDetector, err := newDivergenceDetector(cfg)
 	if err != nil {
 		grpcConn.Close()
 		return nil, fmt.Errorf("failed to create divergence detector: %w", err)
 	}
 
-	// 4. Application
 	bullishAnalyzer := usecase.NewAnalyzeDivergenceUseCase(
 		marketDataGateway, divergenceDetector, analysis.BullishDivergence,
 		appLogger, cfg.DivergenceIndicesRecent, cfg.RSIPeriod,
@@ -82,7 +78,6 @@ func New(cfg *config.Config) (*App, error) {
 		cfg.BearishCronStartDateOffset, cfg.BearishIntervals(),
 	)
 
-	// 5. Presentation
 	router := presHTTP.NewRouter(
 		presHandler.NewBullishDivergenceHandler(bullishAnalyzer),
 		presHandler.NewBearishDivergenceHandler(bearishAnalyzer),
@@ -150,8 +145,6 @@ func (a *App) Close() {
 	a.logger.Sync()
 }
 
-// --- Internal factory functions ---
-
 func newGRPCConnection(cfg *config.Config) (*grpc.ClientConn, error) {
 	clientConfig := infraGRPC.NewClientConfig(
 		cfg.GRPCServerAddr,
@@ -162,7 +155,7 @@ func newGRPCConnection(cfg *config.Config) (*grpc.ClientConn, error) {
 }
 
 func newDivergenceDetector(cfg *config.Config) (*divergence.Detector, error) {
-	divergenceConfig, err := analysis.NewDivergenceConfig(
+	config, err := divergence.NewConfig(
 		cfg.DivergenceLookbackLeft,
 		cfg.DivergenceLookbackRight,
 		cfg.DivergenceRangeMin,
@@ -172,5 +165,5 @@ func newDivergenceDetector(cfg *config.Config) (*divergence.Detector, error) {
 		return nil, err
 	}
 
-	return divergence.NewDetector(cfg.RSIPeriod, divergenceConfig), nil
+	return divergence.NewDetector(cfg.RSIPeriod, config), nil
 }

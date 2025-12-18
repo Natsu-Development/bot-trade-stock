@@ -90,25 +90,31 @@ func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.Market
 
 	recentPriceHistory := priceHistory[len(priceHistory)-uc.indicesRecent:]
 
-	var divergenceResult *analysis.DivergenceResult
+	var detection divergence.DetectionResult
 	if uc.divergenceType == analysis.BullishDivergence {
-		divergenceResult = uc.divergenceDetector.DetectBullish(recentPriceHistory)
+		detection = uc.divergenceDetector.DetectBullish(recentPriceHistory)
 	} else {
-		divergenceResult = uc.divergenceDetector.DetectBearish(recentPriceHistory)
+		detection = uc.divergenceDetector.DetectBearish(recentPriceHistory)
 	}
 
 	processingTime := time.Since(startTime)
 	uc.logger.Info(fmt.Sprintf("%s divergence analysis completed", strategyType),
 		zap.String("symbol", symbol),
 		zap.Duration("duration", processingTime),
-		zap.Bool("divergence_found", divergenceResult.DivergenceFound()),
+		zap.Bool("divergence_found", detection.Found),
 	)
 
 	return analysis.NewAnalysisResult(
 		symbol,
-		divergenceResult,
+		detection.Type,
+		detection.Found,
+		detection.CurrentPrice,
+		detection.CurrentRSI,
+		detection.Description,
 		processingTime.Milliseconds(),
-		q,
+		q.StartDate(),
+		q.EndDate(),
+		q.IntervalString(),
 		uc.rsiPeriod,
 	), nil
 }

@@ -37,7 +37,7 @@ func NewBearishCronScheduler(
 	}
 }
 
-// Start starts the bearish cron scheduler for all enabled intervals
+// Start starts the bearish cron scheduler for all enabled intervals.
 func (bcs *BearishCronScheduler) Start() error {
 	bcs.mu.Lock()
 	defer bcs.mu.Unlock()
@@ -109,17 +109,17 @@ func (bcs *BearishCronScheduler) logSummary(interval string, results map[string]
 	var bearishSymbols []string
 
 	for symbol, result := range results {
-		if result.HasDivergence() && result.Divergence().DivergenceType() == analysis.BearishDivergence {
+		if result.HasDivergence() && result.DivergenceType == analysis.BearishDivergence {
 			bearishCount++
 			bearishSymbols = append(bearishSymbols, symbol)
 
 			bcs.logger.Info("Bearish divergence detected",
 				zap.String("interval", interval),
 				zap.String("symbol", symbol),
-				zap.String("description", result.Divergence().Description()),
+				zap.String("description", result.Description),
 			)
 
-			bcs.HandleResult(interval, symbol, result.Divergence())
+			bcs.HandleResult(interval, symbol, result)
 		}
 	}
 

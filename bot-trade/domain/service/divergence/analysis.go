@@ -12,16 +12,21 @@ func (d *Detector) analyzeDivergence(
 	nodes []priceRSINode,
 	pivots []pivot,
 	divergenceType analysis.DivergenceType,
-) *analysis.DivergenceResult {
+) DetectionResult {
 	if len(nodes) == 0 {
-		return analysis.NewDivergenceResult(false, analysis.NoDivergence, 0, 0, "")
+		return DetectionResult{Found: false, Type: analysis.NoDivergence}
 	}
 
 	currentPrice := nodes[len(nodes)-1].price
 	currentRSI := nodes[len(nodes)-1].rsi
 
 	if len(pivots) < 2 {
-		return analysis.NewDivergenceResult(false, analysis.NoDivergence, currentPrice, currentRSI, "")
+		return DetectionResult{
+			Found:        false,
+			Type:         analysis.NoDivergence,
+			CurrentPrice: currentPrice,
+			CurrentRSI:   currentRSI,
+		}
 	}
 
 	sortPivotsByIndexDesc(pivots)
@@ -35,11 +40,16 @@ func (d *Detector) analyzeDivergence(
 		}
 
 		if d.isDivergence(current, previous, divergenceType) {
-			return d.createDivergenceResult(current, previous, divergenceType, currentPrice, currentRSI)
+			return d.createDetectionResult(current, previous, divergenceType, currentPrice, currentRSI)
 		}
 	}
 
-	return analysis.NewDivergenceResult(false, analysis.NoDivergence, currentPrice, currentRSI, "")
+	return DetectionResult{
+		Found:        false,
+		Type:         analysis.NoDivergence,
+		CurrentPrice: currentPrice,
+		CurrentRSI:   currentRSI,
+	}
 }
 
 func sortPivotsByIndexDesc(pivots []pivot) {
@@ -50,7 +60,7 @@ func sortPivotsByIndexDesc(pivots []pivot) {
 
 func (d *Detector) isValidPivotDistance(current, previous pivot) bool {
 	barsBetween := current.index - previous.index
-	return barsBetween >= d.config.RangeMin() && barsBetween <= d.config.RangeMax()
+	return barsBetween >= d.config.RangeMin && barsBetween <= d.config.RangeMax
 }
 
 func (d *Detector) isDivergence(current, previous pivot, divergenceType analysis.DivergenceType) bool {
@@ -65,11 +75,11 @@ func (d *Detector) isDivergence(current, previous pivot, divergenceType analysis
 	return priceHH && rsiLH
 }
 
-func (d *Detector) createDivergenceResult(
+func (d *Detector) createDetectionResult(
 	current, previous pivot,
 	divergenceType analysis.DivergenceType,
 	currentPrice, currentRSI float64,
-) *analysis.DivergenceResult {
+) DetectionResult {
 	label := "Bullish"
 	if divergenceType == analysis.BearishDivergence {
 		label = "Bearish"
@@ -81,5 +91,11 @@ func (d *Detector) createDivergenceResult(
 		previous.date, current.date,
 	)
 
-	return analysis.NewDivergenceResult(true, divergenceType, currentPrice, currentRSI, description)
+	return DetectionResult{
+		Found:        true,
+		Type:         divergenceType,
+		CurrentPrice: currentPrice,
+		CurrentRSI:   currentRSI,
+		Description:  description,
+	}
 }
