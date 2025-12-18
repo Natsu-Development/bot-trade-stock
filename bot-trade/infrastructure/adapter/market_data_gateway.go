@@ -13,7 +13,6 @@ import (
 )
 
 // MarketDataGateway implements the MarketDataGateway interface using gRPC.
-// This adapter fetches stock data from the Python broker service.
 type MarketDataGateway struct {
 	client pb.StockDataServiceClient
 	conn   *grpc.ClientConn
@@ -36,10 +35,10 @@ func (g *MarketDataGateway) FetchStockData(
 	defer cancel()
 
 	response, err := g.client.GetStockData(ctx, &pb.StockRequest{
-		Symbol:    q.SymbolString(),
-		StartDate: q.StartDate(),
-		EndDate:   q.EndDate(),
-		Interval:  q.IntervalString(),
+		Symbol:    q.Symbol,
+		StartDate: q.StartDate,
+		EndDate:   q.EndDate,
+		Interval:  q.Interval,
 	})
 
 	if err != nil {
@@ -52,4 +51,3 @@ func (g *MarketDataGateway) FetchStockData(
 
 	return response, nil
 }
-

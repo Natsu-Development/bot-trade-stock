@@ -47,7 +47,7 @@ func NewAnalyzeDivergenceUseCase(
 
 // Execute performs divergence analysis for a single symbol.
 func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.MarketDataQuery) (*analysis.AnalysisResult, error) {
-	symbol := q.SymbolString()
+	symbol := q.Symbol
 	strategyType := uc.divergenceType.String()
 
 	uc.logger.Info(fmt.Sprintf("%s divergence analysis", strategyType), zap.String("symbol", symbol))
@@ -62,21 +62,12 @@ func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.Market
 		return nil, fmt.Errorf("failed to fetch stock data: %w", err)
 	}
 
-	rawData := make([]market.RawPriceData, len(rawResponse.PriceHistory))
+	priceHistory := make([]*market.PriceData, len(rawResponse.PriceHistory))
 	for i, pb := range rawResponse.PriceHistory {
-		rawData[i] = market.RawPriceData{
+		priceHistory[i] = &market.PriceData{
 			Date:  pb.Date,
 			Close: pb.Close,
 		}
-	}
-
-	priceHistory, err := market.NewPriceHistoryFromRaw(rawData)
-	if err != nil {
-		uc.logger.Error("Failed to create price history",
-			zap.String("symbol", symbol),
-			zap.Error(err),
-		)
-		return nil, fmt.Errorf("failed to create price history: %w", err)
 	}
 
 	if len(priceHistory) < uc.indicesRecent {
@@ -112,9 +103,9 @@ func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.Market
 		detection.CurrentRSI,
 		detection.Description,
 		processingTime.Milliseconds(),
-		q.StartDate(),
-		q.EndDate(),
-		q.IntervalString(),
+		q.StartDate,
+		q.EndDate,
+		q.Interval,
 		uc.rsiPeriod,
 	), nil
 }
