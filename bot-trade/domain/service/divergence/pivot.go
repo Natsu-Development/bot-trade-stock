@@ -2,15 +2,7 @@ package divergence
 
 import "bot-trade/domain/aggregate/market"
 
-// priceRSINode represents a data point with price and RSI value.
-type priceRSINode struct {
-	index int
-	date  string
-	price float64
-	rsi   float64
-}
-
-// pivot represents a detected pivot point (high or low) in RSI data.
+// pivot represents a detected pivot point in RSI data.
 type pivot struct {
 	index int
 	price float64
@@ -18,92 +10,89 @@ type pivot struct {
 	date  string
 }
 
-// createNodes builds a slice of price-RSI nodes from raw data.
-func (d *Detector) createNodes(priceHistory []*market.PriceData, rsiValues []float64) []priceRSINode {
-	minLen := len(priceHistory)
-	if len(rsiValues) < minLen {
-		minLen = len(rsiValues)
-	}
-
-	nodes := make([]priceRSINode, minLen)
-	for i := 0; i < minLen; i++ {
-		nodes[i] = priceRSINode{
-			index: i,
-			date:  priceHistory[i].Date,
-			price: priceHistory[i].Close,
-			rsi:   rsiValues[i],
-		}
-	}
-	return nodes
-}
-
 // findPivotHighs detects RSI pivot highs (peaks).
-func (d *Detector) findPivotHighs(nodes []priceRSINode) []pivot {
-	return d.findPivots(nodes, d.isPivotHigh)
-}
-
-// findPivotLows detects RSI pivot lows (troughs).
-func (d *Detector) findPivotLows(nodes []priceRSINode) []pivot {
-	return d.findPivots(nodes, d.isPivotLow)
-}
-
-func (d *Detector) findPivots(nodes []priceRSINode, isPivot func([]priceRSINode, int) bool) []pivot {
-	var pivots []pivot
+func (d *Detector) findPivotHighs(data []market.PriceDataWithRSI) []pivot {
 	minRequired := d.config.LookbackLeft + d.config.LookbackRight + 1
-
-	if len(nodes) < minRequired {
-		return pivots
+	if len(data) < minRequired {
+		return nil
 	}
 
-	for i := d.config.LookbackLeft; i < len(nodes); i++ {
-		if isPivot(nodes, i) {
+	var pivots []pivot
+	for i := d.config.LookbackLeft; i < len(data)-d.config.LookbackRight; i++ {
+		if data[i].RSI == 0 {
+			continue
+		}
+
+		isHigh := true
+		centerRSI := data[i].RSI
+
+		// Check left: center must be higher than all left values
+		for j := i - d.config.LookbackLeft; j < i && isHigh; j++ {
+			if data[j].RSI != 0 && data[j].RSI >= centerRSI {
+				isHigh = false
+			}
+		}
+
+		// Check right: center must be higher than all right values
+		for j := i + 1; j <= i+d.config.LookbackRight && isHigh; j++ {
+			if data[j].RSI != 0 && data[j].RSI >= centerRSI {
+				isHigh = false
+			}
+		}
+
+		if isHigh {
 			pivots = append(pivots, pivot{
-				index: i,
-				price: nodes[i].price,
-				rsi:   nodes[i].rsi,
-				date:  nodes[i].date,
+				index: data[i].Index,
+				price: data[i].Close,
+				rsi:   data[i].RSI,
+				date:  data[i].Date,
 			})
 		}
 	}
+
 	return pivots
 }
 
-// isPivotHigh checks if the RSI at index is higher than surrounding values.
-func (d *Detector) isPivotHigh(nodes []priceRSINode, index int) bool {
-	centerRSI := nodes[index].rsi
-	rightIndex := min(index+d.config.LookbackRight, len(nodes)-1)
+// findPivotLows detects RSI pivot lows (troughs).
+func (d *Detector) findPivotLows(data []market.PriceDataWithRSI) []pivot {
+	minRequired := d.config.LookbackLeft + d.config.LookbackRight + 1
+	if len(data) < minRequired {
+		return nil
+	}
 
-	for i := index - d.config.LookbackLeft; i < index; i++ {
-		if nodes[i].rsi >= centerRSI {
-			return false
+	var pivots []pivot
+	for i := d.config.LookbackLeft; i < len(data)-d.config.LookbackRight; i++ {
+		if data[i].RSI == 0 {
+			continue
+		}
+
+		isLow := true
+		centerRSI := data[i].RSI
+
+		// Check left: center must be lower than all left values
+		for j := i - d.config.LookbackLeft; j < i && isLow; j++ {
+			if data[j].RSI != 0 && data[j].RSI <= centerRSI {
+				isLow = false
+			}
+		}
+
+		// Check right: center must be lower than all right values
+		for j := i + 1; j <= i+d.config.LookbackRight && isLow; j++ {
+			if data[j].RSI != 0 && data[j].RSI <= centerRSI {
+				isLow = false
+			}
+		}
+
+		if isLow {
+			pivots = append(pivots, pivot{
+				index: data[i].Index,
+				price: data[i].Close,
+				rsi:   data[i].RSI,
+				date:  data[i].Date,
+			})
 		}
 	}
 
-	for i := index + 1; i <= rightIndex; i++ {
-		if nodes[i].rsi >= centerRSI {
-			return false
-		}
-	}
-
-	return true
+	return pivots
 }
 
-// isPivotLow checks if the RSI at index is lower than surrounding values.
-func (d *Detector) isPivotLow(nodes []priceRSINode, index int) bool {
-	centerRSI := nodes[index].rsi
-	rightIndex := min(index+d.config.LookbackRight, len(nodes)-1)
-
-	for i := index - d.config.LookbackLeft; i < index; i++ {
-		if nodes[i].rsi <= centerRSI {
-			return false
-		}
-	}
-
-	for i := index + 1; i <= rightIndex; i++ {
-		if nodes[i].rsi <= centerRSI {
-			return false
-		}
-	}
-
-	return true
-}

@@ -165,5 +165,5 @@ func newDivergenceDetector(cfg *config.Config) (*divergence.Detector, error) {
 		return nil, err
 	}
 
-	return divergence.NewDetector(cfg.RSIPeriod, config), nil
+	return divergence.NewDetector(config), nil
 }

@@ -73,4 +73,3 @@ func NewInterval(value string) (Interval, error) {
 func (i Interval) String() string {
 	return string(i)
 }
-

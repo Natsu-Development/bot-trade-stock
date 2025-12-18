@@ -81,11 +81,27 @@ func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.Market
 
 	recentPriceHistory := priceHistory[len(priceHistory)-uc.indicesRecent:]
 
+	// Enrich price data with RSI values
+	dataWithRSI := market.CalculateRSI(recentPriceHistory, uc.rsiPeriod)
+	if len(dataWithRSI) == 0 {
+		return nil, fmt.Errorf("insufficient data for RSI calculation")
+	}
+
 	var detection divergence.DetectionResult
 	if uc.divergenceType == analysis.BullishDivergence {
-		detection = uc.divergenceDetector.DetectBullish(recentPriceHistory)
+		detection = uc.divergenceDetector.DetectBullish(dataWithRSI)
 	} else {
-		detection = uc.divergenceDetector.DetectBearish(recentPriceHistory)
+		detection = uc.divergenceDetector.DetectBearish(dataWithRSI)
+	}
+
+	// Get current price/RSI from last valid data point
+	var currentPrice, currentRSI float64
+	for i := len(dataWithRSI) - 1; i >= 0; i-- {
+		if dataWithRSI[i].RSI != 0 {
+			currentPrice = dataWithRSI[i].Close
+			currentRSI = dataWithRSI[i].RSI
+			break
+		}
 	}
 
 	processingTime := time.Since(startTime)
@@ -99,8 +115,8 @@ func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.Market
 		symbol,
 		detection.Type,
 		detection.Found,
-		detection.CurrentPrice,
-		detection.CurrentRSI,
+		currentPrice,
+		currentRSI,
 		detection.Description,
 		processingTime.Milliseconds(),
 		q.StartDate,

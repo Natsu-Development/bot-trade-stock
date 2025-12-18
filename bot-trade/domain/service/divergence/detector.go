@@ -45,49 +45,36 @@ func NewConfig(lookbackLeft, lookbackRight, rangeMin, rangeMax int) (Config, err
 
 // DetectionResult holds the result of divergence detection.
 type DetectionResult struct {
-	Found        bool
-	Type         analysis.DivergenceType
-	CurrentPrice float64
-	CurrentRSI   float64
-	Description  string
+	Found       bool
+	Type        analysis.DivergenceType
+	Description string
 }
 
 // Detector is a domain service that detects RSI divergences.
 type Detector struct {
-	rsiPeriod int
-	config    Config
+	config Config
 }
 
 // NewDetector creates a new divergence detector.
-func NewDetector(rsiPeriod int, config Config) *Detector {
-	return &Detector{
-		rsiPeriod: rsiPeriod,
-		config:    config,
-	}
+func NewDetector(config Config) *Detector {
+	return &Detector{config: config}
 }
 
 // DetectBullish detects bullish divergence (Price Lower Low + RSI Higher Low).
-func (d *Detector) DetectBullish(priceHistory []*market.PriceData) DetectionResult {
-	rsiValues := d.calculateRSI(priceHistory)
-	if len(rsiValues) == 0 {
+func (d *Detector) DetectBullish(data []market.PriceDataWithRSI) DetectionResult {
+	if len(data) == 0 {
 		return DetectionResult{Found: false, Type: analysis.NoDivergence}
 	}
-
-	nodes := d.createNodes(priceHistory, rsiValues)
-	pivotLows := d.findPivotLows(nodes)
-
-	return d.analyzeDivergence(nodes, pivotLows, analysis.BullishDivergence)
+	pivots := d.findPivotLows(data)
+	return d.analyze(pivots, analysis.BullishDivergence)
 }
 
 // DetectBearish detects bearish divergence (Price Higher High + RSI Lower High).
-func (d *Detector) DetectBearish(priceHistory []*market.PriceData) DetectionResult {
-	rsiValues := d.calculateRSI(priceHistory)
-	if len(rsiValues) == 0 {
+func (d *Detector) DetectBearish(data []market.PriceDataWithRSI) DetectionResult {
+	if len(data) == 0 {
 		return DetectionResult{Found: false, Type: analysis.NoDivergence}
 	}
-
-	nodes := d.createNodes(priceHistory, rsiValues)
-	pivotHighs := d.findPivotHighs(nodes)
-
-	return d.analyzeDivergence(nodes, pivotHighs, analysis.BearishDivergence)
+	pivots := d.findPivotHighs(data)
+	return d.analyze(pivots, analysis.BearishDivergence)
 }
+
