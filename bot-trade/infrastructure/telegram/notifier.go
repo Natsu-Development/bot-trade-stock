@@ -14,38 +14,28 @@ var _ port.Notifier = (*Notifier)(nil)
 
 // Notifier sends Telegram notifications.
 type Notifier struct {
-	botToken string
-	chatID   string
-	enabled  bool
-	client   *http.Client
+	client *http.Client
 }
 
 // NewNotifier creates a new Telegram notifier.
-func NewNotifier(botToken, chatID string, enabled bool) *Notifier {
+func NewNotifier() *Notifier {
 	return &Notifier{
-		botToken: botToken,
-		chatID:   chatID,
-		enabled:  enabled,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 	}
 }
 
-// SendMessage sends a message to Telegram.
-func (n *Notifier) SendMessage(message string) error {
-	if !n.enabled {
-		return nil
-	}
-
-	if n.botToken == "" || n.chatID == "" {
+// SendMessage sends a message to Telegram using provided credentials.
+func (n *Notifier) SendMessage(botToken, chatID, message string) error {
+	if botToken == "" || chatID == "" {
 		return fmt.Errorf("telegram bot token or chat ID not configured")
 	}
 
-	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", n.botToken)
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", botToken)
 
 	data := url.Values{}
-	data.Set("chat_id", n.chatID)
+	data.Set("chat_id", chatID)
 	data.Set("text", message)
 	data.Set("parse_mode", "HTML")
 
@@ -62,23 +52,24 @@ func (n *Notifier) SendMessage(message string) error {
 	return nil
 }
 
-// IsEnabled returns whether Telegram notifications are enabled.
-func (n *Notifier) IsEnabled() bool {
-	return n.enabled
-}
-
 // HandleDivergenceResult processes a divergence result and sends notification.
 func (n *Notifier) HandleDivergenceResult(
 	divergenceType analysis.DivergenceType,
 	interval, symbol string,
 	result *analysis.AnalysisResult,
+	botToken, chatID string,
 ) error {
-	if result == nil || !result.DivergenceFound || !n.enabled {
+	if result == nil || !result.DivergenceFound {
+		return nil
+	}
+
+	if botToken == "" || chatID == "" {
+		// Telegram not configured for this config, skip notification
 		return nil
 	}
 
 	message := FormatDivergenceAlert(divergenceType.String(), interval, symbol, result.Description)
-	if err := n.SendMessage(message); err != nil {
+	if err := n.SendMessage(botToken, chatID, message); err != nil {
 		return fmt.Errorf("failed to send %s notification for %s [%s]: %w",
 			divergenceType.String(), symbol, interval, err)
 	}

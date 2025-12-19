@@ -7,8 +7,9 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Config holds application configuration
-type Config struct {
+// InfraConfig holds infrastructure configuration loaded from environment variables.
+// This configuration is immutable at runtime and used for deployment-specific settings.
+type InfraConfig struct {
 	// Server Configuration
 	GRPCServerAddr string
 	HTTPPort       int
@@ -24,15 +25,9 @@ type Config struct {
 	GRPCRequestTimeout    int
 	GRPCMarketDataTimeout int
 
-	// RSI Configuration
-	RSIPeriod int
-
-	// Divergence Detection Configuration
-	DivergenceLookbackLeft  int
-	DivergenceLookbackRight int
-	DivergenceRangeMin      int
-	DivergenceRangeMax      int
-	DivergenceIndicesRecent int
+	// MongoDB Configuration
+	MongoDBURI      string
+	MongoDBDatabase string
 
 	// Bearish Divergence Configuration
 	BearishCronStartDateOffset int  // Days back for historical data
@@ -62,28 +57,21 @@ type Config struct {
 	Bullish1WEnabled   bool
 	Bullish1WSchedule  string
 
-	// Common Cron Configuration
-	DefaultSymbols []string
-
 	// Logging Configuration
 	LogLevel    string
 	Environment string // development, production
-
-	// Telegram Notification Configuration
-	TelegramEnabled  bool
-	TelegramBotToken string
-	TelegramChatID   string
 }
 
-// LoadFromEnv loads and validates configuration from .env file
-func LoadFromEnv() (*Config, error) {
+// LoadInfraFromEnv loads and validates infrastructure configuration from .env file.
+// Returns InfraConfig or error if required variables are missing.
+func LoadInfraFromEnv() (*InfraConfig, error) {
 	// Load .env file (optional)
 	if err := godotenv.Load(); err != nil {
 		fmt.Printf("Warning: .env file not found, using system environment variables\n")
 	}
 
 	var errors []string
-	config := &Config{}
+	config := &InfraConfig{}
 
 	// Server Configuration
 	config.GRPCServerAddr = getStringEnv("GRPC_SERVER_ADDR", &errors)
@@ -100,15 +88,9 @@ func LoadFromEnv() (*Config, error) {
 	config.GRPCRequestTimeout = getNumberEnv("GRPC_REQUEST_TIMEOUT", &errors)
 	config.GRPCMarketDataTimeout = getNumberEnv("GRPC_MARKET_DATA_TIMEOUT", &errors)
 
-	// RSI Configuration
-	config.RSIPeriod = getNumberEnv("RSI_PERIOD", &errors)
-
-	// Divergence Detection Configuration
-	config.DivergenceLookbackLeft = getNumberEnv("DIVERGENCE_LOOKBACK_LEFT", &errors)
-	config.DivergenceLookbackRight = getNumberEnv("DIVERGENCE_LOOKBACK_RIGHT", &errors)
-	config.DivergenceRangeMin = getNumberEnv("DIVERGENCE_RANGE_MIN", &errors)
-	config.DivergenceRangeMax = getNumberEnv("DIVERGENCE_RANGE_MAX", &errors)
-	config.DivergenceIndicesRecent = getNumberEnv("DIVERGENCE_INDICES_RECENT", &errors)
+	// MongoDB Configuration
+	config.MongoDBURI = getStringEnv("MONGODB_URI", &errors)
+	config.MongoDBDatabase = getStringEnv("MONGODB_DATABASE", &errors)
 
 	// Bearish Divergence Configuration
 	config.BearishCronStartDateOffset = getNumberEnv("BEARISH_CRON_START_DATE_OFFSET", &errors)
@@ -138,17 +120,9 @@ func LoadFromEnv() (*Config, error) {
 	config.Bullish1WEnabled = getOptionalBoolEnv("BULLISH_1W_ENABLED")
 	config.Bullish1WSchedule = getOptionalStringEnv("BULLISH_1W_SCHEDULE")
 
-	// Common Cron Configuration
-	config.DefaultSymbols = getSymbolListEnv("DEFAULT_SYMBOLS", &errors)
-
 	// Logging Configuration
 	config.LogLevel = getLogLevelEnv("LOG_LEVEL", &errors)
 	config.Environment = getEnvironmentEnv("ENVIRONMENT")
-
-	// Telegram Notification Configuration (optional)
-	config.TelegramEnabled = getOptionalBoolEnv("TELEGRAM_ENABLED")
-	config.TelegramBotToken = getOptionalStringEnv("TELEGRAM_BOT_TOKEN")
-	config.TelegramChatID = getOptionalStringEnv("TELEGRAM_CHAT_ID")
 
 	if len(errors) > 0 {
 		return nil, fmt.Errorf("configuration validation failed:\n%s", strings.Join(errors, "\n"))
@@ -164,7 +138,7 @@ type IntervalConfig struct {
 }
 
 // BullishIntervals returns the interval configuration map for bullish analysis.
-func (c *Config) BullishIntervals() map[string]IntervalConfig {
+func (c *InfraConfig) BullishIntervals() map[string]IntervalConfig {
 	return map[string]IntervalConfig{
 		"30m": {Enabled: c.Bullish30mEnabled, Schedule: c.Bullish30mSchedule},
 		"1H":  {Enabled: c.Bullish1HEnabled, Schedule: c.Bullish1HSchedule},
@@ -174,7 +148,7 @@ func (c *Config) BullishIntervals() map[string]IntervalConfig {
 }
 
 // BearishIntervals returns the interval configuration map for bearish analysis.
-func (c *Config) BearishIntervals() map[string]IntervalConfig {
+func (c *InfraConfig) BearishIntervals() map[string]IntervalConfig {
 	return map[string]IntervalConfig{
 		"30m": {Enabled: c.Bearish30mEnabled, Schedule: c.Bearish30mSchedule},
 		"1H":  {Enabled: c.Bearish1HEnabled, Schedule: c.Bearish1HSchedule},
@@ -190,7 +164,7 @@ type LoggerConfig struct {
 }
 
 // Logger returns the logger configuration.
-func (c *Config) Logger() LoggerConfig {
+func (c *InfraConfig) Logger() LoggerConfig {
 	return LoggerConfig{
 		Level:       c.LogLevel,
 		Environment: c.Environment,

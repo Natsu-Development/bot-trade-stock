@@ -13,8 +13,8 @@ import (
 // rather than a concrete use case implementation, following the Dependency
 // Inversion Principle.
 type DivergenceAnalyzer interface {
-	// Execute performs divergence analysis for the given query.
+	// Execute performs divergence analysis for the given query using the specified config.
 	// Returns an AnalysisResult domain entity with the analysis results or an error
 	// if the analysis could not be completed.
-	Execute(ctx context.Context, q market.MarketDataQuery) (*analysis.AnalysisResult, error)
+	Execute(ctx context.Context, q market.MarketDataQuery, configID string) (*analysis.AnalysisResult, error)
 }

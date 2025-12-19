@@ -28,28 +28,10 @@ class HighPerformanceStockService(vnstock_pb2_grpc.StockDataServiceServicer):
     def __init__(self):
         """Initialize with persistent vnstock client"""
         self.stock_client = vn.Vnstock()
-        self.cache = {}  # Simple in-memory cache
-        self.cache_ttl = 30  # 30 seconds cache TTL
         logger.info("🚀 High-Performance Stock Service initialized")
     
-    def _is_cache_valid(self, symbol: str) -> bool:
-        """Check if cached data is still valid"""
-        if symbol not in self.cache:
-            return False
-        
-        cache_time = self.cache[symbol].get('timestamp', 0)
-        return (time.time() - cache_time) < self.cache_ttl
-    
-    def _get_stock_data_optimized(self, symbol: str, start_date: str = "", end_date: str = "", interval: str = "1D") -> Optional[Dict]:
-        """Optimized stock data fetching with caching - supports exact date ranges and intervals"""
-        # Create cache key based on all parameters
-        cache_key = f"{symbol}_{start_date}_{end_date}_{interval}"
-        
-        # Check cache first
-        if self._is_cache_valid(cache_key):
-            logger.info(f"📋 Cache hit for {symbol}")
-            return self.cache[cache_key]['data']
-        
+    def _get_stock_data(self, symbol: str, start_date: str = "", end_date: str = "", interval: str = "1D") -> Optional[Dict]:
+        """Stock data fetching - supports exact date ranges and intervals"""
         try:
             # Use exact dates provided by Go client (already validated)
             start_dt = datetime.strptime(start_date, "%Y-%m-%d")
@@ -131,15 +113,7 @@ class HighPerformanceStockService(vnstock_pb2_grpc.StockDataServiceServicer):
                 "status": "success"
             }
 
-            logger.info(f"📊 Result for {symbol}: {len(result['price_history'])} price data points")
-            
-            # Cache the result
-            self.cache[cache_key] = {
-                'data': result,
-                'timestamp': time.time()
-            }
-            
-            logger.info(f"✅ Fetched and cached data for {symbol}: {latest_price} VND")
+            logger.info(f"✅ Fetched data for {symbol}: {latest_price} VND, {len(result['price_history'])} price data points")
             return result
             
         except Exception as e:
@@ -161,7 +135,7 @@ class HighPerformanceStockService(vnstock_pb2_grpc.StockDataServiceServicer):
         logger.info(f"📊 gRPC request for {symbol} from {start_date} to {end_date} with interval {interval}")
 
         
-        data = self._get_stock_data_optimized(symbol, start_date, end_date, interval)
+        data = self._get_stock_data(symbol, start_date, end_date, interval)
         
         if not data or data.get('status') == 'error':
             return vnstock_pb2.StockResponse(
@@ -224,7 +198,6 @@ def serve():
     print("⚡ Features:")
     print("  • Persistent Python process (no startup overhead)")
     print("  • Connection pooling with vnstock")
-    print("  • In-memory caching (30s TTL)")
     print("  • Protocol Buffers (binary serialization)")
     print("  • Concurrent request handling")
     print("\n📊 Available gRPC methods:")

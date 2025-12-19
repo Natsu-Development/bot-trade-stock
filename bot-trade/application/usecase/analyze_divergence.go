@@ -18,39 +18,46 @@ var _ appPort.DivergenceAnalyzer = (*AnalyzeDivergenceUseCase)(nil)
 
 // AnalyzeDivergenceUseCase orchestrates divergence analysis.
 type AnalyzeDivergenceUseCase struct {
-	marketDataGateway  infraPort.MarketDataGateway
-	divergenceDetector *divergence.Detector
-	divergenceType     analysis.DivergenceType
-	logger             *zap.Logger
-	indicesRecent      int
-	rsiPeriod          int
+	configRepository  infraPort.ConfigRepository
+	marketDataGateway infraPort.MarketDataGateway
+	divergenceType    analysis.DivergenceType
+	logger            *zap.Logger
 }
 
 // NewAnalyzeDivergenceUseCase creates a new divergence analysis use case.
 func NewAnalyzeDivergenceUseCase(
+	configRepository infraPort.ConfigRepository,
 	marketDataGateway infraPort.MarketDataGateway,
-	divergenceDetector *divergence.Detector,
 	divergenceType analysis.DivergenceType,
 	logger *zap.Logger,
-	indicesRecent int,
-	rsiPeriod int,
 ) *AnalyzeDivergenceUseCase {
 	return &AnalyzeDivergenceUseCase{
-		marketDataGateway:  marketDataGateway,
-		divergenceDetector: divergenceDetector,
-		divergenceType:     divergenceType,
-		logger:             logger,
-		indicesRecent:      indicesRecent,
-		rsiPeriod:          rsiPeriod,
+		configRepository:  configRepository,
+		marketDataGateway: marketDataGateway,
+		divergenceType:    divergenceType,
+		logger:            logger,
 	}
 }
 
-// Execute performs divergence analysis for a single symbol.
-func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.MarketDataQuery) (*analysis.AnalysisResult, error) {
+// Execute performs divergence analysis for a single symbol using configuration loaded from repository.
+func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.MarketDataQuery, configID string) (*analysis.AnalysisResult, error) {
 	symbol := q.Symbol
 	strategyType := uc.divergenceType.String()
 
-	uc.logger.Info(fmt.Sprintf("%s divergence analysis", strategyType), zap.String("symbol", symbol))
+	// Load configuration from repository
+	tradingConfig, err := uc.configRepository.GetByID(ctx, configID)
+	if err != nil {
+		uc.logger.Error("Failed to load trading configuration",
+			zap.String("configID", configID),
+			zap.Error(err),
+		)
+		return nil, fmt.Errorf("failed to load trading configuration: %w", err)
+	}
+
+	uc.logger.Info(fmt.Sprintf("%s divergence analysis", strategyType),
+		zap.String("symbol", symbol),
+		zap.String("configID", configID),
+	)
 	startTime := time.Now()
 
 	rawResponse, err := uc.marketDataGateway.FetchStockData(ctx, q)
@@ -70,28 +77,41 @@ func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.Market
 		}
 	}
 
-	if len(priceHistory) < uc.indicesRecent {
+	indicesRecent := tradingConfig.Divergence.IndicesRecent
+	if len(priceHistory) < indicesRecent {
 		uc.logger.Warn("Insufficient price data",
 			zap.String("symbol", symbol),
-			zap.Int("required", uc.indicesRecent),
+			zap.Int("required", indicesRecent),
 			zap.Int("actual", len(priceHistory)),
 		)
-		return nil, fmt.Errorf("insufficient price data: required %d, got %d", uc.indicesRecent, len(priceHistory))
+		return nil, fmt.Errorf("insufficient price data: required %d, got %d", indicesRecent, len(priceHistory))
 	}
 
-	recentPriceHistory := priceHistory[len(priceHistory)-uc.indicesRecent:]
+	recentPriceHistory := priceHistory[len(priceHistory)-indicesRecent:]
 
-	// Enrich price data with RSI values
-	dataWithRSI := market.CalculateRSI(recentPriceHistory, uc.rsiPeriod)
+	// Enrich price data with RSI values using config's RSI period
+	dataWithRSI := market.CalculateRSI(recentPriceHistory, tradingConfig.RSIPeriod)
 	if len(dataWithRSI) == 0 {
 		return nil, fmt.Errorf("insufficient data for RSI calculation")
 	}
 
+	// Create detector per-request using config's divergence parameters
+	detectorConfig, err := divergence.NewConfig(
+		tradingConfig.Divergence.LookbackLeft,
+		tradingConfig.Divergence.LookbackRight,
+		tradingConfig.Divergence.RangeMin,
+		tradingConfig.Divergence.RangeMax,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("invalid divergence configuration: %w", err)
+	}
+	detector := divergence.NewDetector(detectorConfig)
+
 	var detection divergence.DetectionResult
 	if uc.divergenceType == analysis.BullishDivergence {
-		detection = uc.divergenceDetector.DetectBullish(dataWithRSI)
+		detection = detector.DetectBullish(dataWithRSI)
 	} else {
-		detection = uc.divergenceDetector.DetectBearish(dataWithRSI)
+		detection = detector.DetectBearish(dataWithRSI)
 	}
 
 	// Get current price/RSI from last valid data point
@@ -122,6 +142,6 @@ func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.Market
 		q.StartDate,
 		q.EndDate,
 		q.Interval,
-		uc.rsiPeriod,
+		tradingConfig.RSIPeriod,
 	), nil
 }

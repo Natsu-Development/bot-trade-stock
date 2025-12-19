@@ -16,7 +16,7 @@ import (
 )
 
 func main() {
-	cfg, err := config.LoadFromEnv()
+	cfg, err := config.LoadInfraFromEnv()
 	if err != nil {
 		log.Fatal("Failed to load configuration: ", err)
 	}
