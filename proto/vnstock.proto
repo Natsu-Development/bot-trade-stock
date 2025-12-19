@@ -8,12 +8,6 @@ option go_package = "../bot-trade/pkg/grpc-broker/vnstock";
 service StockDataService {
     // Get single stock data
     rpc GetStockData(StockRequest) returns (StockResponse);
-    
-    // Get multiple stocks data
-    rpc GetMultipleStocks(MultiStockRequest) returns (MultiStockResponse);
-    
-    // Real-time streaming (for future use)
-    rpc StreamStockData(StreamRequest) returns (stream StockResponse);
 }
 
 // Request for single stock
@@ -22,23 +16,6 @@ message StockRequest {
     string start_date = 3;            // Format: YYYY-MM-DD, optional
     string end_date = 4;              // Format: YYYY-MM-DD, optional (default: today)
     string interval = 5;              // Data interval: "1d", "1h", "15m", etc. (default: "1d")
-}
-
-// Request for multiple stocks
-message MultiStockRequest {
-    repeated string symbols = 1;
-    string start_date = 3;            // Format: YYYY-MM-DD, optional
-    string end_date = 4;              // Format: YYYY-MM-DD, optional (default: today)
-    string interval = 5;              // Data interval: "1d", "1h", "15m", etc. (default: "1d")
-}
-
-// Request for streaming
-message StreamRequest {
-    repeated string symbols = 1;
-    int32 interval_seconds = 2;       // Stream update interval in seconds
-    string start_date = 4;            // Format: YYYY-MM-DD, optional
-    string end_date = 5;              // Format: YYYY-MM-DD, optional (default: today)
-    string data_interval = 6;         // Data interval: "1d", "1h", "15m", etc. (default: "1d")
 }
 
 // Single stock response
@@ -50,13 +27,6 @@ message StockResponse {
     int32 data_points = 5;
     string status = 6;
     string error = 7;
-}
-
-// Multiple stocks response
-message MultiStockResponse {
-    string timestamp = 1;
-    int32 total_symbols = 2;
-    map<string, StockResponse> data = 3;
 }
 
 // Market data structure

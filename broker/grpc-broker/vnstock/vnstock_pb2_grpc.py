@@ -20,16 +20,6 @@ class StockDataServiceStub(object):
                 request_serializer=vnstock__pb2.StockRequest.SerializeToString,
                 response_deserializer=vnstock__pb2.StockResponse.FromString,
                 _registered_method=True)
-        self.GetMultipleStocks = channel.unary_unary(
-                '/vnstock.StockDataService/GetMultipleStocks',
-                request_serializer=vnstock__pb2.MultiStockRequest.SerializeToString,
-                response_deserializer=vnstock__pb2.MultiStockResponse.FromString,
-                _registered_method=True)
-        self.StreamStockData = channel.unary_stream(
-                '/vnstock.StockDataService/StreamStockData',
-                request_serializer=vnstock__pb2.StreamRequest.SerializeToString,
-                response_deserializer=vnstock__pb2.StockResponse.FromString,
-                _registered_method=True)
 
 
 class StockDataServiceServicer(object):
@@ -43,36 +33,12 @@ class StockDataServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetMultipleStocks(self, request, context):
-        """Get multiple stocks data
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def StreamStockData(self, request, context):
-        """Real-time streaming (for future use)
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
 
 def add_StockDataServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'GetStockData': grpc.unary_unary_rpc_method_handler(
                     servicer.GetStockData,
                     request_deserializer=vnstock__pb2.StockRequest.FromString,
-                    response_serializer=vnstock__pb2.StockResponse.SerializeToString,
-            ),
-            'GetMultipleStocks': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetMultipleStocks,
-                    request_deserializer=vnstock__pb2.MultiStockRequest.FromString,
-                    response_serializer=vnstock__pb2.MultiStockResponse.SerializeToString,
-            ),
-            'StreamStockData': grpc.unary_stream_rpc_method_handler(
-                    servicer.StreamStockData,
-                    request_deserializer=vnstock__pb2.StreamRequest.FromString,
                     response_serializer=vnstock__pb2.StockResponse.SerializeToString,
             ),
     }
@@ -103,60 +69,6 @@ class StockDataService(object):
             target,
             '/vnstock.StockDataService/GetStockData',
             vnstock__pb2.StockRequest.SerializeToString,
-            vnstock__pb2.StockResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetMultipleStocks(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/vnstock.StockDataService/GetMultipleStocks',
-            vnstock__pb2.MultiStockRequest.SerializeToString,
-            vnstock__pb2.MultiStockResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def StreamStockData(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_stream(
-            request,
-            target,
-            '/vnstock.StockDataService/StreamStockData',
-            vnstock__pb2.StreamRequest.SerializeToString,
             vnstock__pb2.StockResponse.FromString,
             options,
             channel_credentials,

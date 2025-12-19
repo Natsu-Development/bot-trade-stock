@@ -8,18 +8,17 @@ import (
 	appPort "bot-trade/application/port"
 	"bot-trade/domain/aggregate/analysis"
 	"bot-trade/domain/aggregate/market"
-	domainPort "bot-trade/domain/port"
 	"bot-trade/domain/service/divergence"
+	infraPort "bot-trade/infrastructure/port"
 
 	"go.uber.org/zap"
 )
 
-// Ensure AnalyzeDivergenceUseCase implements DivergenceAnalyzer interface
 var _ appPort.DivergenceAnalyzer = (*AnalyzeDivergenceUseCase)(nil)
 
 // AnalyzeDivergenceUseCase orchestrates divergence analysis.
 type AnalyzeDivergenceUseCase struct {
-	marketDataRepo     domainPort.MarketDataRepository
+	marketDataGateway  infraPort.MarketDataGateway
 	divergenceDetector *divergence.Detector
 	divergenceType     analysis.DivergenceType
 	logger             *zap.Logger
@@ -29,7 +28,7 @@ type AnalyzeDivergenceUseCase struct {
 
 // NewAnalyzeDivergenceUseCase creates a new divergence analysis use case.
 func NewAnalyzeDivergenceUseCase(
-	marketDataRepo domainPort.MarketDataRepository,
+	marketDataGateway infraPort.MarketDataGateway,
 	divergenceDetector *divergence.Detector,
 	divergenceType analysis.DivergenceType,
 	logger *zap.Logger,
@@ -37,7 +36,7 @@ func NewAnalyzeDivergenceUseCase(
 	rsiPeriod int,
 ) *AnalyzeDivergenceUseCase {
 	return &AnalyzeDivergenceUseCase{
-		marketDataRepo:     marketDataRepo,
+		marketDataGateway:  marketDataGateway,
 		divergenceDetector: divergenceDetector,
 		divergenceType:     divergenceType,
 		logger:             logger,
@@ -48,23 +47,29 @@ func NewAnalyzeDivergenceUseCase(
 
 // Execute performs divergence analysis for a single symbol.
 func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.MarketDataQuery) (*analysis.AnalysisResult, error) {
-	symbol := q.SymbolString()
+	symbol := q.Symbol
 	strategyType := uc.divergenceType.String()
 
 	uc.logger.Info(fmt.Sprintf("%s divergence analysis", strategyType), zap.String("symbol", symbol))
 	startTime := time.Now()
 
-	// Fetch market data
-	_, priceHistory, err := uc.marketDataRepo.GetMarketData(ctx, q)
+	rawResponse, err := uc.marketDataGateway.FetchStockData(ctx, q)
 	if err != nil {
-		uc.logger.Error("Failed to fetch market data",
+		uc.logger.Error("Failed to fetch stock data",
 			zap.String("symbol", symbol),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("failed to fetch market data: %w", err)
+		return nil, fmt.Errorf("failed to fetch stock data: %w", err)
 	}
 
-	// Check if we have enough data
+	priceHistory := make([]*market.PriceData, len(rawResponse.PriceHistory))
+	for i, pb := range rawResponse.PriceHistory {
+		priceHistory[i] = &market.PriceData{
+			Date:  pb.Date,
+			Close: pb.Close,
+		}
+	}
+
 	if len(priceHistory) < uc.indicesRecent {
 		uc.logger.Warn("Insufficient price data",
 			zap.String("symbol", symbol),
@@ -74,29 +79,49 @@ func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.Market
 		return nil, fmt.Errorf("insufficient price data: required %d, got %d", uc.indicesRecent, len(priceHistory))
 	}
 
-	// Get recent price data
 	recentPriceHistory := priceHistory[len(priceHistory)-uc.indicesRecent:]
 
-	// Perform divergence detection based on type
-	var divergenceResult *analysis.DivergenceResult
+	// Enrich price data with RSI values
+	dataWithRSI := market.CalculateRSI(recentPriceHistory, uc.rsiPeriod)
+	if len(dataWithRSI) == 0 {
+		return nil, fmt.Errorf("insufficient data for RSI calculation")
+	}
+
+	var detection divergence.DetectionResult
 	if uc.divergenceType == analysis.BullishDivergence {
-		divergenceResult = uc.divergenceDetector.DetectBullish(recentPriceHistory)
+		detection = uc.divergenceDetector.DetectBullish(dataWithRSI)
 	} else {
-		divergenceResult = uc.divergenceDetector.DetectBearish(recentPriceHistory)
+		detection = uc.divergenceDetector.DetectBearish(dataWithRSI)
+	}
+
+	// Get current price/RSI from last valid data point
+	var currentPrice, currentRSI float64
+	for i := len(dataWithRSI) - 1; i >= 0; i-- {
+		if dataWithRSI[i].RSI != 0 {
+			currentPrice = dataWithRSI[i].Close
+			currentRSI = dataWithRSI[i].RSI
+			break
+		}
 	}
 
 	processingTime := time.Since(startTime)
 	uc.logger.Info(fmt.Sprintf("%s divergence analysis completed", strategyType),
 		zap.String("symbol", symbol),
 		zap.Duration("duration", processingTime),
-		zap.Bool("divergence_found", divergenceResult.DivergenceFound()),
+		zap.Bool("divergence_found", detection.Found),
 	)
 
 	return analysis.NewAnalysisResult(
 		symbol,
-		divergenceResult,
+		detection.Type,
+		detection.Found,
+		currentPrice,
+		currentRSI,
+		detection.Description,
 		processingTime.Milliseconds(),
-		q,
+		q.StartDate,
+		q.EndDate,
+		q.Interval,
 		uc.rsiPeriod,
 	), nil
 }
