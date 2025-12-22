@@ -2,9 +2,7 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
-	"reflect"
 
 	"bot-trade/application/port"
 	"bot-trade/domain/aggregate/config"
@@ -31,8 +29,6 @@ func (h *BearishDivergenceHandler) AnalyzeBearishDivergence(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "config_id is required"})
 		return
 	}
-
-	fmt.Println("start_date", c.Query("start_date"), "type", reflect.TypeOf(c.Query("start_date")))
 
 	query, err := market.NewMarketDataQueryFromStrings(
 		c.Param("symbol"),

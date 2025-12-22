@@ -32,9 +32,6 @@ func NewMarketDataQueryFromStrings(symbolStr, startDate, endDate, intervalStr st
 		return MarketDataQuery{}, fmt.Errorf("invalid date range: %w", err)
 	}
 
-	fmt.Println("startDate", normalizedStart)
-	fmt.Println("endDate", normalizedEnd)
-
 	return MarketDataQuery{
 		Symbol:    symbol.String(),
 		StartDate: normalizedStart,
