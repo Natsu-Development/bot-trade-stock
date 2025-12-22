@@ -14,13 +14,14 @@ var ErrConfigValidation = errors.New("configuration validation failed")
 
 // TradingConfig represents a user's trading configuration.
 type TradingConfig struct {
-	ID         string           `json:"id" bson:"_id"`
-	RSIPeriod  int              `json:"rsi_period" bson:"rsi_period"`
-	Divergence DivergenceConfig `json:"divergence" bson:"divergence"`
-	Symbols    []string         `json:"symbols" bson:"symbols"`
-	Telegram   TelegramConfig   `json:"telegram" bson:"telegram"`
-	CreatedAt  time.Time        `json:"created_at" bson:"created_at"`
-	UpdatedAt  time.Time        `json:"updated_at" bson:"updated_at"`
+	ID              string           `json:"id" bson:"_id"`
+	RSIPeriod       int              `json:"rsi_period" bson:"rsi_period"`
+	StartDateOffset int              `json:"start_date_offset" bson:"start_date_offset"` // Days of historical data
+	Divergence      DivergenceConfig `json:"divergence" bson:"divergence"`
+	Symbols         []string         `json:"symbols" bson:"symbols"`
+	Telegram        TelegramConfig   `json:"telegram" bson:"telegram"`
+	CreatedAt       time.Time        `json:"created_at" bson:"created_at"`
+	UpdatedAt       time.Time        `json:"updated_at" bson:"updated_at"`
 }
 
 // DivergenceConfig holds divergence detection parameters.
@@ -45,6 +46,10 @@ func (c *TradingConfig) Validate() error {
 
 	if c.RSIPeriod <= 0 {
 		errs = append(errs, "rsi_period must be a positive integer")
+	}
+
+	if c.StartDateOffset <= 0 {
+		errs = append(errs, "start_date_offset must be a positive integer")
 	}
 
 	if err := c.Divergence.Validate(); err != nil {

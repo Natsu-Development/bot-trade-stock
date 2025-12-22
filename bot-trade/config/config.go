@@ -30,8 +30,7 @@ type InfraConfig struct {
 	MongoDBDatabase string
 
 	// Bearish Divergence Configuration
-	BearishCronStartDateOffset int  // Days back for historical data
-	BearishCronAutoStart       bool // Auto-start on application boot
+	BearishCronAutoStart bool // Auto-start on application boot
 
 	// Bearish Intervals - Enable specific intervals
 	Bearish30mEnabled  bool
@@ -44,8 +43,7 @@ type InfraConfig struct {
 	Bearish1WSchedule  string
 
 	// Bullish Divergence Configuration
-	BullishCronStartDateOffset int  // Days back for historical data
-	BullishCronAutoStart       bool // Auto-start on application boot
+	BullishCronAutoStart bool // Auto-start on application boot
 
 	// Bullish Intervals - Enable specific intervals
 	Bullish30mEnabled  bool
@@ -93,7 +91,6 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	config.MongoDBDatabase = getStringEnv("MONGODB_DATABASE", &errors)
 
 	// Bearish Divergence Configuration
-	config.BearishCronStartDateOffset = getNumberEnv("BEARISH_CRON_START_DATE_OFFSET", &errors)
 	config.BearishCronAutoStart = getBoolEnv("BEARISH_CRON_AUTO_START", &errors)
 
 	// Bearish Intervals (at least one should be enabled)
@@ -107,7 +104,6 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	config.Bearish1WSchedule = getOptionalStringEnv("BEARISH_1W_SCHEDULE")
 
 	// Bullish Divergence Configuration
-	config.BullishCronStartDateOffset = getNumberEnv("BULLISH_CRON_START_DATE_OFFSET", &errors)
 	config.BullishCronAutoStart = getBoolEnv("BULLISH_CRON_AUTO_START", &errors)
 
 	// Bullish Intervals (at least one should be enabled)

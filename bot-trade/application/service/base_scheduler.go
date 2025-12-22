@@ -23,7 +23,6 @@ type BaseCronScheduler struct {
 	isRunning        bool
 	mu               sync.RWMutex
 	divergenceType   analysis.DivergenceType
-	startDateOffset  int
 }
 
 // NewBaseCronScheduler creates a new base cron scheduler.
@@ -32,7 +31,6 @@ func NewBaseCronScheduler(
 	notifier infraPort.Notifier,
 	configRepository infraPort.ConfigRepository,
 	divergenceType analysis.DivergenceType,
-	startDateOffset int,
 ) *BaseCronScheduler {
 	return &BaseCronScheduler{
 		cron:             cron.New(cron.WithLocation(time.UTC)),
@@ -41,7 +39,6 @@ func NewBaseCronScheduler(
 		configRepository: configRepository,
 		isRunning:        false,
 		divergenceType:   divergenceType,
-		startDateOffset:  startDateOffset,
 	}
 }
 
@@ -79,11 +76,6 @@ func (bcs *BaseCronScheduler) GetDivergenceType() analysis.DivergenceType {
 	return bcs.divergenceType
 }
 
-// GetStartDateOffset returns the start date offset.
-func (bcs *BaseCronScheduler) GetStartDateOffset() int {
-	return bcs.startDateOffset
-}
-
 // SetRunning sets the running state.
 func (bcs *BaseCronScheduler) SetRunning(running bool) {
 	bcs.mu.Lock()
@@ -102,9 +94,9 @@ func (bcs *BaseCronScheduler) CreateMarketDataQuery(symbol, startDate, endDate, 
 }
 
 // CalculateDateRange calculates the date range based on offset.
-func (bcs *BaseCronScheduler) CalculateDateRange() (string, string) {
+func (bcs *BaseCronScheduler) CalculateDateRange(startDateOffset int) (string, string) {
 	endDate := time.Now().Format("2006-01-02")
-	startDate := time.Now().AddDate(0, 0, -bcs.startDateOffset).Format("2006-01-02")
+	startDate := time.Now().AddDate(0, 0, -startDateOffset).Format("2006-01-02")
 	return startDate, endDate
 }
 

@@ -26,12 +26,11 @@ func NewBearishCronScheduler(
 	notifier infraPort.Notifier,
 	configRepository infraPort.ConfigRepository,
 	analyzer appPort.DivergenceAnalyzer,
-	startDateOffset int,
 	intervals map[string]config.IntervalConfig,
 ) *BearishCronScheduler {
 	return &BearishCronScheduler{
 		BaseCronScheduler: NewBaseCronScheduler(
-			logger, notifier, configRepository, analysis.BearishDivergence, startDateOffset,
+			logger, notifier, configRepository, analysis.BearishDivergence,
 		),
 		analyzer:  analyzer,
 		intervals: intervals,
@@ -102,10 +101,9 @@ func (bcs *BearishCronScheduler) runAnalysis(interval string) {
 		zap.Int("configCount", len(configs)),
 	)
 
-	startDate, endDate := bcs.CalculateDateRange()
-
-	// Process each config
+	// Process each config with its own date range
 	for _, cfg := range configs {
+		startDate, endDate := bcs.CalculateDateRange(cfg.StartDateOffset)
 		bcs.processConfig(ctx, interval, startDate, endDate, cfg)
 	}
 }

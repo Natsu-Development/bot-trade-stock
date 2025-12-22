@@ -85,11 +85,11 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	// Create schedulers
 	bullishScheduler := appService.NewBullishCronScheduler(
 		appLogger, notifier, configRepository, bullishAnalyzer,
-		cfg.BullishCronStartDateOffset, cfg.BullishIntervals(),
+		cfg.BullishIntervals(),
 	)
 	bearishScheduler := appService.NewBearishCronScheduler(
 		appLogger, notifier, configRepository, bearishAnalyzer,
-		cfg.BearishCronStartDateOffset, cfg.BearishIntervals(),
+		cfg.BearishIntervals(),
 	)
 
 	// Create handlers

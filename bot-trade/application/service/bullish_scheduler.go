@@ -26,12 +26,11 @@ func NewBullishCronScheduler(
 	notifier infraPort.Notifier,
 	configRepository infraPort.ConfigRepository,
 	analyzer appPort.DivergenceAnalyzer,
-	startDateOffset int,
 	intervals map[string]config.IntervalConfig,
 ) *BullishCronScheduler {
 	return &BullishCronScheduler{
 		BaseCronScheduler: NewBaseCronScheduler(
-			logger, notifier, configRepository, analysis.BullishDivergence, startDateOffset,
+			logger, notifier, configRepository, analysis.BullishDivergence,
 		),
 		analyzer:  analyzer,
 		intervals: intervals,
@@ -102,10 +101,9 @@ func (bcs *BullishCronScheduler) runAnalysis(interval string) {
 		zap.Int("configCount", len(configs)),
 	)
 
-	startDate, endDate := bcs.CalculateDateRange()
-
-	// Process each config
+	// Process each config with its own date range
 	for _, cfg := range configs {
+		startDate, endDate := bcs.CalculateDateRange(cfg.StartDateOffset)
 		bcs.processConfig(ctx, interval, startDate, endDate, cfg)
 	}
 }
