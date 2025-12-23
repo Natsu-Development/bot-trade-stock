@@ -12,44 +12,40 @@ on:
         type: choice
         options: [production, staging]
 
-env:
-  DOCKER_REGISTRY: ${{ vars.DOCKER_REGISTRY }}
-  DOCKER_NAMESPACE: ${{ vars.DOCKER_NAMESPACE }}
-  IMAGE_TAG: ${{ github.sha }}
-
 jobs:
   # Build and push Docker images to Docker Hub
   build-images:
     runs-on: ubuntu-latest
     environment: production
     outputs:
-      registry: ${{ env.DOCKER_REGISTRY }}
-      namespace: ${{ env.DOCKER_NAMESPACE }}
-      broker-image: ${{ env.DOCKER_NAMESPACE }}/trading-broker:${{ env.IMAGE_TAG }}
-      bot-image: ${{ env.DOCKER_NAMESPACE }}/trading-bot:${{ env.IMAGE_TAG }}
+      docker-namespace: ${{ steps.config.outputs.DOCKER_NAMESPACE }}
+      broker-image: ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-broker:${{ github.sha }}
+      bot-image: ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-bot:${{ github.sha }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Load config from production.env
+        id: config
+        run: |
+          # Parse production.env and export to GitHub outputs
+          while IFS='=' read -r key value; do
+            # Skip comments and empty lines
+            [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
+            # Remove leading/trailing whitespace
+            key=$(echo "$key" | xargs)
+            value=$(echo "$value" | xargs)
+            echo "${key}=${value}" >> $GITHUB_OUTPUT
+          done < config/production.env
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Debug environment variables
-        run: |
-          echo "🔍 Debugging environment variables:"
-          echo "DOCKER_REGISTRY: ${{ env.DOCKER_REGISTRY }}"
-          echo "DOCKER_NAMESPACE: ${{ env.DOCKER_NAMESPACE }}"
-          echo "IMAGE_TAG: ${{ env.IMAGE_TAG }}"
-          echo ""
-          echo "🔍 Checking secrets availability:"
-          echo "DOCKER_USERNAME is set: ${{ secrets.DOCKER_USERNAME != '' && 'YES' || 'NO' }}"
-          echo "DOCKER_PASSWORD is set: ${{ secrets.DOCKER_PASSWORD != '' && 'YES' || 'NO' }}"
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.DOCKER_REGISTRY }}
+          registry: ${{ steps.config.outputs.DOCKER_REGISTRY }}
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
@@ -60,13 +56,8 @@ jobs:
           file: broker/Dockerfile
           push: true
           tags: |
-            ${{ env.DOCKER_NAMESPACE }}/trading-broker:${{ env.IMAGE_TAG }}
-            ${{ env.DOCKER_NAMESPACE }}/trading-broker:latest
-          labels: |
-            org.opencontainers.image.title=Trading Broker
-            org.opencontainers.image.description=Python gRPC Stock Data Service
-            org.opencontainers.image.source=${{ github.repositoryUrl }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-broker:${{ github.sha }}
+            ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-broker:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -77,13 +68,8 @@ jobs:
           file: bot-trade/Dockerfile
           push: true
           tags: |
-            ${{ env.DOCKER_NAMESPACE }}/trading-bot:${{ env.IMAGE_TAG }}
-            ${{ env.DOCKER_NAMESPACE }}/trading-bot:latest
-          labels: |
-            org.opencontainers.image.title=Trading Bot
-            org.opencontainers.image.description=Go Trading Bot Service
-            org.opencontainers.image.source=${{ github.repositoryUrl }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-bot:${{ github.sha }}
+            ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-bot:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -100,115 +86,28 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y gettext-base
+
+      - name: Build docker-compose configuration
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gettext-base  # Only need envsubst for variable substitution
-
-      - name: Build docker-compose configuration (NO SECRETS)
-        env:
-          # Export all GitHub Variables as environment variables
-          NODE_ENV: ${{ vars.NODE_ENV }}
-          GRPC_SERVER_ADDR: ${{ vars.GRPC_SERVER_ADDR }}
-          HTTP_PORT: ${{ vars.HTTP_PORT }}
-          HTTP_READ_TIMEOUT: ${{ vars.HTTP_READ_TIMEOUT }}
-          HTTP_WRITE_TIMEOUT: ${{ vars.HTTP_WRITE_TIMEOUT }}
-          HTTP_IDLE_TIMEOUT: ${{ vars.HTTP_IDLE_TIMEOUT }}
-          HTTP_SHUTDOWN_TIMEOUT: ${{ vars.HTTP_SHUTDOWN_TIMEOUT }}
-          GRPC_CONNECTION_TIMEOUT: ${{ vars.GRPC_CONNECTION_TIMEOUT }}
-          GRPC_REQUEST_TIMEOUT: ${{ vars.GRPC_REQUEST_TIMEOUT }}
-          GRPC_MARKET_DATA_TIMEOUT: ${{ vars.GRPC_MARKET_DATA_TIMEOUT }}
-          RSI_PERIOD: ${{ vars.RSI_PERIOD }}
-          RSI_OVERBOUGHT_THRESHOLD: ${{ vars.RSI_OVERBOUGHT_THRESHOLD }}
-          RSI_OVERSOLD_THRESHOLD: ${{ vars.RSI_OVERSOLD_THRESHOLD }}
-          RSI_EXTREME_OVERBOUGHT_THRESHOLD: ${{ vars.RSI_EXTREME_OVERBOUGHT_THRESHOLD }}
-          RSI_EXTREME_OVERSOLD_THRESHOLD: ${{ vars.RSI_EXTREME_OVERSOLD_THRESHOLD }}
-          DIVERGENCE_LOOKBACK_LEFT: ${{ vars.DIVERGENCE_LOOKBACK_LEFT }}
-          DIVERGENCE_LOOKBACK_RIGHT: ${{ vars.DIVERGENCE_LOOKBACK_RIGHT }}
-          DIVERGENCE_RANGE_MIN: ${{ vars.DIVERGENCE_RANGE_MIN }}
-          DIVERGENCE_RANGE_MAX: ${{ vars.DIVERGENCE_RANGE_MAX }}
-          DIVERGENCE_INDICES_RECENT: ${{ vars.DIVERGENCE_INDICES_RECENT }}
-          MIN_ANALYSIS_DAYS: ${{ vars.MIN_ANALYSIS_DAYS }}
-          MAX_DATE_RANGE_DAYS: ${{ vars.MAX_DATE_RANGE_DAYS }}
-          MIN_SYMBOL_LENGTH: ${{ vars.MIN_SYMBOL_LENGTH }}
-          MAX_SYMBOL_LENGTH: ${{ vars.MAX_SYMBOL_LENGTH }}
-          CRON_JOB_TIMEOUT: ${{ vars.CRON_JOB_TIMEOUT }}
-          BEARISH_CRON_START_DATE_OFFSET: ${{ vars.BEARISH_CRON_START_DATE_OFFSET }}
-          BEARISH_CRON_AUTO_START: ${{ vars.BEARISH_CRON_AUTO_START }}
-          BEARISH_30M_ENABLED: ${{ vars.BEARISH_30M_ENABLED }}
-          BEARISH_30M_SCHEDULE: ${{ vars.BEARISH_30M_SCHEDULE }}
-          BEARISH_1H_ENABLED: ${{ vars.BEARISH_1H_ENABLED }}
-          BEARISH_1H_SCHEDULE: ${{ vars.BEARISH_1H_SCHEDULE }}
-          BEARISH_1D_ENABLED: ${{ vars.BEARISH_1D_ENABLED }}
-          BEARISH_1D_SCHEDULE: ${{ vars.BEARISH_1D_SCHEDULE }}
-          BEARISH_1W_ENABLED: ${{ vars.BEARISH_1W_ENABLED }}
-          BEARISH_1W_SCHEDULE: ${{ vars.BEARISH_1W_SCHEDULE }}
-          BULLISH_CRON_START_DATE_OFFSET: ${{ vars.BULLISH_CRON_START_DATE_OFFSET }}
-          BULLISH_CRON_AUTO_START: ${{ vars.BULLISH_CRON_AUTO_START }}
-          BULLISH_30M_ENABLED: ${{ vars.BULLISH_30M_ENABLED }}
-          BULLISH_30M_SCHEDULE: ${{ vars.BULLISH_30M_SCHEDULE }}
-          BULLISH_1H_ENABLED: ${{ vars.BULLISH_1H_ENABLED }}
-          BULLISH_1H_SCHEDULE: ${{ vars.BULLISH_1H_SCHEDULE }}
-          BULLISH_1D_ENABLED: ${{ vars.BULLISH_1D_ENABLED }}
-          BULLISH_1D_SCHEDULE: ${{ vars.BULLISH_1D_SCHEDULE }}
-          BULLISH_1W_ENABLED: ${{ vars.BULLISH_1W_ENABLED }}
-          BULLISH_1W_SCHEDULE: ${{ vars.BULLISH_1W_SCHEDULE }}
-          DEFAULT_SYMBOLS: ${{ vars.DEFAULT_SYMBOLS }}
-          LOG_LEVEL: ${{ vars.LOG_LEVEL }}
-          TELEGRAM_ENABLED: ${{ vars.TELEGRAM_ENABLED }}
-        run: |
-          echo "🐳 Building docker-compose configuration..."
-          echo "🔒 SECURITY: NO secrets included (injected via SSH during deployment)"
-
-          # Substitute variables directly using envsubst (KISS: one command does it all)
-          export DOCKER_REGISTRY="${{ env.DOCKER_NAMESPACE }}"
-          export IMAGE_TAG="${{ env.IMAGE_TAG }}"
-          envsubst < docker/docker-compose.prod.yml > docker-compose.final.yml
-
-          # Verify no secrets leaked into artifact
-          if grep -E "TELEGRAM_BOT_TOKEN=.{10,}|TELEGRAM_CHAT_ID=[0-9]{5,}" docker-compose.final.yml; then
-            echo "❌ SECURITY VIOLATION: Secrets found in artifact!"
-            exit 1
-          fi
-
-          echo "✅ Configuration built successfully - no secrets embedded"
+          echo "Building docker-compose configuration..."
+          export DOCKER_REGISTRY="${{ needs.build-images.outputs.docker-namespace }}"
+          export IMAGE_TAG="${{ github.sha }}"
+          envsubst '${DOCKER_REGISTRY},${IMAGE_TAG}' < docker/docker-compose.prod.yml > docker-compose.final.yml
+          echo "Configuration built successfully"
 
       - name: Create deployment package
         run: |
-          echo "📦 Creating deployment package..."
+          echo "Creating deployment package..."
           mkdir -p deployment-package
 
-          # Copy final docker-compose file
+          # Copy docker-compose and config files
           cp docker-compose.final.yml deployment-package/docker-compose.yml
+          cp config/production.env deployment-package/.env.production
 
           # Copy deployment scripts
           cp -r scripts/ deployment-package/scripts/
           chmod +x deployment-package/scripts/*.sh
-
-          # Create .env.secrets TEMPLATE (not actual secrets)
-          cat > deployment-package/.env.secrets.template << 'TEMPLATE_EOF'
-          # 🔒 Secrets Configuration Template
-          # This file should be created as .env.secrets on the production VM
-          # NEVER commit actual secrets to this file
-
-          # Telegram Bot Configuration
-          TELEGRAM_BOT_TOKEN=your_bot_token_here
-          TELEGRAM_CHAT_ID=your_chat_id_here
-          TEMPLATE_EOF
-
-          # Create deployment README
-          cat > deployment-package/DEPLOY_README.md << 'README_EOF'
-          # Deployment Instructions
-
-          ## Security Notice
-          This artifact does NOT contain any secrets. Secrets must be provided during deployment.
-
-          ## Required Secrets
-          Create `.env.secrets` file with:
-          - TELEGRAM_BOT_TOKEN
-          - TELEGRAM_CHAT_ID
-
-          See `.env.secrets.template` for the format.
-          README_EOF
 
           # Create deployment metadata
           cat > deployment-package/deployment-info.json << EOF
@@ -217,8 +116,6 @@ jobs:
             "git_sha": "${{ github.sha }}",
             "git_ref": "${{ github.ref }}",
             "environment": "${{ github.ref_name == 'master' && 'production' || 'staging' }}",
-            "registry": "${{ env.DOCKER_REGISTRY }}",
-            "namespace": "${{ env.DOCKER_NAMESPACE }}",
             "images": {
               "broker": "${{ needs.build-images.outputs.broker-image }}",
               "bot": "${{ needs.build-images.outputs.bot-image }}"
@@ -226,7 +123,7 @@ jobs:
           }
           EOF
 
-          echo "📋 Deployment package contents:"
+          echo "Deployment package contents:"
           find deployment-package -type f -exec ls -la {} \;
 
       - name: Upload deployment artifact
@@ -238,12 +135,7 @@ jobs:
           retention-days: 30
           compression-level: 6
 
-  # ═══════════════════════════════════════════════════════════════
   # Deploy to VPS
-  # ═══════════════════════════════════════════════════════════════
-  # This job handles SECURE secret injection at deployment time
-  # Secrets are passed via SSH environment variables and created
-  # as .env.secrets on production VM only (never stored in artifacts)
   deploy:
     runs-on: ubuntu-latest
     needs: [build-images, build-config]
@@ -258,11 +150,9 @@ jobs:
 
       - name: Prepare deployment
         run: |
-          echo "🚀 Preparing deployment to VPS"
+          echo "Preparing deployment to VPS"
           chmod +x deployment-package/scripts/*.sh
-
-          # Show deployment info
-          echo "📋 Deployment Information:"
+          echo "Deployment Information:"
           cat deployment-package/deployment-info.json | jq '.'
 
       - name: Setup SSH connection
@@ -284,9 +174,6 @@ jobs:
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/deployment.tar.gz
 
       - name: Execute VPS deployment
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
@@ -300,54 +187,48 @@ jobs:
             tar xzf /tmp/deployment.tar.gz
             chmod +x scripts/*.sh
             
-            # Copy docker-compose.yml to expected location
+            # Copy files to expected locations
             cp docker-compose.yml /tmp/docker-compose.yml
+            cp .env.production /tmp/.env.production
             
             # Export secrets for deploy script
-            export TELEGRAM_BOT_TOKEN='${{ secrets.TELEGRAM_BOT_TOKEN }}'
-            export TELEGRAM_CHAT_ID='${{ secrets.TELEGRAM_CHAT_ID }}'
+            export MONGO_ROOT_USERNAME='${{ secrets.MONGO_ROOT_USERNAME }}'
+            export MONGO_ROOT_PASSWORD='${{ secrets.MONGO_ROOT_PASSWORD }}'
             
             # Run deployment
             ./scripts/deploy-vps.sh
             
             # Cleanup
-            rm -f /tmp/deployment.tar.gz /tmp/docker-compose.yml
+            rm -rf /tmp/deployment-package /tmp/deployment.tar.gz /tmp/docker-compose.yml /tmp/.env.production
           ENDSSH
 
-  # Notification and cleanup
+  # Notification (runs if Telegram secrets are configured)
   notify:
     runs-on: ubuntu-latest
     needs: [build-images, build-config, deploy]
     environment: production
-    if: always() && vars.TELEGRAM_ENABLED == 'true'
+    if: always()
 
     steps:
       - name: Notify deployment status
+        continue-on-error: true
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           message: |
-            🚀 Trading App Deployment
+            Trading App Deployment
 
-            Status: ${{ needs.build-images.result == 'success' && needs.build-config.result == 'success' && needs.deploy.result == 'success' && '✅ Deployment Success' || '❌ Deployment Failed' }}
+            Status: ${{ needs.deploy.result == 'success' && 'Success' || 'Failed' }}
             Branch: ${{ github.ref_name }}
             Commit: ${{ github.sha }}
-            Environment: ${{ github.ref_name == 'master' && 'Production' || 'Staging' }}
-            Registry: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_NAMESPACE }}
 
-            Images Deployed:
-            • Broker: trading-broker:${{ env.IMAGE_TAG }}
-            • Bot: trading-bot:${{ env.IMAGE_TAG }}
+            Steps:
+            - Build: ${{ needs.build-images.result == 'success' && 'OK' || 'FAILED' }}
+            - Config: ${{ needs.build-config.result == 'success' && 'OK' || 'FAILED' }}
+            - Deploy: ${{ needs.deploy.result == 'success' && 'OK' || 'FAILED' }}
 
-            Deployment Steps:
-            • Build Images: ${{ needs.build-images.result == 'success' && '✅' || '❌' }}
-            • Build Config: ${{ needs.build-config.result == 'success' && '✅' || '❌' }}
-            • Deploy to VPS: ${{ needs.deploy.result == 'success' && '✅' || '❌' }}
-
-            ${{ needs.deploy.result == 'success' && '🎉 Application is now running on VPS!' || '⚠️ Deployment failed - check workflow logs' }}
-
-  # Cleanup old artifacts (runs only on master branch after deployment)
+  # Cleanup old artifacts
   cleanup:
     runs-on: ubuntu-latest
     needs: [deploy]
@@ -361,7 +242,6 @@ jobs:
           chmod 700 ~/.ssh
           echo -e "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Clean up old Docker images
         continue-on-error: true

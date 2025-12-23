@@ -1,6 +1,28 @@
 version: '3.8'
 
 services:
+  # MongoDB Database
+  mongo:
+    image: mongo:7
+    container_name: trading-mongo
+    env_file:
+      - .env.secrets
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+      - MONGO_INITDB_DATABASE=bot_trade
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - trading-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   # Python gRPC Stock Data Service
   broker:
     image: ${DOCKER_REGISTRY}/trading-broker:${IMAGE_TAG:-latest}
@@ -10,8 +32,6 @@ services:
     networks:
       - trading-network
     restart: unless-stopped
-    environment:
-      - NODE_ENV=${NODE_ENV:-production}
     healthcheck:
       test: ["CMD", "python3", "-c", "import grpc; channel = grpc.insecure_channel('localhost:50051'); channel.close()"]
       interval: 30s
@@ -25,84 +45,12 @@ services:
     container_name: trading-bot
     ports:
       - "8080:8080"
-    
-    # 🔒 SECURITY: Secrets loaded from external file (created during deployment)
     env_file:
-      - .env.secrets  # Created on VM, NEVER in artifact
-    
-    environment:
-      # System Configuration
-      - NODE_ENV=${NODE_ENV:-production}
-      
-      # Server Configuration
-      - GRPC_SERVER_ADDR=${GRPC_SERVER_ADDR}
-      - HTTP_PORT=${HTTP_PORT}
-      
-      # HTTP Server Timeouts
-      - HTTP_READ_TIMEOUT=${HTTP_READ_TIMEOUT}
-      - HTTP_WRITE_TIMEOUT=${HTTP_WRITE_TIMEOUT}
-      - HTTP_IDLE_TIMEOUT=${HTTP_IDLE_TIMEOUT}
-      - HTTP_SHUTDOWN_TIMEOUT=${HTTP_SHUTDOWN_TIMEOUT}
-      
-      # gRPC Client Configuration
-      - GRPC_CONNECTION_TIMEOUT=${GRPC_CONNECTION_TIMEOUT}
-      - GRPC_REQUEST_TIMEOUT=${GRPC_REQUEST_TIMEOUT}
-      - GRPC_MARKET_DATA_TIMEOUT=${GRPC_MARKET_DATA_TIMEOUT}
-      
-      # RSI Configuration
-      - RSI_PERIOD=${RSI_PERIOD}
-      - RSI_OVERBOUGHT_THRESHOLD=${RSI_OVERBOUGHT_THRESHOLD}
-      - RSI_OVERSOLD_THRESHOLD=${RSI_OVERSOLD_THRESHOLD}
-      - RSI_EXTREME_OVERBOUGHT_THRESHOLD=${RSI_EXTREME_OVERBOUGHT_THRESHOLD}
-      - RSI_EXTREME_OVERSOLD_THRESHOLD=${RSI_EXTREME_OVERSOLD_THRESHOLD}
-      
-      # Divergence Detection Configuration
-      - DIVERGENCE_LOOKBACK_LEFT=${DIVERGENCE_LOOKBACK_LEFT}
-      - DIVERGENCE_LOOKBACK_RIGHT=${DIVERGENCE_LOOKBACK_RIGHT}
-      - DIVERGENCE_RANGE_MIN=${DIVERGENCE_RANGE_MIN}
-      - DIVERGENCE_RANGE_MAX=${DIVERGENCE_RANGE_MAX}
-      - DIVERGENCE_INDICES_RECENT=${DIVERGENCE_INDICES_RECENT}
-      
-      # Business Rules Configuration
-      - MIN_ANALYSIS_DAYS=${MIN_ANALYSIS_DAYS}
-      - MAX_DATE_RANGE_DAYS=${MAX_DATE_RANGE_DAYS}
-      - MIN_SYMBOL_LENGTH=${MIN_SYMBOL_LENGTH}
-      - MAX_SYMBOL_LENGTH=${MAX_SYMBOL_LENGTH}
-      - CRON_JOB_TIMEOUT=${CRON_JOB_TIMEOUT}
-      
-      # Bearish Divergence Configuration
-      - BEARISH_CRON_AUTO_START=${BEARISH_CRON_AUTO_START}
-      - BEARISH_30M_ENABLED=${BEARISH_30M_ENABLED}
-      - BEARISH_30M_SCHEDULE=${BEARISH_30M_SCHEDULE}
-      - BEARISH_1H_ENABLED=${BEARISH_1H_ENABLED}
-      - BEARISH_1H_SCHEDULE=${BEARISH_1H_SCHEDULE}
-      - BEARISH_1D_ENABLED=${BEARISH_1D_ENABLED}
-      - BEARISH_1D_SCHEDULE=${BEARISH_1D_SCHEDULE}
-      - BEARISH_1W_ENABLED=${BEARISH_1W_ENABLED}
-      - BEARISH_1W_SCHEDULE=${BEARISH_1W_SCHEDULE}
-      
-      # Bullish Divergence Configuration
-      - BULLISH_CRON_AUTO_START=${BULLISH_CRON_AUTO_START}
-      - BULLISH_30M_ENABLED=${BULLISH_30M_ENABLED}
-      - BULLISH_30M_SCHEDULE=${BULLISH_30M_SCHEDULE}
-      - BULLISH_1H_ENABLED=${BULLISH_1H_ENABLED}
-      - BULLISH_1H_SCHEDULE=${BULLISH_1H_SCHEDULE}
-      - BULLISH_1D_ENABLED=${BULLISH_1D_ENABLED}
-      - BULLISH_1D_SCHEDULE=${BULLISH_1D_SCHEDULE}
-      - BULLISH_1W_ENABLED=${BULLISH_1W_ENABLED}
-      - BULLISH_1W_SCHEDULE=${BULLISH_1W_SCHEDULE}
-      
-      # Trading Symbols Configuration
-      - DEFAULT_SYMBOLS=${DEFAULT_SYMBOLS}
-      
-      # Logging Configuration
-      - LOG_LEVEL=${LOG_LEVEL}
-      
-      # Telegram Configuration (non-sensitive)
-      - TELEGRAM_ENABLED=${TELEGRAM_ENABLED}
-      # 🔒 TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID loaded from .env.secrets
-      
+      - .env.secrets      # MongoDB credentials and URI
+      - .env.production   # All non-sensitive config
     depends_on:
+      mongo:
+        condition: service_healthy
       broker:
         condition: service_healthy
     networks:
@@ -118,3 +66,7 @@ services:
 networks:
   trading-network:
     driver: bridge
+
+volumes:
+  mongo-data:
+    driver: local

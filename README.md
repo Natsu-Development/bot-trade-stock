@@ -110,9 +110,6 @@ DEFAULT_SYMBOLS=VIC,VCB,BID,CTG,TCB
 BEARISH_1D_ENABLED=true
 BULLISH_1D_ENABLED=true
 LOG_LEVEL=info
-
-# Telegram Notifications
-TELEGRAM_ENABLED=true
 ```
 
 ## 🌩️ Cloud Deployment

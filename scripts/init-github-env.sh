@@ -226,7 +226,6 @@ ensure_environment() {
         "NODE_ENV:$env_lower"
         "DOCKER_REGISTRY:docker.io"
         "DOCKER_NAMESPACE:$REPO_OWNER"
-        "TELEGRAM_ENABLED:true"
     )
 
     # Add critical variables to environment

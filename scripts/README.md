@@ -158,7 +158,6 @@ The `init-github-env.sh` script creates these **GitHub Environment Variables**:
 - `DOCKER_NAMESPACE=your-username`
 
 ### 📱 Application Settings  
-- `TELEGRAM_ENABLED=true`
 - `NODE_ENV=production`
 
 ### ⚙️ Trading Bot Configuration
