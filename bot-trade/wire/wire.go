@@ -2,6 +2,7 @@
 package wire
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -11,31 +12,33 @@ import (
 	"bot-trade/application/usecase"
 	"bot-trade/config"
 	"bot-trade/domain/aggregate/analysis"
-	"bot-trade/domain/service/divergence"
 	"bot-trade/infrastructure/adapter"
 	infraGRPC "bot-trade/infrastructure/grpc"
+	"bot-trade/infrastructure/mongodb"
 	"bot-trade/infrastructure/telegram"
 	"bot-trade/pkg/logger"
 	presHTTP "bot-trade/presentation/http"
 	presHandler "bot-trade/presentation/http/handler"
 
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
 // App holds all initialized dependencies and manages application lifecycle.
 type App struct {
-	cfg    *config.Config
+	cfg    *config.InfraConfig
 	logger *zap.Logger
 
 	grpcConn         *grpc.ClientConn
+	mongoClient      *mongo.Client
 	bearishScheduler appPort.CronScheduler
 	bullishScheduler appPort.CronScheduler
 	router           http.Handler
 }
 
 // New creates and wires all application dependencies.
-func New(cfg *config.Config) (*App, error) {
+func New(cfg *config.InfraConfig) (*App, error) {
 	appLogger, err := logger.New(logger.Config{
 		Level:       cfg.LogLevel,
 		Environment: cfg.Environment,
@@ -46,41 +49,57 @@ func New(cfg *config.Config) (*App, error) {
 
 	appLogger.Info("Initializing application")
 
+	// Connect to MongoDB
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	mongoClient, err := mongodb.ConnectMongoDB(ctx, cfg.MongoDBURI, 10*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to MongoDB: %w", err)
+	}
+	appLogger.Info("Connected to MongoDB", zap.String("database", cfg.MongoDBDatabase))
+
+	// Connect to gRPC
 	grpcConn, err := newGRPCConnection(cfg)
 	if err != nil {
+		mongoClient.Disconnect(context.Background())
 		return nil, fmt.Errorf("failed to connect to gRPC: %w", err)
 	}
 
-	notifier := telegram.NewNotifier(cfg.TelegramBotToken, cfg.TelegramChatID, cfg.TelegramEnabled)
+	// Create repositories
+	configRepository := mongodb.NewConfigRepository(mongoClient, cfg.MongoDBDatabase)
+
+	// Create infrastructure adapters
+	notifier := telegram.NewNotifier()
 	marketDataGateway := adapter.NewMarketDataGateway(grpcConn)
 
-	divergenceDetector, err := newDivergenceDetector(cfg)
-	if err != nil {
-		grpcConn.Close()
-		return nil, fmt.Errorf("failed to create divergence detector: %w", err)
-	}
-
+	// Create use cases
 	bullishAnalyzer := usecase.NewAnalyzeDivergenceUseCase(
-		marketDataGateway, divergenceDetector, analysis.BullishDivergence,
-		appLogger, cfg.DivergenceIndicesRecent, cfg.RSIPeriod,
+		configRepository, marketDataGateway, analysis.BullishDivergence, appLogger,
 	)
 	bearishAnalyzer := usecase.NewAnalyzeDivergenceUseCase(
-		marketDataGateway, divergenceDetector, analysis.BearishDivergence,
-		appLogger, cfg.DivergenceIndicesRecent, cfg.RSIPeriod,
+		configRepository, marketDataGateway, analysis.BearishDivergence, appLogger,
 	)
+	configUseCase := usecase.NewConfigUseCase(configRepository)
 
+	// Create schedulers
 	bullishScheduler := appService.NewBullishCronScheduler(
-		appLogger, notifier, bullishAnalyzer, cfg.DefaultSymbols,
-		cfg.BullishCronStartDateOffset, cfg.BullishIntervals(),
+		appLogger, notifier, configRepository, bullishAnalyzer,
+		cfg.BullishIntervals(),
 	)
 	bearishScheduler := appService.NewBearishCronScheduler(
-		appLogger, notifier, bearishAnalyzer, cfg.DefaultSymbols,
-		cfg.BearishCronStartDateOffset, cfg.BearishIntervals(),
+		appLogger, notifier, configRepository, bearishAnalyzer,
+		cfg.BearishIntervals(),
 	)
 
+	// Create handlers
+	configHandler := presHandler.NewConfigHandler(configUseCase)
+
+	// Create router
 	router := presHTTP.NewRouter(
 		presHandler.NewBullishDivergenceHandler(bullishAnalyzer),
 		presHandler.NewBearishDivergenceHandler(bearishAnalyzer),
+		configHandler,
 	)
 
 	appLogger.Info("Application initialized successfully")
@@ -89,6 +108,7 @@ func New(cfg *config.Config) (*App, error) {
 		cfg:              cfg,
 		logger:           appLogger,
 		grpcConn:         grpcConn,
+		mongoClient:      mongoClient,
 		bearishScheduler: bearishScheduler,
 		bullishScheduler: bullishScheduler,
 		router:           router,
@@ -142,28 +162,17 @@ func (a *App) Close() {
 	if a.grpcConn != nil {
 		a.grpcConn.Close()
 	}
+	if a.mongoClient != nil {
+		a.mongoClient.Disconnect(context.Background())
+	}
 	a.logger.Sync()
 }
 
-func newGRPCConnection(cfg *config.Config) (*grpc.ClientConn, error) {
+func newGRPCConnection(cfg *config.InfraConfig) (*grpc.ClientConn, error) {
 	clientConfig := infraGRPC.NewClientConfig(
 		cfg.GRPCServerAddr,
 		time.Duration(cfg.GRPCConnectionTimeout)*time.Second,
 		time.Duration(cfg.GRPCRequestTimeout)*time.Second,
 	)
 	return infraGRPC.NewConnection(clientConfig)
-}
-
-func newDivergenceDetector(cfg *config.Config) (*divergence.Detector, error) {
-	config, err := divergence.NewConfig(
-		cfg.DivergenceLookbackLeft,
-		cfg.DivergenceLookbackRight,
-		cfg.DivergenceRangeMin,
-		cfg.DivergenceRangeMax,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return divergence.NewDetector(config), nil
 }

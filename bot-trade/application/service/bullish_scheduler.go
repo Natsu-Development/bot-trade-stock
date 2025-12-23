@@ -7,6 +7,7 @@ import (
 	appPort "bot-trade/application/port"
 	"bot-trade/config"
 	"bot-trade/domain/aggregate/analysis"
+	tradingConfig "bot-trade/domain/aggregate/config"
 	infraPort "bot-trade/infrastructure/port"
 
 	"go.uber.org/zap"
@@ -23,14 +24,13 @@ type BullishCronScheduler struct {
 func NewBullishCronScheduler(
 	logger *zap.Logger,
 	notifier infraPort.Notifier,
+	configRepository infraPort.ConfigRepository,
 	analyzer appPort.DivergenceAnalyzer,
-	symbols []string,
-	startDateOffset int,
 	intervals map[string]config.IntervalConfig,
 ) *BullishCronScheduler {
 	return &BullishCronScheduler{
 		BaseCronScheduler: NewBaseCronScheduler(
-			logger, notifier, symbols, analysis.BullishDivergence, startDateOffset,
+			logger, notifier, configRepository, analysis.BullishDivergence,
 		),
 		analyzer:  analyzer,
 		intervals: intervals,
@@ -63,7 +63,6 @@ func (bcs *BullishCronScheduler) Start() error {
 
 	bcs.logger.Info("Bullish scheduler started",
 		zap.Int("intervals", jobCount),
-		zap.Int("symbols", len(bcs.predefinedSymbols)),
 	)
 
 	return nil
@@ -82,29 +81,53 @@ func (bcs *BullishCronScheduler) registerInterval(interval, schedule string) {
 }
 
 func (bcs *BullishCronScheduler) runAnalysis(interval string) {
-	bcs.logger.Info("Starting bullish analysis",
-		zap.String("interval", interval),
-		zap.Strings("symbols", bcs.GetSymbols()),
-	)
-
 	ctx, cancel := bcs.CreateAnalysisContext()
 	defer cancel()
 
-	startDate, endDate := bcs.CalculateDateRange()
+	// Load all trading configs from database
+	configs, err := bcs.LoadAllConfigs(ctx)
+	if err != nil {
+		bcs.logger.Error("Failed to load trading configs", zap.Error(err))
+		return
+	}
+
+	if len(configs) == 0 {
+		bcs.logger.Warn("No trading configs found in database, skipping scheduled job")
+		return
+	}
+
+	bcs.logger.Info("Starting bullish analysis for all configs",
+		zap.String("interval", interval),
+		zap.Int("configCount", len(configs)),
+	)
+
+	// Process each config with its own date range
+	for _, cfg := range configs {
+		startDate, endDate := bcs.CalculateDateRange(cfg.StartDateOffset)
+		bcs.processConfig(ctx, interval, startDate, endDate, cfg)
+	}
+}
+
+func (bcs *BullishCronScheduler) processConfig(ctx context.Context, interval, startDate, endDate string, cfg *tradingConfig.TradingConfig) {
+	bcs.logger.Info("Processing config",
+		zap.String("configID", cfg.ID),
+		zap.String("interval", interval),
+		zap.Strings("symbols", cfg.Symbols),
+	)
 
 	processFunc := func(ctx context.Context, symbol string) (*analysis.AnalysisResult, error) {
 		query, err := bcs.CreateMarketDataQuery(symbol, startDate, endDate, interval)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create query: %w", err)
 		}
-		return bcs.analyzer.Execute(ctx, query)
+		return bcs.analyzer.Execute(ctx, query, cfg.ID)
 	}
 
-	results, _ := bcs.ProcessSymbolsConcurrently(ctx, bcs.GetSymbols(), processFunc)
-	bcs.logSummary(interval, results)
+	results, _ := bcs.ProcessSymbolsConcurrently(ctx, cfg.Symbols, processFunc)
+	bcs.logSummary(interval, results, cfg)
 }
 
-func (bcs *BullishCronScheduler) logSummary(interval string, results map[string]*analysis.AnalysisResult) {
+func (bcs *BullishCronScheduler) logSummary(interval string, results map[string]*analysis.AnalysisResult, cfg *tradingConfig.TradingConfig) {
 	var bullishCount int
 	var bullishSymbols []string
 
@@ -114,16 +137,18 @@ func (bcs *BullishCronScheduler) logSummary(interval string, results map[string]
 			bullishSymbols = append(bullishSymbols, symbol)
 
 			bcs.logger.Info("Bullish divergence detected",
+				zap.String("configID", cfg.ID),
 				zap.String("interval", interval),
 				zap.String("symbol", symbol),
 				zap.String("description", result.Description),
 			)
 
-			bcs.HandleResult(interval, symbol, result)
+			bcs.HandleResult(interval, symbol, result, cfg)
 		}
 	}
 
-	bcs.logger.Info("Analysis complete",
+	bcs.logger.Info("Analysis complete for config",
+		zap.String("configID", cfg.ID),
 		zap.String("interval", interval),
 		zap.Int("analyzed", len(results)),
 		zap.Int("signals", bullishCount),

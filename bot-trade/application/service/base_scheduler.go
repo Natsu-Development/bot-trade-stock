@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"bot-trade/domain/aggregate/analysis"
+	"bot-trade/domain/aggregate/config"
 	"bot-trade/domain/aggregate/market"
 	infraPort "bot-trade/infrastructure/port"
 
@@ -15,32 +16,29 @@ import (
 
 // BaseCronScheduler provides shared utilities for cron schedulers.
 type BaseCronScheduler struct {
-	cron              *cron.Cron
-	logger            *zap.Logger
-	notifier          infraPort.Notifier
-	predefinedSymbols []string
-	isRunning         bool
-	mu                sync.RWMutex
-	divergenceType    analysis.DivergenceType
-	startDateOffset   int
+	cron             *cron.Cron
+	logger           *zap.Logger
+	notifier         infraPort.Notifier
+	configRepository infraPort.ConfigRepository
+	isRunning        bool
+	mu               sync.RWMutex
+	divergenceType   analysis.DivergenceType
 }
 
 // NewBaseCronScheduler creates a new base cron scheduler.
 func NewBaseCronScheduler(
 	logger *zap.Logger,
 	notifier infraPort.Notifier,
-	symbols []string,
+	configRepository infraPort.ConfigRepository,
 	divergenceType analysis.DivergenceType,
-	startDateOffset int,
 ) *BaseCronScheduler {
 	return &BaseCronScheduler{
-		cron:              cron.New(cron.WithLocation(time.UTC)),
-		logger:            logger,
-		notifier:          notifier,
-		predefinedSymbols: symbols,
-		isRunning:         false,
-		divergenceType:    divergenceType,
-		startDateOffset:   startDateOffset,
+		cron:             cron.New(cron.WithLocation(time.UTC)),
+		logger:           logger,
+		notifier:         notifier,
+		configRepository: configRepository,
+		isRunning:        false,
+		divergenceType:   divergenceType,
 	}
 }
 
@@ -63,21 +61,6 @@ func (bcs *BaseCronScheduler) IsRunning() bool {
 	return bcs.isRunning
 }
 
-// UpdateSymbols updates the predefined symbols list.
-func (bcs *BaseCronScheduler) UpdateSymbols(symbols []string) {
-	bcs.mu.Lock()
-	defer bcs.mu.Unlock()
-	bcs.predefinedSymbols = symbols
-	bcs.logger.Info("Updated symbols", zap.Int("count", len(symbols)))
-}
-
-// GetSymbols returns the current list of symbols.
-func (bcs *BaseCronScheduler) GetSymbols() []string {
-	bcs.mu.RLock()
-	defer bcs.mu.RUnlock()
-	return bcs.predefinedSymbols
-}
-
 // GetCron returns the underlying cron scheduler.
 func (bcs *BaseCronScheduler) GetCron() *cron.Cron {
 	return bcs.cron
@@ -93,16 +76,16 @@ func (bcs *BaseCronScheduler) GetDivergenceType() analysis.DivergenceType {
 	return bcs.divergenceType
 }
 
-// GetStartDateOffset returns the start date offset.
-func (bcs *BaseCronScheduler) GetStartDateOffset() int {
-	return bcs.startDateOffset
-}
-
 // SetRunning sets the running state.
 func (bcs *BaseCronScheduler) SetRunning(running bool) {
 	bcs.mu.Lock()
 	defer bcs.mu.Unlock()
 	bcs.isRunning = running
+}
+
+// LoadAllConfigs loads all trading configurations from repository.
+func (bcs *BaseCronScheduler) LoadAllConfigs(ctx context.Context) ([]*config.TradingConfig, error) {
+	return bcs.configRepository.GetAll(ctx)
 }
 
 // CreateMarketDataQuery creates a domain query for market data.
@@ -111,9 +94,9 @@ func (bcs *BaseCronScheduler) CreateMarketDataQuery(symbol, startDate, endDate, 
 }
 
 // CalculateDateRange calculates the date range based on offset.
-func (bcs *BaseCronScheduler) CalculateDateRange() (string, string) {
+func (bcs *BaseCronScheduler) CalculateDateRange(startDateOffset int) (string, string) {
 	endDate := time.Now().Format("2006-01-02")
-	startDate := time.Now().AddDate(0, 0, -bcs.startDateOffset).Format("2006-01-02")
+	startDate := time.Now().AddDate(0, 0, -startDateOffset).Format("2006-01-02")
 	return startDate, endDate
 }
 
@@ -172,9 +155,12 @@ func (bcs *BaseCronScheduler) ProcessSymbolsConcurrently(
 }
 
 // HandleResult delegates result handling to the notifier.
-func (bcs *BaseCronScheduler) HandleResult(interval, symbol string, result *analysis.AnalysisResult) {
-	if bcs.notifier != nil {
-		if err := bcs.notifier.HandleDivergenceResult(bcs.divergenceType, interval, symbol, result); err != nil {
+func (bcs *BaseCronScheduler) HandleResult(interval, symbol string, result *analysis.AnalysisResult, tradingConfig *config.TradingConfig) {
+	if bcs.notifier != nil && tradingConfig.Telegram.Enabled {
+		if err := bcs.notifier.HandleDivergenceResult(
+			bcs.divergenceType, interval, symbol, result,
+			tradingConfig.Telegram.BotToken, tradingConfig.Telegram.ChatID,
+		); err != nil {
 			bcs.logger.Error("Failed to send notification",
 				zap.String("type", bcs.divergenceType.String()),
 				zap.String("symbol", symbol),

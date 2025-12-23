@@ -14,10 +14,4 @@ type CronScheduler interface {
 
 	// IsRunning returns whether the scheduler is currently running.
 	IsRunning() bool
-
-	// UpdateSymbols updates the predefined symbols list for analysis.
-	UpdateSymbols(symbols []string)
-
-	// GetSymbols returns the current list of symbols being analyzed.
-	GetSymbols() []string
 }

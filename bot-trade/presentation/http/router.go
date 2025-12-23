@@ -13,6 +13,7 @@ import (
 func NewRouter(
 	bullishDivergenceHandler *handler.BullishDivergenceHandler,
 	bearishDivergenceHandler *handler.BearishDivergenceHandler,
+	configHandler *handler.ConfigHandler,
 ) *gin.Engine {
 	// Set Gin to release mode
 	gin.SetMode(gin.ReleaseMode)
@@ -32,6 +33,12 @@ func NewRouter(
 			"timestamp": time.Now().Format(time.RFC3339),
 		})
 	})
+
+	// Configuration CRUD endpoints
+	router.POST("/config", configHandler.CreateConfig)
+	router.GET("/config/:id", configHandler.GetConfig)
+	router.PUT("/config/:id", configHandler.UpdateConfig)
+	router.DELETE("/config/:id", configHandler.DeleteConfig)
 
 	// API routes group with request validation middleware
 	api := router.Group("/analyze")
