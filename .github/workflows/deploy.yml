@@ -91,9 +91,14 @@ jobs:
       - name: Build docker-compose configuration
         run: |
           echo "Building docker-compose configuration..."
-          export DOCKER_REGISTRY="${{ needs.build-images.outputs.docker-namespace }}"
+          # Read DOCKER_NAMESPACE directly from production.env
+          export DOCKER_REGISTRY=$(grep '^DOCKER_NAMESPACE=' config/production.env | cut -d'=' -f2 | xargs)
           export IMAGE_TAG="${{ github.sha }}"
+          echo "DOCKER_REGISTRY=${DOCKER_REGISTRY}"
+          echo "IMAGE_TAG=${IMAGE_TAG}"
           envsubst '${DOCKER_REGISTRY} ${IMAGE_TAG}' < docker/docker-compose.prod.yml > docker-compose.final.yml
+          echo "Verifying substitution:"
+          grep "image:" docker-compose.final.yml
           echo "Configuration built successfully"
 
       - name: Create deployment package
