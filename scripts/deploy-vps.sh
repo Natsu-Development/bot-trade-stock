@@ -44,12 +44,12 @@ else
 fi
 
 # Deploy containers
-docker-compose pull
-docker-compose down --timeout 30 || true
-docker-compose up -d
+docker compose pull
+docker compose down --timeout 30 || true
+docker compose up -d
 
 # Wait for services
 sleep 10
-docker-compose ps
+docker compose ps
 
 echo "Deployment complete!"
