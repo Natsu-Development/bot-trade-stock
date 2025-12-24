@@ -103,7 +103,7 @@ jobs:
 
           # Copy docker-compose and config files
           cp docker-compose.final.yml deployment-package/docker-compose.yml
-          cp config/production.env deployment-package/.env.production
+          cp config/production.env deployment-package/production.env
 
           # Copy deployment scripts
           cp -r scripts/ deployment-package/scripts/
@@ -189,7 +189,7 @@ jobs:
             
             # Copy files to expected locations
             cp docker-compose.yml /tmp/docker-compose.yml
-            cp .env.production /tmp/.env.production
+            cp production.env /tmp/.env.production
             
             # Export secrets for deploy script
             export MONGO_ROOT_USERNAME='${{ secrets.MONGO_ROOT_USERNAME }}'
