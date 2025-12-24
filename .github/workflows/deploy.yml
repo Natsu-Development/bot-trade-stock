@@ -93,7 +93,7 @@ jobs:
           echo "Building docker-compose configuration..."
           export DOCKER_REGISTRY="${{ needs.build-images.outputs.docker-namespace }}"
           export IMAGE_TAG="${{ github.sha }}"
-          envsubst '${DOCKER_REGISTRY},${IMAGE_TAG}' < docker/docker-compose.prod.yml > docker-compose.final.yml
+          envsubst '${DOCKER_REGISTRY} ${IMAGE_TAG}' < docker/docker-compose.prod.yml > docker-compose.final.yml
           echo "Configuration built successfully"
 
       - name: Create deployment package
