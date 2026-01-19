@@ -109,10 +109,17 @@ func (bcs *BearishCronScheduler) runAnalysis(interval string) {
 }
 
 func (bcs *BearishCronScheduler) processConfig(ctx context.Context, interval, startDate, endDate string, cfg *tradingConfig.TradingConfig) {
+	if len(cfg.BearishSymbols) == 0 {
+		bcs.logger.Debug("Skipping config with no bearish symbols",
+			zap.String("configID", cfg.ID),
+		)
+		return
+	}
+
 	bcs.logger.Info("Processing config",
 		zap.String("configID", cfg.ID),
 		zap.String("interval", interval),
-		zap.Strings("symbols", cfg.Symbols),
+		zap.Strings("bearish_symbols", cfg.BearishSymbols),
 	)
 
 	processFunc := func(ctx context.Context, symbol string) (*analysis.AnalysisResult, error) {
@@ -123,7 +130,7 @@ func (bcs *BearishCronScheduler) processConfig(ctx context.Context, interval, st
 		return bcs.analyzer.Execute(ctx, query, cfg.ID)
 	}
 
-	results, _ := bcs.ProcessSymbolsConcurrently(ctx, cfg.Symbols, processFunc)
+	results, _ := bcs.ProcessSymbolsConcurrently(ctx, cfg.BearishSymbols, processFunc)
 	bcs.logSummary(interval, results, cfg)
 }
 

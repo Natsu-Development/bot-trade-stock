@@ -18,7 +18,8 @@ type TradingConfig struct {
 	RSIPeriod       int              `json:"rsi_period" bson:"rsi_period"`
 	StartDateOffset int              `json:"start_date_offset" bson:"start_date_offset"` // Days of historical data
 	Divergence      DivergenceConfig `json:"divergence" bson:"divergence"`
-	Symbols         []string         `json:"symbols" bson:"symbols"`
+	BearishSymbols  []string         `json:"bearish_symbols" bson:"bearish_symbols"` // Holding stocks for exit signals
+	BullishSymbols  []string         `json:"bullish_symbols" bson:"bullish_symbols"` // Watchlist stocks for entry signals
 	Telegram        TelegramConfig   `json:"telegram" bson:"telegram"`
 	CreatedAt       time.Time        `json:"created_at" bson:"created_at"`
 	UpdatedAt       time.Time        `json:"updated_at" bson:"updated_at"`
@@ -56,8 +57,8 @@ func (c *TradingConfig) Validate() error {
 		errs = append(errs, err.Error())
 	}
 
-	if len(c.Symbols) == 0 {
-		errs = append(errs, "symbols must contain at least one symbol")
+	if len(c.BearishSymbols) == 0 && len(c.BullishSymbols) == 0 {
+		errs = append(errs, "at least one of bearish_symbols or bullish_symbols must contain symbols")
 	}
 
 	if err := c.Telegram.Validate(); err != nil {
