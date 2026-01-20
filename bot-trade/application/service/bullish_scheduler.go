@@ -109,10 +109,17 @@ func (bcs *BullishCronScheduler) runAnalysis(interval string) {
 }
 
 func (bcs *BullishCronScheduler) processConfig(ctx context.Context, interval, startDate, endDate string, cfg *tradingConfig.TradingConfig) {
+	if len(cfg.BullishSymbols) == 0 {
+		bcs.logger.Debug("Skipping config with no bullish symbols",
+			zap.String("configID", cfg.ID),
+		)
+		return
+	}
+
 	bcs.logger.Info("Processing config",
 		zap.String("configID", cfg.ID),
 		zap.String("interval", interval),
-		zap.Strings("symbols", cfg.Symbols),
+		zap.Strings("bullish_symbols", cfg.BullishSymbols),
 	)
 
 	processFunc := func(ctx context.Context, symbol string) (*analysis.AnalysisResult, error) {
@@ -123,7 +130,7 @@ func (bcs *BullishCronScheduler) processConfig(ctx context.Context, interval, st
 		return bcs.analyzer.Execute(ctx, query, cfg.ID)
 	}
 
-	results, _ := bcs.ProcessSymbolsConcurrently(ctx, cfg.Symbols, processFunc)
+	results, _ := bcs.ProcessSymbolsConcurrently(ctx, cfg.BullishSymbols, processFunc)
 	bcs.logSummary(interval, results, cfg)
 }
 
