@@ -13,7 +13,7 @@ import (
 	"bot-trade/config"
 	"bot-trade/domain/aggregate/analysis"
 	"bot-trade/infrastructure/adapter"
-	infraGRPC "bot-trade/infrastructure/grpc"
+	infraHTTP "bot-trade/infrastructure/http"
 	"bot-trade/infrastructure/mongodb"
 	"bot-trade/infrastructure/telegram"
 	"bot-trade/pkg/logger"
@@ -22,7 +22,6 @@ import (
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 )
 
 // App holds all initialized dependencies and manages application lifecycle.
@@ -30,7 +29,6 @@ type App struct {
 	cfg    *config.InfraConfig
 	logger *zap.Logger
 
-	grpcConn         *grpc.ClientConn
 	mongoClient      *mongo.Client
 	bearishScheduler appPort.CronScheduler
 	bullishScheduler appPort.CronScheduler
@@ -59,19 +57,20 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	}
 	appLogger.Info("Connected to MongoDB", zap.String("database", cfg.MongoDBDatabase))
 
-	// Connect to gRPC
-	grpcConn, err := newGRPCConnection(cfg)
-	if err != nil {
-		mongoClient.Disconnect(context.Background())
-		return nil, fmt.Errorf("failed to connect to gRPC: %w", err)
-	}
-
 	// Create repositories
 	configRepository := mongodb.NewConfigRepository(mongoClient, cfg.MongoDBDatabase)
+	stockMetricsRepository := mongodb.NewStockMetricsRepository(mongoClient, cfg.MongoDBDatabase)
+
+	// Create HTTP client with retry transport for external API calls
+	httpClient := infraHTTP.NewHTTPClientWithRetry(30*time.Second, appLogger)
 
 	// Create infrastructure adapters
 	notifier := telegram.NewNotifier()
-	marketDataGateway := adapter.NewMarketDataGateway(grpcConn)
+	marketDataGateway := adapter.NewVietCapGateway(httpClient, cfg.VietCapRateLimit)
+	appLogger.Info("VietCap gateway initialized",
+		zap.Int("rate_limit_per_min", cfg.VietCapRateLimit),
+		zap.String("retry_transport", "enabled"),
+	)
 
 	// Create use cases
 	bullishAnalyzer := usecase.NewAnalyzeDivergenceUseCase(
@@ -81,6 +80,14 @@ func New(cfg *config.InfraConfig) (*App, error) {
 		configRepository, marketDataGateway, analysis.BearishDivergence, appLogger,
 	)
 	configUseCase := usecase.NewConfigUseCase(configRepository)
+	stockMetricsUseCase := usecase.NewStockMetricsUseCase(marketDataGateway, stockMetricsRepository, appLogger)
+
+	// Pre-populate stock metrics cache from database
+	loadCtx, loadCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer loadCancel()
+	if _, err := stockMetricsUseCase.LoadFromDB(loadCtx); err != nil {
+		appLogger.Warn("Failed to load stock metrics from database on startup", zap.Error(err))
+	}
 
 	// Create schedulers
 	bullishScheduler := appService.NewBullishCronScheduler(
@@ -94,12 +101,14 @@ func New(cfg *config.InfraConfig) (*App, error) {
 
 	// Create handlers
 	configHandler := presHandler.NewConfigHandler(configUseCase)
+	stockHandler := presHandler.NewStockHandler(stockMetricsUseCase)
 
 	// Create router
 	router := presHTTP.NewRouter(
 		presHandler.NewBullishDivergenceHandler(bullishAnalyzer),
 		presHandler.NewBearishDivergenceHandler(bearishAnalyzer),
 		configHandler,
+		stockHandler,
 	)
 
 	appLogger.Info("Application initialized successfully")
@@ -107,7 +116,6 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	return &App{
 		cfg:              cfg,
 		logger:           appLogger,
-		grpcConn:         grpcConn,
 		mongoClient:      mongoClient,
 		bearishScheduler: bearishScheduler,
 		bullishScheduler: bullishScheduler,
@@ -159,20 +167,8 @@ func (a *App) StopSchedulers() {
 // Close releases all application resources.
 func (a *App) Close() {
 	a.StopSchedulers()
-	if a.grpcConn != nil {
-		a.grpcConn.Close()
-	}
 	if a.mongoClient != nil {
 		a.mongoClient.Disconnect(context.Background())
 	}
 	a.logger.Sync()
-}
-
-func newGRPCConnection(cfg *config.InfraConfig) (*grpc.ClientConn, error) {
-	clientConfig := infraGRPC.NewClientConfig(
-		cfg.GRPCServerAddr,
-		time.Duration(cfg.GRPCConnectionTimeout)*time.Second,
-		time.Duration(cfg.GRPCRequestTimeout)*time.Second,
-	)
-	return infraGRPC.NewConnection(clientConfig)
 }

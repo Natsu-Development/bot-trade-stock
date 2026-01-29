@@ -14,6 +14,7 @@ func NewRouter(
 	bullishDivergenceHandler *handler.BullishDivergenceHandler,
 	bearishDivergenceHandler *handler.BearishDivergenceHandler,
 	configHandler *handler.ConfigHandler,
+	stockHandler *handler.StockHandler,
 ) *gin.Engine {
 	// Set Gin to release mode
 	gin.SetMode(gin.ReleaseMode)
@@ -47,6 +48,14 @@ func NewRouter(
 		api.GET("/:symbol/divergence/bullish", bullishDivergenceHandler.AnalyzeBullishDivergence)
 		api.GET("/:symbol/divergence/bearish", bearishDivergenceHandler.AnalyzeBearishDivergence)
 	}
+
+	// Stock metrics endpoints
+	// POST /stocks/refresh - Fetch all stocks, calculate metrics, cache in RAM
+	// POST /stocks/filter - Advanced filtering with AND/OR logic
+	// GET /stocks/cache-info - Get cache status
+	router.POST("/stocks/refresh", stockHandler.RefreshStocks)
+	router.POST("/stocks/filter", stockHandler.FilterStocks)
+	router.GET("/stocks/cache-info", stockHandler.GetCacheInfo)
 
 	return router
 }

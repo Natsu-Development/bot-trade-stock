@@ -6,10 +6,33 @@ import (
 	"strings"
 )
 
-// PriceData represents individual price point data.
+// PriceData represents individual OHLCV price point data.
 type PriceData struct {
-	Date  string
-	Close float64
+	Date   string
+	Open   float64
+	High   float64
+	Low    float64
+	Close  float64
+	Volume int64
+}
+
+// StockInfo represents a listed stock.
+type StockInfo struct {
+	Symbol   string
+	Name     string
+	Exchange string
+}
+
+// StockDataResponse is the domain response for market data.
+type StockDataResponse struct {
+	Symbol       string
+	PriceHistory []*PriceData
+}
+
+// ListStocksResponse is the domain response for stock listing.
+type ListStocksResponse struct {
+	Stocks     []StockInfo
+	TotalCount int
 }
 
 // Symbol is a value object representing a stock symbol.

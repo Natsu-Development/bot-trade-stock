@@ -1,15 +1,31 @@
 # Trading Bot System 📈
 
-A high-performance trading bot system with microservices architecture, utilizing gRPC for efficient stock data retrieval and analysis.
+A high-performance trading bot system with clean architecture, directly integrating with VietCap API for Vietnamese stock market data and analysis.
 
 ## 🏗️ Architecture
 
-### Services
-- **Broker Service** (Python): gRPC server for Vietnamese stock market data
-- **Bot-Trade Service** (Go): HTTP API for divergence analysis with scheduled jobs
+```
+┌─────────────────────────────────────────────────────────┐
+│  Presentation (HTTP handlers)                           │
+├─────────────────────────────────────────────────────────┤
+│  Application (Use Cases: RS Rating, Divergence)         │
+│      └── uses MarketDataGateway interface               │
+├─────────────────────────────────────────────────────────┤
+│  Domain (market.PriceData, market.StockInfo)            │
+├─────────────────────────────────────────────────────────┤
+│  Infrastructure                                         │
+│      ├── port/market_data.go (interface)                │
+│      └── adapter/vietcap_gateway.go (implementation)    │
+└─────────────────────────────────────────────────────────┘
+         │
+         ▼
+    [VietCap API]
+```
 
 ### Key Features
-- ✅ Microservices architecture with gRPC communication
+- ✅ Clean Architecture with domain-driven design
+- ✅ Direct VietCap API integration (no Python broker needed)
+- ✅ RS Rating calculation for all HOSE stocks
 - ✅ RSI-based divergence analysis
 - ✅ Telegram notifications
 - ✅ Docker deployment ready
@@ -55,7 +71,7 @@ git push origin master
 ```
 
 **What happens:**
-1. ✅ Builds Docker images → Pushes to Docker Hub
+1. ✅ Builds Docker image → Pushes to Docker Hub
 2. ✅ Creates deployment package (NO secrets inside)
 3. ✅ Deploys to cloud provider (secrets injected via SSH)
 4. ✅ Sends Telegram notification
@@ -79,13 +95,10 @@ make docker-down
 
 ### Manual Setup
 ```bash
-# Setup Python environment
-make python-setup
+# Setup development dependencies
+make setup
 
-# Generate protobuf files
-make proto-gen
-
-# Start development services
+# Start development with hot reload
 make dev
 ```
 
@@ -94,17 +107,23 @@ make dev
 - `GET /health` - System health check
 - `GET /analyze/{symbol}/divergence/bullish` - Bullish divergence analysis
 - `GET /analyze/{symbol}/divergence/bearish` - Bearish divergence analysis
+- `GET /rs-rating` - Get RS ratings for all HOSE stocks
+- `POST /rs-rating/refresh` - Refresh RS ratings cache
 
 ## ⚙️ Configuration
 
 Environment variables are configured in `bot-trade/env.example`:
 
 ```bash
-# Trading Configuration
-RSI_PERIOD=14
-RSI_OVERBOUGHT_THRESHOLD=70
-RSI_OVERSOLD_THRESHOLD=30
-DEFAULT_SYMBOLS=VIC,VCB,BID,CTG,TCB
+# Server Configuration
+HTTP_PORT=8080
+
+# VietCap API Configuration
+VIETCAP_RATE_LIMIT=15  # Requests per minute
+
+# MongoDB Configuration
+MONGODB_URI=mongodb://mongo:27017
+MONGODB_DATABASE=bot_trade
 
 # Analysis Settings
 BEARISH_1D_ENABLED=true
@@ -124,7 +143,7 @@ LOG_LEVEL=info
 ```
 ┌─────────────────────────────────────────────┐
 │ GitHub Actions (Build)                      │
-│ • Build Docker images                       │
+│ • Build Docker image                        │
 │ • Push to Docker Hub                        │
 │ • Create deployment package (NO secrets)    │
 └─────────────────────────────────────────────┘
@@ -140,18 +159,6 @@ LOG_LEVEL=info
 
 **Security:** Secrets are NEVER stored in artifacts, only injected via SSH during deployment.
 
-### Deploy Commands
-
-```bash
-# Automatic deployment
-git push origin master
-
-# Manual deployment from artifact
-# 1. Download artifact from GitHub Actions
-# 2. SSH to your server
-# 3. Run: ./scripts/deploy-generic.sh <provider>
-```
-
 ## 🔧 Development Commands
 
 ```bash
@@ -160,20 +167,26 @@ make docker-up       # Start services
 make docker-down     # Stop services
 make docker-logs     # View logs
 make docker-test     # Test API
-make docker-restart  # Restart services
+make docker-rebuild  # Rebuild and restart
 
 # Development
-make python-setup    # Setup Python environment
-make proto-gen       # Generate protobuf files
-make dev             # Start development mode
+make setup           # First-time setup
+make dev             # Start with hot reload
+make golang-build    # Build production binary
 ```
 
 ## 📈 Trading Strategy
 
-The bot analyzes RSI divergences:
+The bot analyzes two main strategies:
 
-1. **Bullish Divergence**: Price makes lower lows, RSI makes higher lows
-2. **Bearish Divergence**: Price makes higher highs, RSI makes lower highs
+### 1. RS Rating (Relative Strength)
+- Ranks all HOSE stocks by price performance
+- Calculates percentile ratings for 1M, 3M, 6M, 9M, 12M periods
+- Higher RS rating = stronger relative performance
+
+### 2. RSI Divergence
+- **Bullish Divergence**: Price makes lower lows, RSI makes higher lows
+- **Bearish Divergence**: Price makes higher highs, RSI makes lower highs
 
 Analysis runs on scheduled intervals and sends notifications via Telegram.
 
@@ -184,7 +197,7 @@ Analysis runs on scheduled intervals and sends notifications via Telegram.
 - ✅ **Encrypted Transmission**: All secrets passed via encrypted SSH connection
 - ✅ **Secure Storage**: `.env.secrets` on VM with chmod 600 permissions
 - ✅ **No Git Exposure**: Secrets never committed to repository
-- ✅ **Industry Standard**: Follows DevOps best practices (KISS principle)
+- ✅ **Rate Limiting**: Built-in VietCap API rate limiting
 
 ## 🛠️ Troubleshooting
 
@@ -193,7 +206,7 @@ Analysis runs on scheduled intervals and sends notifications via Telegram.
 **Services not starting:**
 ```bash
 make docker-logs        # Check logs
-make docker-restart     # Restart services
+make docker-rebuild     # Restart services
 make docker-clean       # Clean rebuild
 ```
 
@@ -233,10 +246,14 @@ docker-compose logs
 ```
 Trading/
 ├── bot-trade/           # Go trading bot service
-├── broker/              # Python gRPC broker service
+│   ├── application/     # Use cases and application services
+│   ├── domain/          # Business logic and entities
+│   ├── infrastructure/  # External integrations (VietCap, MongoDB)
+│   ├── presentation/    # HTTP handlers and routes
+│   └── wire/            # Dependency injection
 ├── scripts/             # Deployment and setup scripts
 ├── docker/              # Docker configurations
-├── proto/               # Protocol buffer definitions
+├── makefiles/           # Modular makefile targets
 └── .github/workflows/   # CI/CD workflows
 ```
 

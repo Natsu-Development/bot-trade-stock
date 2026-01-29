@@ -11,8 +11,7 @@ import (
 // This configuration is immutable at runtime and used for deployment-specific settings.
 type InfraConfig struct {
 	// Server Configuration
-	GRPCServerAddr string
-	HTTPPort       int
+	HTTPPort int
 
 	// HTTP Server Timeouts
 	HTTPReadTimeout     int
@@ -20,10 +19,8 @@ type InfraConfig struct {
 	HTTPIdleTimeout     int
 	HTTPShutdownTimeout int
 
-	// gRPC Client Configuration
-	GRPCConnectionTimeout int
-	GRPCRequestTimeout    int
-	GRPCMarketDataTimeout int
+	// VietCap API Configuration
+	VietCapRateLimit int // Requests per minute (default: 15)
 
 	// MongoDB Configuration
 	MongoDBURI      string
@@ -72,7 +69,6 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	config := &InfraConfig{}
 
 	// Server Configuration
-	config.GRPCServerAddr = getStringEnv("GRPC_SERVER_ADDR", &errors)
 	config.HTTPPort = getNumberEnv("HTTP_PORT", &errors)
 
 	// HTTP Server Timeouts
@@ -81,10 +77,8 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	config.HTTPIdleTimeout = getNumberEnv("HTTP_IDLE_TIMEOUT", &errors)
 	config.HTTPShutdownTimeout = getNumberEnv("HTTP_SHUTDOWN_TIMEOUT", &errors)
 
-	// gRPC Client Configuration
-	config.GRPCConnectionTimeout = getNumberEnv("GRPC_CONNECTION_TIMEOUT", &errors)
-	config.GRPCRequestTimeout = getNumberEnv("GRPC_REQUEST_TIMEOUT", &errors)
-	config.GRPCMarketDataTimeout = getNumberEnv("GRPC_MARKET_DATA_TIMEOUT", &errors)
+	// VietCap API Configuration
+	config.VietCapRateLimit = getOptionalNumberEnv("VIETCAP_RATE_LIMIT", 120) // Default: 120 req/min
 
 	// MongoDB Configuration
 	config.MongoDBURI = getStringEnv("MONGODB_URI", &errors)

@@ -10,9 +10,7 @@ NC=\033[0m
 
 # Project directories
 PROJECT_ROOT=$(shell pwd)
-PROTO_DIR=proto
 GO_SERVICE_DIR=bot-trade
-PYTHON_SERVICE_DIR=broker
 DOCKER_DIR=docker
 
 # Docker settings

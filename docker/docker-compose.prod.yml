@@ -21,23 +21,7 @@ services:
       retries: 3
       start_period: 10s
 
-  # Python gRPC Stock Data Service
-  broker:
-    image: ${DOCKER_REGISTRY}/trading-broker:${IMAGE_TAG:-latest}
-    container_name: trading-broker
-    ports:
-      - "50051:50051"
-    networks:
-      - trading-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import grpc; channel = grpc.insecure_channel('localhost:50051'); channel.close()"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
-  # Go Trading Bot Service
+  # Go Trading Bot Service (Direct VietCap API)
   bot-trade:
     image: ${DOCKER_REGISTRY}/trading-bot:${IMAGE_TAG:-latest}
     container_name: trading-bot
@@ -48,8 +32,6 @@ services:
       - .env.production   # All non-sensitive config
     depends_on:
       mongo:
-        condition: service_healthy
-      broker:
         condition: service_healthy
     networks:
       - trading-network
