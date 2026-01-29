@@ -60,7 +60,7 @@ func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.Market
 	)
 	startTime := time.Now()
 
-	rawResponse, err := uc.marketDataGateway.FetchStockData(ctx, q)
+	response, err := uc.marketDataGateway.FetchStockData(ctx, q)
 	if err != nil {
 		uc.logger.Error("Failed to fetch stock data",
 			zap.String("symbol", symbol),
@@ -69,13 +69,7 @@ func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.Market
 		return nil, fmt.Errorf("failed to fetch stock data: %w", err)
 	}
 
-	priceHistory := make([]*market.PriceData, len(rawResponse.PriceHistory))
-	for i, pb := range rawResponse.PriceHistory {
-		priceHistory[i] = &market.PriceData{
-			Date:  pb.Date,
-			Close: pb.Close,
-		}
-	}
+	priceHistory := response.PriceHistory
 
 	indicesRecent := tradingConfig.Divergence.IndicesRecent
 	if len(priceHistory) < indicesRecent {

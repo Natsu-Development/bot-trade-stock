@@ -71,7 +71,7 @@ func validateAndNormalizeDateRange(startDate, endDate string) (string, string, e
 		return "", "", errors.New("end_date cannot be in the future")
 	}
 
-	maxDays := 365
+	maxDays := 400
 	if parsedEndDate.Sub(parsedStartDate) > time.Duration(maxDays)*24*time.Hour {
 		return "", "", fmt.Errorf("date range cannot exceed %d days", maxDays)
 	}

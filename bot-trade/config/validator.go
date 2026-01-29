@@ -29,6 +29,18 @@ func getOptionalBoolEnv(key string) bool {
 	return boolValue
 }
 
+func getOptionalNumberEnv(key string, defaultValue int) int {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	intValue, err := strconv.Atoi(value)
+	if err != nil || intValue <= 0 {
+		return defaultValue
+	}
+	return intValue
+}
+
 func getNumberEnv(key string, errors *[]string) int {
 	value := os.Getenv(key)
 	if value == "" {
