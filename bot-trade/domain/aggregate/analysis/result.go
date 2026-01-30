@@ -16,6 +16,9 @@ type AnalysisResult struct {
 	Interval         string
 	RSIPeriod        int
 	Timestamp        time.Time
+	// Early detection fields
+	EarlySignalDetected bool
+	EarlyDescription    string
 }
 
 // NewAnalysisResult creates a new AnalysisResult.
@@ -51,4 +54,15 @@ func NewAnalysisResult(
 // HasDivergence returns true if a divergence was detected.
 func (r *AnalysisResult) HasDivergence() bool {
 	return r.DivergenceFound
+}
+
+// SetEarlySignal sets the early detection fields.
+func (r *AnalysisResult) SetEarlySignal(detected bool, description string) {
+	r.EarlySignalDetected = detected
+	r.EarlyDescription = description
+}
+
+// HasEarlySignal returns true if an early signal was detected.
+func (r *AnalysisResult) HasEarlySignal() bool {
+	return r.EarlySignalDetected
 }

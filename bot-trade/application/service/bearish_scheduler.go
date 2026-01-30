@@ -136,9 +136,12 @@ func (bcs *BearishCronScheduler) processConfig(ctx context.Context, interval, st
 
 func (bcs *BearishCronScheduler) logSummary(interval string, results map[string]*analysis.AnalysisResult, cfg *tradingConfig.TradingConfig) {
 	var bearishCount int
+	var earlySignalCount int
 	var bearishSymbols []string
+	var earlySignalSymbols []string
 
 	for symbol, result := range results {
+		// Handle confirmed divergence
 		if result.HasDivergence() && result.DivergenceType == analysis.BearishDivergence {
 			bearishCount++
 			bearishSymbols = append(bearishSymbols, symbol)
@@ -152,13 +155,34 @@ func (bcs *BearishCronScheduler) logSummary(interval string, results map[string]
 
 			bcs.HandleResult(interval, symbol, result, cfg)
 		}
+
+		// Handle early signal (only if enabled in config and no confirmed divergence)
+		if result.HasEarlySignal() && cfg.EarlyDetectionEnabled && !result.HasDivergence() {
+			earlySignalCount++
+			earlySignalSymbols = append(earlySignalSymbols, symbol)
+
+			bcs.logger.Info("Early bearish signal detected",
+				zap.String("configID", cfg.ID),
+				zap.String("interval", interval),
+				zap.String("symbol", symbol),
+				zap.String("description", result.EarlyDescription),
+			)
+
+			// Set divergence info for notification using early signal data
+			result.DivergenceFound = true
+			result.DivergenceType = analysis.BearishDivergence
+			result.Description = result.EarlyDescription
+			bcs.HandleResult(interval, symbol, result, cfg)
+		}
 	}
 
 	bcs.logger.Info("Analysis complete for config",
 		zap.String("configID", cfg.ID),
 		zap.String("interval", interval),
 		zap.Int("analyzed", len(results)),
-		zap.Int("signals", bearishCount),
+		zap.Int("confirmed_signals", bearishCount),
+		zap.Int("early_signals", earlySignalCount),
 		zap.Strings("bearish_symbols", bearishSymbols),
+		zap.Strings("early_signal_symbols", earlySignalSymbols),
 	)
 }
