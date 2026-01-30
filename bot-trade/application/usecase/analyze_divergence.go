@@ -102,10 +102,14 @@ func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.Market
 	detector := divergence.NewDetector(detectorConfig)
 
 	var detection divergence.DetectionResult
+	var earlyDetection divergence.DetectionResult
+
 	if uc.divergenceType == analysis.BullishDivergence {
 		detection = detector.DetectBullish(dataWithRSI)
 	} else {
 		detection = detector.DetectBearish(dataWithRSI)
+		// Also check for early bearish divergence with current price
+		earlyDetection = detector.DetectEarlyBearish(dataWithRSI)
 	}
 
 	// Get current price/RSI from last valid data point
@@ -123,9 +127,11 @@ func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.Market
 		zap.String("symbol", symbol),
 		zap.Duration("duration", processingTime),
 		zap.Bool("divergence_found", detection.Found),
+		zap.Bool("early_signal", earlyDetection.EarlySignal),
+		zap.String("early_description", earlyDetection.EarlyDescription),
 	)
 
-	return analysis.NewAnalysisResult(
+	result := analysis.NewAnalysisResult(
 		symbol,
 		detection.Type,
 		detection.Found,
@@ -137,5 +143,15 @@ func (uc *AnalyzeDivergenceUseCase) Execute(ctx context.Context, q market.Market
 		q.EndDate,
 		q.Interval,
 		tradingConfig.RSIPeriod,
-	), nil
+	)
+
+	// Set early detection fields for bearish analysis
+	if uc.divergenceType == analysis.BearishDivergence && earlyDetection.EarlySignal {
+		result.SetEarlySignal(
+			earlyDetection.EarlySignal,
+			earlyDetection.EarlyDescription,
+		)
+	}
+
+	return result, nil
 }
