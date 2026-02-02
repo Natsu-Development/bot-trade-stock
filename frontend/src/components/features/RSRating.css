@@ -1,0 +1,41 @@
+.rs-rating {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rs-bar {
+  width: 80px;
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.rs-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease-out;
+}
+
+.rs-fill.high {
+  background: var(--neon-bull);
+  box-shadow: 0 0 10px var(--neon-bull);
+}
+
+.rs-fill.medium {
+  background: var(--neon-amber);
+}
+
+.rs-fill.low {
+  background: var(--neon-bear);
+}
+
+.rs-value {
+  font-weight: 600;
+  min-width: 32px;
+}
+
+.rs-value.high { color: var(--neon-bull); }
+.rs-value.medium { color: var(--neon-amber); }
+.rs-value.low { color: var(--neon-bear); }

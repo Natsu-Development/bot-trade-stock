@@ -3,9 +3,9 @@
 .env.*
 !.env.example
 
-# AI Context Files
-.cursor/
-.kiro/
+# Frontend Build Artifacts
+frontend/dist/
+frontend/node_modules/
 
 # Go Build Artifacts (only at root level of bot-trade)
 bot-trade/main
@@ -35,7 +35,7 @@ x``
 *.tmp
 *.bak
 
-# Ai - DLC
+# AI Context Files
 .cursor/
 .kiro/
 .claude/
