@@ -41,6 +41,10 @@ func NewRouter(
 	router.PUT("/config/:id", configHandler.UpdateConfig)
 	router.DELETE("/config/:id", configHandler.DeleteConfig)
 
+	// Watchlist management endpoints
+	router.POST("/config/:id/watchlist", configHandler.AddSymbolsToWatchlist)
+	router.DELETE("/config/:id/watchlist", configHandler.RemoveSymbolsFromWatchlist)
+
 	// API routes group with request validation middleware
 	api := router.Group("/analyze")
 	{

@@ -2,7 +2,7 @@ import { ReactNode } from 'react'
 import './Table.css'
 
 interface TableProps {
-  headers: string[]
+  headers: Array<string | ReactNode>
   children: ReactNode
 }
 

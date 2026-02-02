@@ -3,6 +3,8 @@ package config
 
 import (
 	"errors"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -20,10 +22,11 @@ type TradingConfig struct {
 	Divergence            DivergenceConfig `json:"divergence" bson:"divergence"`
 	EarlyDetectionEnabled bool             `json:"early_detection_enabled" bson:"early_detection_enabled"` // Enable early bearish divergence detection
 	BearishSymbols        []string         `json:"bearish_symbols" bson:"bearish_symbols"`                 // Holding stocks for exit signals
-	BullishSymbols        []string         `json:"bullish_symbols" bson:"bullish_symbols"`                 // Watchlist stocks for entry signals
-	Telegram              TelegramConfig   `json:"telegram" bson:"telegram"`
-	CreatedAt             time.Time        `json:"created_at" bson:"created_at"`
-	UpdatedAt             time.Time        `json:"updated_at" bson:"updated_at"`
+	BullishSymbols        []string                 `json:"bullish_symbols" bson:"bullish_symbols"`                         // Watchlist stocks for entry signals
+	Telegram              TelegramConfig           `json:"telegram" bson:"telegram"`
+	ScreenerFilterPresets []ScreenerFiltersConfig  `json:"screener_filters,omitempty" bson:"screener_filters,omitempty"` // Saved screener filter presets
+	CreatedAt             time.Time                `json:"created_at" bson:"created_at"`
+	UpdatedAt             time.Time                `json:"updated_at" bson:"updated_at"`
 }
 
 // DivergenceConfig holds divergence detection parameters.
@@ -40,6 +43,22 @@ type TelegramConfig struct {
 	Enabled  bool   `json:"enabled" bson:"enabled"`
 	BotToken string `json:"bot_token,omitempty" bson:"bot_token"`
 	ChatID   string `json:"chat_id,omitempty" bson:"chat_id"`
+}
+
+// ScreenerFilter represents a single filter condition for the stock screener.
+type ScreenerFilter struct {
+	Field    string `json:"field" bson:"field"`       // e.g., "rs_52w", "volume_vs_sma"
+	Operator string `json:"op" bson:"op"`             // e.g., ">=", "<=", ">", "<", "="
+	Value    int    `json:"value" bson:"value"`       // Filter threshold value
+}
+
+// ScreenerFiltersConfig holds saved screener filter presets.
+type ScreenerFiltersConfig struct {
+	Name      string           `json:"name" bson:"name"`                           // User-defined filter name
+	Filters   []ScreenerFilter `json:"filters" bson:"filters"`                     // Filter conditions
+	Logic     string           `json:"logic" bson:"logic"`                         // 'and' or 'or'
+	Exchanges []string         `json:"exchanges,omitempty" bson:"exchanges,omitempty"` // Optional exchange filter
+	CreatedAt time.Time        `json:"created_at" bson:"created_at"`
 }
 
 // Validate checks all trading config invariants.
@@ -137,4 +156,29 @@ func (e *ValidationError) Error() string {
 		result += err
 	}
 	return result
+}
+
+// ValidateConfigID validates a config ID (username) format.
+func ValidateConfigID(id string) error {
+	trimmed := strings.TrimSpace(id)
+
+	if trimmed == "" {
+		return &ValidationError{Errors: []string{"config ID is required"}}
+	}
+
+	if len(trimmed) < 2 {
+		return &ValidationError{Errors: []string{"config ID must be at least 2 characters"}}
+	}
+
+	if len(trimmed) > 50 {
+		return &ValidationError{Errors: []string{"config ID must be less than 50 characters"}}
+	}
+
+	// Allow alphanumeric, hyphens, and underscores only
+	validPattern := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+	if !validPattern.MatchString(trimmed) {
+		return &ValidationError{Errors: []string{"config ID can only contain letters, numbers, hyphens, and underscores"}}
+	}
+
+	return nil
 }

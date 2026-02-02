@@ -90,3 +90,17 @@ export interface FilterOperatorOption {
   value: FilterOperator
   label: string
 }
+
+// Screener filter preset types
+export interface ScreenerFilterPreset {
+  name: string
+  filters: Array<{ field: string; op: string; value: number }>
+  logic: 'and' | 'or'
+  exchanges?: string[]
+  created_at: string
+}
+
+export interface WatchlistAction {
+  type: 'bullish' | 'bearish'
+  symbols: string[]
+}

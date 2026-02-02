@@ -5,9 +5,11 @@ import { Button } from '../ui/Button'
 import { Table } from '../ui/Table'
 import { Badge } from '../ui/Badge'
 import { Chip } from '../ui/Chip'
+import { Dialog } from '../ui/Dialog'
 import { Icons } from '../icons/Icons'
 import { formatPrice, formatChange, getBadgeVariantFromExchange } from '../../lib/utils'
-import { api, apiToStock } from '../../lib/api'
+import { api, apiToStock, getConfigId, type ScreenerFilterPreset } from '../../lib/api'
+import { toast } from '../ui/Toast'
 import type { Stock, DynamicFilter, FilterField, FilterOperator, FilterFieldOption, FilterOperatorOption } from '../../types'
 import './Screener.css'
 
@@ -39,7 +41,7 @@ const getDefaultFilters = (): DynamicFilter[] => [
   { id: '1', field: 'rs_52w', operator: '>=', value: 70 },
 ]
 
-// Generate unique ID for new filters
+// Generate unique ID for new filter
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2)
 
 export function Screener() {
@@ -50,6 +52,33 @@ export function Screener() {
   // Dynamic filter state
   const [dynamicFilters, setDynamicFilters] = useState<DynamicFilter[]>(getDefaultFilters)
   const [filterLogic, setFilterLogic] = useState<'and' | 'or'>('and')
+
+  // Saved filter presets
+  const [savedFilters, setSavedFilters] = useState<ScreenerFilterPreset[]>([])
+  const [selectedPreset, setSelectedPreset] = useState<string | null>(null)
+  const [showSaveFilterModal, setShowSaveFilterModal] = useState(false)
+  const [newFilterName, setNewFilterName] = useState('')
+
+  // Stock selection for watchlist
+  const [selectedStocks, setSelectedStocks] = useState<Set<string>>(new Set())
+  const [showWatchlistModal, setShowWatchlistModal] = useState(false)
+
+  // Removed toast state in favor of toast function
+
+  // Load saved filters from config
+  useEffect(() => {
+    loadSavedFilters()
+  }, [])
+
+  const loadSavedFilters = async () => {
+    try {
+      const configId = getConfigId()
+      const config = await api.getConfig(configId)
+      setSavedFilters(config.screener_filters || [])
+    } catch (error) {
+      console.error('Failed to load saved filters:', error)
+    }
+  }
 
   const fetchStocks = async () => {
     setLoading(true)
@@ -71,6 +100,8 @@ export function Screener() {
 
       const converted = response.stocks.map(apiToStock)
       setStocks(converted)
+      // Clear selection when results change
+      setSelectedStocks(new Set())
     } catch (error) {
       console.error('Failed to fetch stocks:', error)
     }
@@ -91,6 +122,7 @@ export function Screener() {
     setDynamicFilters(getDefaultFilters())
     setFilterLogic('and')
     setActiveExchange('All')
+    setSelectedPreset(null)
   }
 
   // Dynamic filter handlers
@@ -124,6 +156,160 @@ export function Screener() {
     f.value !== '' && !isNaN(Number(f.value))
   )
 
+  // Save filter preset (update if exists, otherwise create new)
+  const handleSaveFilter = async () => {
+    if (!newFilterName.trim()) {
+      toast.error('Please enter a filter name')
+      return
+    }
+
+    try {
+      const configId = getConfigId()
+      const config = await api.getConfig(configId)
+
+      const newPreset: ScreenerFilterPreset = {
+        name: newFilterName,
+        filters: dynamicFilters
+          .filter(f => f.value !== '' && !isNaN(Number(f.value)))
+          .map(f => ({
+            field: f.field,
+            op: f.operator,
+            value: Number(f.value),
+          })),
+        logic: filterLogic,
+        exchanges: activeExchange !== 'All' ? [activeExchange] : undefined,
+        created_at: new Date().toISOString(),
+      }
+
+      // Check if filter with this name already exists
+      const existingIndex = (config.screener_filters || []).findIndex(f => f.name === newFilterName)
+
+      let updatedFilters: ScreenerFilterPreset[]
+      if (existingIndex >= 0) {
+        // Update existing filter
+        updatedFilters = [...(config.screener_filters || [])]
+        updatedFilters[existingIndex] = newPreset
+        toast.success('Filter updated successfully')
+      } else {
+        // Add new filter
+        updatedFilters = [...(config.screener_filters || []), newPreset]
+        toast.success('Filter saved successfully')
+      }
+
+      await api.updateConfig(configId, {
+        screener_filters: updatedFilters,
+      })
+
+      setSavedFilters(updatedFilters)
+      setNewFilterName('')
+      setShowSaveFilterModal(false)
+    } catch (error) {
+      console.error('Failed to save filter:', error)
+      toast.error('Failed to save filter')
+    }
+  }
+
+  // Load saved filter preset
+  const handleLoadPreset = (presetName: string) => {
+    const preset = savedFilters.find(f => f.name === presetName)
+    if (!preset) return
+
+    setSelectedPreset(presetName)
+
+    // Convert preset filters to DynamicFilter format
+    const loadedFilters: DynamicFilter[] = preset.filters.map((f, index) => ({
+      id: generateId() + index,
+      field: f.field as FilterField,
+      operator: f.op as FilterOperator,
+      value: f.value,
+    }))
+
+    setDynamicFilters(loadedFilters.length > 0 ? loadedFilters : getDefaultFilters())
+    setFilterLogic(preset.logic)
+    if (preset.exchanges && preset.exchanges.length > 0) {
+      setActiveExchange(preset.exchanges[0])
+    } else {
+      setActiveExchange('All')
+    }
+  }
+
+  // Delete saved filter preset
+  const handleDeletePreset = async (presetName: string) => {
+    try {
+      const configId = getConfigId()
+      const config = await api.getConfig(configId)
+
+      const updatedFilters = (config.screener_filters || []).filter(f => f.name !== presetName)
+
+      await api.updateConfig(configId, {
+        screener_filters: updatedFilters,
+      })
+
+      setSavedFilters(updatedFilters)
+      if (selectedPreset === presetName) {
+        setSelectedPreset(null)
+      }
+      toast.success('Filter deleted')
+    } catch (error) {
+      console.error('Failed to delete filter:', error)
+      toast.error('Failed to delete filter')
+    }
+  }
+
+  // Stock selection handlers
+  const handleToggleStockSelection = (symbol: string) => {
+    const newSelection = new Set(selectedStocks)
+    if (newSelection.has(symbol)) {
+      newSelection.delete(symbol)
+    } else {
+      newSelection.add(symbol)
+    }
+    setSelectedStocks(newSelection)
+  }
+
+  const handleToggleAllSelection = () => {
+    if (selectedStocks.size === stocks.length) {
+      setSelectedStocks(new Set())
+    } else {
+      setSelectedStocks(new Set(stocks.map(s => s.symbol)))
+    }
+  }
+
+  const handleAddSelectedToWatchlist = () => {
+    if (selectedStocks.size === 0) {
+      toast.error('Please select at least one stock')
+      return
+    }
+    setShowWatchlistModal(true)
+  }
+
+  const handleAddAllToWatchlist = () => {
+    if (stocks.length === 0) {
+      toast.error('No stocks to add')
+      return
+    }
+    setSelectedStocks(new Set(stocks.map(s => s.symbol)))
+    setShowWatchlistModal(true)
+  }
+
+  const handleConfirmWatchlist = async (listType: 'bullish' | 'bearish') => {
+    try {
+      const configId = getConfigId()
+      const symbols = Array.from(selectedStocks)
+
+      await api.addSymbolsToWatchlist(configId, listType, symbols)
+
+      setSelectedStocks(new Set())
+      setShowWatchlistModal(false)
+
+      const listName = listType === 'bullish' ? 'Bullish' : 'Bearish'
+      toast.success(`Added ${symbols.length} stocks to ${listName} watchlist`)
+    } catch (error) {
+      console.error('Failed to add to watchlist:', error)
+      toast.error('Failed to add stocks to watchlist')
+    }
+  }
+
   return (
     <div className="page active">
       <Header
@@ -131,7 +317,14 @@ export function Screener() {
         subtitle="Filter and discover high-momentum stocks"
         actions={
           <>
-            <Button variant="secondary" icon="Save">Save Filter</Button>
+            <Button
+              variant="secondary"
+              icon="Save"
+              onClick={() => setShowSaveFilterModal(true)}
+              disabled={!hasValidFilters}
+            >
+              Save Filter
+            </Button>
             <Button icon="Filter" onClick={handleApplyFilters} disabled={loading}>
               {loading ? 'Loading...' : 'Apply Filters'}
             </Button>
@@ -142,10 +335,43 @@ export function Screener() {
       <Card className="mb-6">
         <Card.Header
           action={
-            <button className="btn btn-ghost" onClick={handleReset}>
-              <Icons.RotateCcw />
-              Reset All
-            </button>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              {/* Saved Filters Dropdown */}
+              {savedFilters.length > 0 && (
+                <>
+                  <select
+                    className="form-input form-select"
+                    value={selectedPreset || ''}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleLoadPreset(e.target.value)
+                      } else {
+                        setSelectedPreset(null)
+                      }
+                    }}
+                    style={{ marginRight: '8px' }}
+                  >
+                    <option value="">Saved Filters...</option>
+                    {savedFilters.map(f => (
+                      <option key={f.name} value={f.name}>{f.name}</option>
+                    ))}
+                  </select>
+                  {selectedPreset && (
+                    <button
+                      className="btn btn-ghost btn-icon"
+                      onClick={() => handleDeletePreset(selectedPreset)}
+                      title="Delete saved filter"
+                    >
+                      <Icons.Trash2 />
+                    </button>
+                  )}
+                </>
+              )}
+              <button className="btn btn-ghost" onClick={handleReset}>
+                <Icons.RotateCcw />
+                Reset All
+              </button>
+            </div>
           }
         >
           <Icons.Filter />
@@ -283,7 +509,30 @@ export function Screener() {
 
       <Card>
         <Card.Header
-          action={<button className="btn btn-ghost">Export CSV</button>}
+          action={
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {selectedStocks.size > 0 && (
+                <Button
+                  variant="primary"
+                  icon="Plus"
+                  onClick={handleAddSelectedToWatchlist}
+                  style={{ fontSize: '13px', padding: '6px 12px' }}
+                >
+                  Add Selected ({selectedStocks.size})
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                icon="List"
+                onClick={handleAddAllToWatchlist}
+                disabled={stocks.length === 0}
+                style={{ fontSize: '13px', padding: '6px 12px' }}
+              >
+                Add All
+              </Button>
+              <button className="btn btn-ghost">Export CSV</button>
+            </div>
+          }
         >
           <Icons.Grid />
           Results <span className="text-muted font-mono" style={{ marginLeft: '8px' }}>{stocks.length} stocks</span>
@@ -299,10 +548,35 @@ export function Screener() {
             </div>
           ) : (
             <Table
-              headers={['Symbol', 'Exchange', 'RS 1M', 'RS 3M', 'RS 6M', 'RS 9M', 'RS 52W', 'Vol/SMA', 'Price', 'Change %']}
+              headers={[
+                <label key="select" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedStocks.size === stocks.length && stocks.length > 0}
+                    onChange={handleToggleAllSelection}
+                  />
+                </label>,
+                'Symbol',
+                'Exchange',
+                'RS 1M',
+                'RS 3M',
+                'RS 6M',
+                'RS 9M',
+                'RS 52W',
+                'Vol/SMA',
+                'Price',
+                'Change %'
+              ]}
             >
               {stocks.map((stock) => (
                 <tr key={stock.symbol}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedStocks.has(stock.symbol)}
+                      onChange={() => handleToggleStockSelection(stock.symbol)}
+                    />
+                  </td>
                   <td>
                     <div className="symbol-cell">
                       <div className="symbol-avatar">{stock.symbol}</div>
@@ -328,6 +602,204 @@ export function Screener() {
           )}
         </Card.Body>
       </Card>
+
+      {/* Save Filter Modal */}
+      <Dialog isOpen={showSaveFilterModal} onClose={() => setShowSaveFilterModal(false)}>
+        <Dialog.Header icon={<Icons.Save />}>
+          Save Filter Preset
+          <Dialog.CloseButton onClick={() => setShowSaveFilterModal(false)} />
+        </Dialog.Header>
+        <Dialog.Body>
+          <div className="form-group">
+            <label className="form-label">Filter Name</label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="e.g., High RS Stocks (80+)"
+              value={newFilterName}
+              onChange={(e) => setNewFilterName(e.target.value)}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleSaveFilter()
+                }
+              }}
+            />
+            <p className="form-hint">
+              This will save your current filter conditions and logic for quick access later.
+            </p>
+          </div>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button variant="secondary" onClick={() => setShowSaveFilterModal(false)}>
+            Cancel
+          </Button>
+          <Button icon="Save" onClick={handleSaveFilter}>
+            Save Filter
+          </Button>
+        </Dialog.Footer>
+      </Dialog>
+
+      {/* Watchlist Modal */}
+      <Dialog isOpen={showWatchlistModal} onClose={() => setShowWatchlistModal(false)}>
+        <Dialog.Header icon={<Icons.List />}>
+          Add to Watchlist
+          <Dialog.CloseButton onClick={() => setShowWatchlistModal(false)} />
+        </Dialog.Header>
+        <Dialog.Body>
+          <p style={{ marginBottom: '16px' }}>
+            Add {selectedStocks.size} stock(s) to your watchlist:
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <button
+              className="watchlist-option-btn"
+              onClick={() => handleConfirmWatchlist('bullish')}
+            >
+              <div className="watchlist-option-icon bullish">
+                <Icons.TrendUp />
+              </div>
+              <div style={{ textAlign: 'left' }}>
+                <div className="watchlist-option-title bullish">Bullish Watchlist</div>
+                <div className="watchlist-option-desc">
+                  For entry signals - stocks you want to buy
+                </div>
+              </div>
+            </button>
+            <button
+              className="watchlist-option-btn"
+              onClick={() => handleConfirmWatchlist('bearish')}
+            >
+              <div className="watchlist-option-icon bearish">
+                <Icons.TrendDown />
+              </div>
+              <div style={{ textAlign: 'left' }}>
+                <div className="watchlist-option-title bearish">Bearish Watchlist</div>
+                <div className="watchlist-option-desc">
+                  For exit signals - stocks you currently hold
+                </div>
+              </div>
+            </button>
+          </div>
+          {selectedStocks.size <= 5 && (
+            <div className="selected-stocks-preview">
+              <div className="selected-stocks-label">Selected stocks:</div>
+              <div className="selected-stocks-tags">
+                {Array.from(selectedStocks).map(s => (
+                  <span key={s} className="stock-tag">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Button variant="secondary" onClick={() => setShowWatchlistModal(false)}>
+            Cancel
+          </Button>
+        </Dialog.Footer>
+      </Dialog>
+
+      <style>{`
+        .form-hint {
+          margin: 4px 0 0;
+          font-size: 13px;
+          color: var(--text-muted);
+        }
+
+        .watchlist-option-btn {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          width: 100%;
+          padding: 16px;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-dim);
+          border-radius: var(--radius-md);
+          cursor: pointer;
+          transition: all var(--transition-fast);
+        }
+
+        .watchlist-option-btn:hover {
+          border-color: var(--border-glow);
+          background: var(--bg-hover);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .watchlist-option-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 48px;
+          height: 48px;
+          border-radius: var(--radius-md);
+          flex-shrink: 0;
+        }
+
+        .watchlist-option-icon.bullish {
+          background: var(--neon-bull-dim);
+          color: var(--neon-bull);
+        }
+
+        .watchlist-option-icon.bearish {
+          background: var(--neon-bear-dim);
+          color: var(--neon-bear);
+        }
+
+        .watchlist-option-icon svg {
+          width: 24px;
+          height: 24px;
+        }
+
+        .watchlist-option-title {
+          font-size: 15px;
+          font-weight: 600;
+          margin-bottom: 4px;
+        }
+
+        .watchlist-option-title.bullish {
+          color: var(--neon-bull);
+        }
+
+        .watchlist-option-title.bearish {
+          color: var(--neon-bear);
+        }
+
+        .watchlist-option-desc {
+          font-size: 13px;
+          color: var(--text-muted);
+        }
+
+        .selected-stocks-preview {
+          margin-top: 16px;
+          padding: 12px;
+          background: var(--bg-elevated);
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border-dim);
+        }
+
+        .selected-stocks-label {
+          font-size: 12px;
+          color: var(--text-muted);
+          margin-bottom: 8px;
+        }
+
+        .selected-stocks-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+
+        .stock-tag {
+          padding: 4px 10px;
+          background: var(--bg-hover);
+          border: 1px solid var(--border-dim);
+          border-radius: var(--radius-sm);
+          font-size: 12px;
+          font-family: var(--font-mono);
+          color: var(--text-secondary);
+        }
+      `}</style>
     </div>
   )
 }

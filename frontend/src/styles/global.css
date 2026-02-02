@@ -412,6 +412,13 @@ body::after {
   padding-left: 44px;
 }
 
+/* Username Dialog State */
+.app.app-blurred {
+  filter: blur(4px);
+  pointer-events: none;
+  user-select: none;
+}
+
 /* Responsive */
 @media (max-width: 1200px) {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
