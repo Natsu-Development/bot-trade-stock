@@ -1,33 +1,28 @@
 import { useState, useEffect } from 'react'
 import { Header } from '../layout/Header'
-import { Card } from '../ui/Card'
-import { Button } from '../ui/Button'
-import { Table } from '../ui/Table'
-import { Badge } from '../ui/Badge'
-import { Chip } from '../ui/Chip'
-import { Dialog } from '../ui/Dialog'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogIcon } from '@/components/ui/dialog'
 import { Icons } from '../icons/Icons'
 import { formatPrice, formatChange, getBadgeVariantFromExchange } from '../../lib/utils'
 import { api, apiToStock, getConfigId, type ScreenerFilterPreset } from '../../lib/api'
 import { toast } from '../ui/Toast'
+import { FilterBar } from '../screener/FilterBar'
 import type { Stock, DynamicFilter, FilterField, FilterOperator, FilterFieldOption, FilterOperatorOption } from '../../types'
-import './Screener.css'
 
-const exchanges = ['All', 'HOSE', 'HNX', 'UPCOM']
-
-// Filter field options
 const filterFieldOptions: FilterFieldOption[] = [
-  { value: 'rs_1m', label: 'RS 1M', description: '1-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_3m', label: 'RS 3M', description: '3-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_6m', label: 'RS 6M', description: '6-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_9m', label: 'RS 9M', description: '9-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_52w', label: 'RS 52W', description: '52-Week Relative Strength', category: 'RS Rating' },
-  { value: 'volume_vs_sma', label: 'Vol vs SMA', description: 'Volume vs SMA20 (%)', category: 'Volume' },
-  { value: 'current_volume', label: 'Current Vol', description: 'Current Volume', category: 'Volume' },
-  { value: 'volume_sma20', label: 'Vol SMA20', description: '20-day SMA Volume', category: 'Volume' },
+  { value: 'rs_1m', label: 'RS 1M', shortLabel: 'RS 1M', description: '1-Month Relative Strength', category: 'RS Rating' },
+  { value: 'rs_3m', label: 'RS 3M', shortLabel: 'RS 3M', description: '3-Month Relative Strength', category: 'RS Rating' },
+  { value: 'rs_6m', label: 'RS 6M', shortLabel: 'RS 6M', description: '6-Month Relative Strength', category: 'RS Rating' },
+  { value: 'rs_9m', label: 'RS 9M', shortLabel: 'RS 9M', description: '9-Month Relative Strength', category: 'RS Rating' },
+  { value: 'rs_52w', label: 'RS 52W', shortLabel: 'RS 52W', description: '52-Week Relative Strength', category: 'RS Rating' },
+  { value: 'volume_vs_sma', label: 'Vol vs SMA', shortLabel: 'Vol vs SMA', description: 'Volume vs SMA20 (%)', category: 'Volume' },
+  { value: 'current_volume', label: 'Current Vol', shortLabel: 'Cur Vol', description: 'Current Volume', category: 'Volume' },
+  { value: 'volume_sma20', label: 'Vol SMA20', shortLabel: 'Vol SMA20', description: '20-day SMA Volume', category: 'Volume' },
 ]
 
-// Filter operator options
 const filterOperatorOptions: FilterOperatorOption[] = [
   { value: '>=', label: 'Greater or equal (≥)' },
   { value: '<=', label: 'Less or equal (≤)' },
@@ -36,12 +31,10 @@ const filterOperatorOptions: FilterOperatorOption[] = [
   { value: '=', label: 'Equal (=)' },
 ]
 
-// Default filters for new users
 const getDefaultFilters = (): DynamicFilter[] => [
   { id: '1', field: 'rs_52w', operator: '>=', value: 70 },
 ]
 
-// Generate unique ID for new filter
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2)
 
 export function Screener() {
@@ -49,23 +42,17 @@ export function Screener() {
   const [loading, setLoading] = useState(false)
   const [activeExchange, setActiveExchange] = useState('All')
 
-  // Dynamic filter state
   const [dynamicFilters, setDynamicFilters] = useState<DynamicFilter[]>(getDefaultFilters)
   const [filterLogic, setFilterLogic] = useState<'and' | 'or'>('and')
 
-  // Saved filter presets
   const [savedFilters, setSavedFilters] = useState<ScreenerFilterPreset[]>([])
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null)
   const [showSaveFilterModal, setShowSaveFilterModal] = useState(false)
   const [newFilterName, setNewFilterName] = useState('')
 
-  // Stock selection for watchlist
   const [selectedStocks, setSelectedStocks] = useState<Set<string>>(new Set())
   const [showWatchlistModal, setShowWatchlistModal] = useState(false)
 
-  // Removed toast state in favor of toast function
-
-  // Load saved filters from config
   useEffect(() => {
     loadSavedFilters()
   }, [])
@@ -83,7 +70,6 @@ export function Screener() {
   const fetchStocks = async () => {
     setLoading(true)
     try {
-      // Build filters from dynamic filter state
       const filters = dynamicFilters
         .filter(f => f.value !== '' && !isNaN(Number(f.value)))
         .map(f => ({
@@ -100,7 +86,6 @@ export function Screener() {
 
       const converted = response.stocks.map(apiToStock)
       setStocks(converted)
-      // Clear selection when results change
       setSelectedStocks(new Set())
     } catch (error) {
       console.error('Failed to fetch stocks:', error)
@@ -110,8 +95,6 @@ export function Screener() {
 
   useEffect(() => {
     fetchStocks()
-    // Only run on initial mount or exchange change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeExchange])
 
   const handleApplyFilters = () => {
@@ -125,38 +108,6 @@ export function Screener() {
     setSelectedPreset(null)
   }
 
-  // Dynamic filter handlers
-  const handleAddFilter = () => {
-    const newFilter: DynamicFilter = {
-      id: generateId(),
-      field: 'rs_52w',
-      operator: '>=',
-      value: '',
-    }
-    setDynamicFilters([...dynamicFilters, newFilter])
-  }
-
-  const handleRemoveFilter = (id: string) => {
-    setDynamicFilters(dynamicFilters.filter(f => f.id !== id))
-  }
-
-  const handleUpdateFilter = (id: string, updates: Partial<DynamicFilter>) => {
-    setDynamicFilters(dynamicFilters.map(f =>
-      f.id === id ? { ...f, ...updates } : f
-    ))
-  }
-
-  // Get field option helper
-  const getFieldOption = (field: FilterField) => {
-    return filterFieldOptions.find(o => o.value === field)
-  }
-
-  // Check if all filters have valid values
-  const hasValidFilters = dynamicFilters.some(f =>
-    f.value !== '' && !isNaN(Number(f.value))
-  )
-
-  // Save filter preset (update if exists, otherwise create new)
   const handleSaveFilter = async () => {
     if (!newFilterName.trim()) {
       toast.error('Please enter a filter name')
@@ -181,17 +132,14 @@ export function Screener() {
         created_at: new Date().toISOString(),
       }
 
-      // Check if filter with this name already exists
       const existingIndex = (config.screener_filters || []).findIndex(f => f.name === newFilterName)
 
       let updatedFilters: ScreenerFilterPreset[]
       if (existingIndex >= 0) {
-        // Update existing filter
         updatedFilters = [...(config.screener_filters || [])]
         updatedFilters[existingIndex] = newPreset
         toast.success('Filter updated successfully')
       } else {
-        // Add new filter
         updatedFilters = [...(config.screener_filters || []), newPreset]
         toast.success('Filter saved successfully')
       }
@@ -209,14 +157,12 @@ export function Screener() {
     }
   }
 
-  // Load saved filter preset
   const handleLoadPreset = (presetName: string) => {
     const preset = savedFilters.find(f => f.name === presetName)
     if (!preset) return
 
     setSelectedPreset(presetName)
 
-    // Convert preset filters to DynamicFilter format
     const loadedFilters: DynamicFilter[] = preset.filters.map((f, index) => ({
       id: generateId() + index,
       field: f.field as FilterField,
@@ -233,7 +179,6 @@ export function Screener() {
     }
   }
 
-  // Delete saved filter preset
   const handleDeletePreset = async (presetName: string) => {
     try {
       const configId = getConfigId()
@@ -256,7 +201,6 @@ export function Screener() {
     }
   }
 
-  // Stock selection handlers
   const handleToggleStockSelection = (symbol: string) => {
     const newSelection = new Set(selectedStocks)
     if (newSelection.has(symbol)) {
@@ -311,7 +255,7 @@ export function Screener() {
   }
 
   return (
-    <div className="page active">
+    <div className="animate-slide-in-from-bottom">
       <Header
         title="Stock Screener"
         subtitle="Filter and discover high-momentum stocks"
@@ -321,12 +265,8 @@ export function Screener() {
               variant="secondary"
               icon="Save"
               onClick={() => setShowSaveFilterModal(true)}
-              disabled={!hasValidFilters}
             >
-              Save Filter
-            </Button>
-            <Button icon="Filter" onClick={handleApplyFilters} disabled={loading}>
-              {loading ? 'Loading...' : 'Apply Filters'}
+              <span>Save Filter</span>
             </Button>
           </>
         }
@@ -335,30 +275,28 @@ export function Screener() {
       <Card className="mb-6">
         <Card.Header
           action={
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              {/* Saved Filters Dropdown */}
+            <div className="flex gap-2 items-center [&_svg]:w-[16px] [&_svg]:h-[16px] [&_svg]:flex-shrink-0">
               {savedFilters.length > 0 && (
                 <>
                   <select
-                    className="form-input form-select"
-                    value={selectedPreset || ''}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        handleLoadPreset(e.target.value)
-                      } else {
-                        setSelectedPreset(null)
-                      }
-                    }}
-                    style={{ marginRight: '8px' }}
-                  >
-                    <option value="">Saved Filters...</option>
-                    {savedFilters.map(f => (
-                      <option key={f.name} value={f.name}>{f.name}</option>
-                    ))}
-                  </select>
+                  className="flex h-10 w-[180px] rounded-md border border-[var(--border-dim)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:border-[var(--neon-cyan)] focus-visible:ring-[3px] focus-visible:ring-[var(--neon-cyan-dim)] appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2716%27%20height%3D%2716%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%2371717a%27%20stroke-width%3D%272%27%3E%3Cpath%20d%3D%27M6%209l6%206%206-6%27%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_12px_center] pr-10"
+                  value={selectedPreset || ''}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleLoadPreset(e.target.value)
+                    } else {
+                      setSelectedPreset(null)
+                    }
+                  }}
+                >
+                  <option value="">Saved Filters...</option>
+                  {savedFilters.map(f => (
+                    <option key={f.name} value={f.name}>{f.name}</option>
+                  ))}
+                </select>
                   {selectedPreset && (
                     <button
-                      className="btn btn-ghost btn-icon"
+                      className="inline-flex items-center justify-center w-10 h-10 rounded-md text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
                       onClick={() => handleDeletePreset(selectedPreset)}
                       title="Delete saved filter"
                     >
@@ -367,158 +305,50 @@ export function Screener() {
                   )}
                 </>
               )}
-              <button className="btn btn-ghost" onClick={handleReset}>
+              <button
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] transition-colors [&_svg]:w-[16px] [&_svg]:h-[16px] [&_svg]:flex-shrink-0"
+                onClick={handleReset}
+              >
                 <Icons.RotateCcw />
-                Reset All
+                <span>Reset</span>
               </button>
+              <Button icon="Filter" onClick={handleApplyFilters} disabled={loading}>
+                <span>{loading ? 'Loading...' : 'Apply'}</span>
+              </Button>
             </div>
           }
         >
           <Icons.Filter />
-          Filter Conditions
+          <span>Filter Conditions</span>
         </Card.Header>
         <Card.Body>
-          {/* Exchange Filter */}
-          <div className="form-group mb-4">
-            <label className="form-label">Exchange</label>
-            <div className="filter-chips">
-              {exchanges.map((exchange) => (
-                <Chip
-                  key={exchange}
-                  active={activeExchange === exchange}
-                  onClick={() => setActiveExchange(exchange)}
-                >
-                  {exchange}
-                </Chip>
-              ))}
-            </div>
-          </div>
-
-          {/* Dynamic Filter Builder */}
-          <div className="filter-builder">
-            <div className="filter-builder-header">
-              <label className="form-label mb-0">Dynamic Filters</label>
-              <Button
-                variant="secondary"
-                icon="Plus"
-                onClick={handleAddFilter}
-                className="btn-sm"
-              >
-                Add Filter
-              </Button>
-            </div>
-
-            {/* Filter Logic Selector */}
-            <div className="filter-logic-bar">
-              <span className="filter-logic-label">Match</span>
-              <select
-                className="form-input form-select filter-logic-select"
-                value={filterLogic}
-                onChange={(e) => setFilterLogic(e.target.value as 'and' | 'or')}
-              >
-                <option value="and">ALL conditions (AND)</option>
-                <option value="or">ANY condition (OR)</option>
-              </select>
-            </div>
-
-            {/* Filter Rows */}
-            <div className="filter-rows">
-              {dynamicFilters.length === 0 ? (
-                <div className="filter-empty">
-                  <Icons.Filter />
-                  <p>No filters added. Click "Add Filter" to create conditions.</p>
-                </div>
-              ) : (
-                dynamicFilters.map((filter, index) => {
-                  const fieldOption = getFieldOption(filter.field)
-                  return (
-                    <div key={filter.id} className="filter-row">
-                      <div className="filter-row-number">
-                        <span>{index + 1}</span>
-                      </div>
-
-                      {/* Field Selector */}
-                      <div className="filter-field">
-                        <label className="filter-label">Field</label>
-                        <select
-                          className="form-input form-select"
-                          value={filter.field}
-                          onChange={(e) => handleUpdateFilter(filter.id, { field: e.target.value as FilterField })}
-                        >
-                          {filterFieldOptions.map(option => (
-                            <option key={option.value} value={option.value}>
-                              {option.label} - {option.description}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Operator Selector */}
-                      <div className="filter-operator">
-                        <label className="filter-label">Operator</label>
-                        <select
-                          className="form-input form-select"
-                          value={filter.operator}
-                          onChange={(e) => handleUpdateFilter(filter.id, { operator: e.target.value as FilterOperator })}
-                        >
-                          {filterOperatorOptions.map(option => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Value Input */}
-                      <div className="filter-value">
-                        <label className="filter-label">Value</label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          placeholder={fieldOption?.value === 'volume_vs_sma' ? 'e.g., 50' : '1-99'}
-                          value={filter.value}
-                          onChange={(e) => handleUpdateFilter(filter.id, { value: parseFloat(e.target.value) || '' })}
-                        />
-                      </div>
-
-                      {/* Remove Button */}
-                      <button
-                        className="btn btn-ghost btn-icon filter-remove"
-                        onClick={() => handleRemoveFilter(filter.id)}
-                        title="Remove filter"
-                      >
-                        <Icons.X />
-                      </button>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-
-            {/* Filter Summary */}
-            {dynamicFilters.length > 0 && hasValidFilters && (
-              <div className="filter-summary">
-                <span className="filter-summary-count">
-                  {dynamicFilters.filter(f => f.value !== '').length} active filter(s)
-                </span>
-              </div>
-            )}
-          </div>
+          <FilterBar
+            filters={dynamicFilters}
+            fieldOptions={filterFieldOptions}
+            operatorOptions={filterOperatorOptions}
+            filterLogic={filterLogic}
+            activeExchange={activeExchange}
+            onFiltersChange={setDynamicFilters}
+            onLogicChange={setFilterLogic}
+            onExchangeChange={setActiveExchange}
+            onReset={handleReset}
+            onSavePreset={() => setShowSaveFilterModal(true)}
+          />
         </Card.Body>
       </Card>
 
       <Card>
         <Card.Header
           action={
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div className="flex gap-2">
               {selectedStocks.size > 0 && (
                 <Button
                   variant="primary"
                   icon="Plus"
                   onClick={handleAddSelectedToWatchlist}
-                  style={{ fontSize: '13px', padding: '6px 12px' }}
+                  className="text-xs px-3 py-1.5 h-8"
                 >
-                  Add Selected ({selectedStocks.size})
+                  <span>Add Selected ({selectedStocks.size})</span>
                 </Button>
               )}
               <Button
@@ -526,280 +356,207 @@ export function Screener() {
                 icon="List"
                 onClick={handleAddAllToWatchlist}
                 disabled={stocks.length === 0}
-                style={{ fontSize: '13px', padding: '6px 12px' }}
+                className="text-xs px-3 py-1.5 h-8"
               >
-                Add All
+                <span>Add All</span>
               </Button>
-              <button className="btn btn-ghost">Export CSV</button>
+              <button
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] transition-colors [&_svg]:w-[16px] [&_svg]:h-[16px] [&_svg]:flex-shrink-0"
+              >
+                <Icons.GridSmall />
+                <span>Export CSV</span>
+              </button>
             </div>
           }
         >
           <Icons.Grid />
-          Results <span className="text-muted font-mono" style={{ marginLeft: '8px' }}>{stocks.length} stocks</span>
+          <span>Results <span className="text-[var(--text-muted)] font-mono ml-2">{stocks.length} stocks</span></span>
         </Card.Header>
-        <Card.Body style={{ padding: 0 }}>
+        <Card.Body className="!p-0">
           {loading ? (
-            <div style={{ padding: '40px', textAlign: 'center' }} className="text-muted">
+            <div className="p-10 text-center text-[var(--text-muted)]">
               Loading...
             </div>
           ) : stocks.length === 0 ? (
-            <div style={{ padding: '40px', textAlign: 'center' }} className="text-muted">
+            <div className="p-10 text-center text-[var(--text-muted)]">
               No stocks found matching your filters.
             </div>
           ) : (
-            <Table
-              headers={[
-                <label key="select" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedStocks.size === stocks.length && stocks.length > 0}
-                    onChange={handleToggleAllSelection}
-                  />
-                </label>,
-                'Symbol',
-                'Exchange',
-                'RS 1M',
-                'RS 3M',
-                'RS 6M',
-                'RS 9M',
-                'RS 52W',
-                'Vol/SMA',
-                'Price',
-                'Change %'
-              ]}
-            >
-              {stocks.map((stock) => (
-                <tr key={stock.symbol}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={selectedStocks.has(stock.symbol)}
-                      onChange={() => handleToggleStockSelection(stock.symbol)}
-                    />
-                  </td>
-                  <td>
-                    <div className="symbol-cell">
-                      <div className="symbol-avatar">{stock.symbol}</div>
-                      <span className="symbol-name">{stock.name}</span>
-                    </div>
-                  </td>
-                  <td><Badge variant={getBadgeVariantFromExchange(stock.exchange)}>{stock.exchange}</Badge></td>
-                  <td className={stock.rs1m !== undefined && stock.rs1m >= 80 ? 'text-bull' : ''}>{stock.rs1m ?? '-'}</td>
-                  <td className={stock.rs3m !== undefined && stock.rs3m >= 80 ? 'text-bull' : ''}>{stock.rs3m ?? '-'}</td>
-                  <td className={stock.rs6m !== undefined && stock.rs6m >= 80 ? 'text-bull' : ''}>{stock.rs6m ?? '-'}</td>
-                  <td className={stock.rs9m !== undefined && stock.rs9m >= 80 ? 'text-bull' : ''}>{stock.rs9m ?? '-'}</td>
-                  <td className={stock.rs52w >= 80 ? 'text-bull' : ''}>{stock.rs52w}</td>
-                  <td className={parseFloat(stock.volume || '') >= 0 ? 'text-cyan' : 'text-muted'}>
-                    {stock.volume}
-                  </td>
-                  <td>{formatPrice(stock.price)}</td>
-                  <td className={stock.change >= 0 ? 'text-bull' : 'text-bear'}>
-                    {formatChange(stock.change)}
-                  </td>
-                </tr>
-              ))}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedStocks.size === stocks.length && stocks.length > 0}
+                        onChange={handleToggleAllSelection}
+                      />
+                    </label>
+                  </TableHead>
+                  <TableHead>Symbol</TableHead>
+                  <TableHead>Exchange</TableHead>
+                  <TableHead>RS 1M</TableHead>
+                  <TableHead>RS 3M</TableHead>
+                  <TableHead>RS 52W</TableHead>
+                  <TableHead>Vol/SMA</TableHead>
+                  <TableHead>Price</TableHead>
+                  <TableHead>Change %</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {stocks.map((stock, index) => (
+                  <TableRow
+                    key={stock.symbol}
+                    selected={selectedStocks.has(stock.symbol)}
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        checked={selectedStocks.has(stock.symbol)}
+                        onChange={() => handleToggleStockSelection(stock.symbol)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-sm bg-gradient-to-br from-[var(--bg-elevated)] to-[var(--bg-hover)] flex items-center justify-center text-[10px] font-semibold text-[var(--neon-cyan)] border border-[var(--border-glow)]">
+                          {stock.symbol}
+                        </div>
+                        <span className="font-semibold text-[var(--text-primary)] font-display">
+                          {stock.name}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={getBadgeVariantFromExchange(stock.exchange)}>
+                        {stock.exchange}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className={stock.rs1m !== undefined && stock.rs1m >= 80 ? 'text-[var(--neon-bull)]' : ''}>
+                      {stock.rs1m ?? '-'}
+                    </TableCell>
+                    <TableCell className={stock.rs3m !== undefined && stock.rs3m >= 80 ? 'text-[var(--neon-bull)]' : ''}>
+                      {stock.rs3m ?? '-'}
+                    </TableCell>
+                    <TableCell className={stock.rs52w >= 80 ? 'text-[var(--neon-bull)]' : ''}>
+                      {stock.rs52w}
+                    </TableCell>
+                    <TableCell className={parseFloat(stock.volume || '') >= 0 ? 'text-[var(--neon-cyan)]' : 'text-[var(--text-muted)]'}>
+                      {stock.volume}
+                    </TableCell>
+                    <TableCell>{formatPrice(stock.price)}</TableCell>
+                    <TableCell className={stock.change >= 0 ? 'text-[var(--neon-bull)]' : 'text-[var(--neon-bear)]'}>
+                      {formatChange(stock.change)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
             </Table>
           )}
         </Card.Body>
       </Card>
 
-      {/* Save Filter Modal */}
-      <Dialog isOpen={showSaveFilterModal} onClose={() => setShowSaveFilterModal(false)}>
-        <Dialog.Header icon={<Icons.Save />}>
-          Save Filter Preset
-          <Dialog.CloseButton onClick={() => setShowSaveFilterModal(false)} />
-        </Dialog.Header>
-        <Dialog.Body>
-          <div className="form-group">
-            <label className="form-label">Filter Name</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="e.g., High RS Stocks (80+)"
-              value={newFilterName}
-              onChange={(e) => setNewFilterName(e.target.value)}
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleSaveFilter()
-                }
-              }}
-            />
-            <p className="form-hint">
-              This will save your current filter conditions and logic for quick access later.
-            </p>
-          </div>
-        </Dialog.Body>
-        <Dialog.Footer>
-          <Button variant="secondary" onClick={() => setShowSaveFilterModal(false)}>
-            Cancel
-          </Button>
-          <Button icon="Save" onClick={handleSaveFilter}>
-            Save Filter
-          </Button>
-        </Dialog.Footer>
-      </Dialog>
-
-      {/* Watchlist Modal */}
-      <Dialog isOpen={showWatchlistModal} onClose={() => setShowWatchlistModal(false)}>
-        <Dialog.Header icon={<Icons.List />}>
-          Add to Watchlist
-          <Dialog.CloseButton onClick={() => setShowWatchlistModal(false)} />
-        </Dialog.Header>
-        <Dialog.Body>
-          <p style={{ marginBottom: '16px' }}>
-            Add {selectedStocks.size} stock(s) to your watchlist:
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <button
-              className="watchlist-option-btn"
-              onClick={() => handleConfirmWatchlist('bullish')}
-            >
-              <div className="watchlist-option-icon bullish">
-                <Icons.TrendUp />
-              </div>
-              <div style={{ textAlign: 'left' }}>
-                <div className="watchlist-option-title bullish">Bullish Watchlist</div>
-                <div className="watchlist-option-desc">
-                  For entry signals - stocks you want to buy
-                </div>
-              </div>
-            </button>
-            <button
-              className="watchlist-option-btn"
-              onClick={() => handleConfirmWatchlist('bearish')}
-            >
-              <div className="watchlist-option-icon bearish">
-                <Icons.TrendDown />
-              </div>
-              <div style={{ textAlign: 'left' }}>
-                <div className="watchlist-option-title bearish">Bearish Watchlist</div>
-                <div className="watchlist-option-desc">
-                  For exit signals - stocks you currently hold
-                </div>
-              </div>
-            </button>
-          </div>
-          {selectedStocks.size <= 5 && (
-            <div className="selected-stocks-preview">
-              <div className="selected-stocks-label">Selected stocks:</div>
-              <div className="selected-stocks-tags">
-                {Array.from(selectedStocks).map(s => (
-                  <span key={s} className="stock-tag">
-                    {s}
-                  </span>
-                ))}
-              </div>
+      <Dialog open={showSaveFilterModal} onOpenChange={(open) => setShowSaveFilterModal(open)}>
+        <DialogContent size="md">
+          <DialogHeader>
+            <DialogIcon><Icons.Save /></DialogIcon>
+            Save Filter Preset
+          </DialogHeader>
+          <DialogBody>
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-2 uppercase tracking-wider">
+                Filter Name
+              </label>
+              <input
+                type="text"
+                className="flex h-10 w-full rounded-md border border-[var(--border-dim)] bg-[var(--bg-elevated)] px-4 py-2 text-sm text-[var(--text-primary)] font-mono shadow-sm transition-colors placeholder:text-[var(--text-muted)] focus-visible:outline-none focus-visible:border-[var(--neon-cyan)] focus-visible:ring-[3px] focus-visible:ring-[var(--neon-cyan-dim)]"
+                placeholder="e.g., High RS Stocks (80+)"
+                value={newFilterName}
+                onChange={(e) => setNewFilterName(e.target.value)}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSaveFilter()
+                  }
+                }}
+              />
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                This will save your current filter conditions and logic for quick access later.
+              </p>
             </div>
-          )}
-        </Dialog.Body>
-        <Dialog.Footer>
-          <Button variant="secondary" onClick={() => setShowWatchlistModal(false)}>
-            Cancel
-          </Button>
-        </Dialog.Footer>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setShowSaveFilterModal(false)}>
+              <span>Cancel</span>
+            </Button>
+            <Button icon="Save" onClick={handleSaveFilter}>
+              <span>Save Filter</span>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
 
-      <style>{`
-        .form-hint {
-          margin: 4px 0 0;
-          font-size: 13px;
-          color: var(--text-muted);
-        }
-
-        .watchlist-option-btn {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          width: 100%;
-          padding: 16px;
-          background: var(--bg-elevated);
-          border: 1px solid var(--border-dim);
-          border-radius: var(--radius-md);
-          cursor: pointer;
-          transition: all var(--transition-fast);
-        }
-
-        .watchlist-option-btn:hover {
-          border-color: var(--border-glow);
-          background: var(--bg-hover);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        }
-
-        .watchlist-option-icon {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 48px;
-          height: 48px;
-          border-radius: var(--radius-md);
-          flex-shrink: 0;
-        }
-
-        .watchlist-option-icon.bullish {
-          background: var(--neon-bull-dim);
-          color: var(--neon-bull);
-        }
-
-        .watchlist-option-icon.bearish {
-          background: var(--neon-bear-dim);
-          color: var(--neon-bear);
-        }
-
-        .watchlist-option-icon svg {
-          width: 24px;
-          height: 24px;
-        }
-
-        .watchlist-option-title {
-          font-size: 15px;
-          font-weight: 600;
-          margin-bottom: 4px;
-        }
-
-        .watchlist-option-title.bullish {
-          color: var(--neon-bull);
-        }
-
-        .watchlist-option-title.bearish {
-          color: var(--neon-bear);
-        }
-
-        .watchlist-option-desc {
-          font-size: 13px;
-          color: var(--text-muted);
-        }
-
-        .selected-stocks-preview {
-          margin-top: 16px;
-          padding: 12px;
-          background: var(--bg-elevated);
-          border-radius: var(--radius-md);
-          border: 1px solid var(--border-dim);
-        }
-
-        .selected-stocks-label {
-          font-size: 12px;
-          color: var(--text-muted);
-          margin-bottom: 8px;
-        }
-
-        .selected-stocks-tags {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 6px;
-        }
-
-        .stock-tag {
-          padding: 4px 10px;
-          background: var(--bg-hover);
-          border: 1px solid var(--border-dim);
-          border-radius: var(--radius-sm);
-          font-size: 12px;
-          font-family: var(--font-mono);
-          color: var(--text-secondary);
-        }
-      `}</style>
+      <Dialog open={showWatchlistModal} onOpenChange={(open) => setShowWatchlistModal(open)}>
+        <DialogContent size="md">
+          <DialogHeader>
+            <DialogIcon><Icons.List /></DialogIcon>
+            Add to Watchlist
+          </DialogHeader>
+          <DialogBody>
+            <p className="mb-4">
+              Add {selectedStocks.size} stock(s) to your watchlist:
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                className="flex items-center gap-4 w-full p-4 bg-[var(--bg-elevated)] border border-[var(--border-dim)] rounded-md cursor-pointer transition-all duration-150 hover:border-[var(--border-glow)] hover:bg-[var(--bg-hover)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
+                onClick={() => handleConfirmWatchlist('bullish')}
+              >
+                <div className="flex items-center justify-center w-12 h-12 rounded-md bg-[var(--neon-bull-dim)] text-[var(--neon-bull)] flex-shrink-0">
+                  <Icons.TrendUp />
+                </div>
+                <div className="text-left">
+                  <div className="text-sm font-semibold mb-1 text-[var(--neon-bull)]">Bullish Watchlist</div>
+                  <div className="text-xs text-[var(--text-muted)]">
+                    For entry signals - stocks you want to buy
+                  </div>
+                </div>
+              </button>
+              <button
+                className="flex items-center gap-4 w-full p-4 bg-[var(--bg-elevated)] border border-[var(--border-dim)] rounded-md cursor-pointer transition-all duration-150 hover:border-[var(--border-glow)] hover:bg-[var(--bg-hover)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
+                onClick={() => handleConfirmWatchlist('bearish')}
+              >
+                <div className="flex items-center justify-center w-12 h-12 rounded-md bg-[var(--neon-bear-dim)] text-[var(--neon-bear)] flex-shrink-0">
+                  <Icons.TrendDown />
+                </div>
+                <div className="text-left">
+                  <div className="text-sm font-semibold mb-1 text-[var(--neon-bear)]">Bearish Watchlist</div>
+                  <div className="text-xs text-[var(--text-muted)]">
+                    For exit signals - stocks you currently hold
+                  </div>
+                </div>
+              </button>
+            </div>
+            {selectedStocks.size <= 5 && (
+              <div className="mt-4 p-3 bg-[var(--bg-elevated)] rounded-md border border-[var(--border-dim)]">
+                <div className="text-xs text-[var(--text-muted)] mb-2">Selected stocks:</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {Array.from(selectedStocks).map(s => (
+                    <span key={s} className="px-2.5 py-1 bg-[var(--bg-hover)] border border-[var(--border-dim)] rounded text-xs font-mono text-[var(--text-secondary)]">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setShowWatchlistModal(false)}>
+              <span>Cancel</span>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1,6 +1,5 @@
-import { getRsLevel, cn } from '../../lib/utils'
+import { cn, getRsLevel } from '../../lib/utils'
 import type { RSLevel } from '../../types'
-import './RSRating.css'
 
 interface RSRatingProps {
   value: number
@@ -12,16 +11,30 @@ export function RSRating({ value, showBar = true, className = '' }: RSRatingProp
   const level = getRsLevel(value) as RSLevel
 
   return (
-    <div className={cn('rs-rating', className)}>
+    <div className={cn('flex items-center gap-2.5', className)}>
       {showBar && (
-        <div className="rs-bar">
+        <div className="w-20 h-1.5 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
           <div
-            className={`rs-fill ${level}`}
+            className={cn(
+              'h-full rounded-full transition-[width] duration-600 ease-out',
+              level === 'high' && 'bg-[var(--neon-bull)] shadow-[0_0_10px_var(--neon-bull)]',
+              level === 'medium' && 'bg-[var(--neon-amber)]',
+              level === 'low' && 'bg-[var(--neon-bear)]'
+            )}
             style={{ width: `${value}%` }}
           />
         </div>
       )}
-      <span className={`rs-value ${level}`}>{value}</span>
+      <span
+        className={cn(
+          'font-semibold min-w-[32px]',
+          level === 'high' && 'text-[var(--neon-bull)]',
+          level === 'medium' && 'text-[var(--neon-amber)]',
+          level === 'low' && 'text-[var(--neon-bear)]'
+        )}
+      >
+        {value}
+      </span>
     </div>
   )
 }

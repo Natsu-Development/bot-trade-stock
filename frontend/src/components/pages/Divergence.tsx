@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Header } from '../layout/Header'
-import { Card } from '../ui/Card'
-import { Button } from '../ui/Button'
-import { Badge } from '../ui/Badge'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Icons } from '../icons/Icons'
 import { SignalCard } from '../features/SignalCard'
 import { ChartPlaceholder } from '../features/ChartPlaceholder'
@@ -48,11 +48,9 @@ export function Divergence() {
     }
   }
 
-  // Count signals
   const bullishCount = bullishResult?.divergence?.divergence_found ? 1 : 0
   const bearishCount = bearishResult?.divergence?.divergence_found ? 1 : 0
 
-  // Get signal card props
   const getBullishSignal = () => {
     if (!bullishResult) return null
     const { divergence } = bullishResult
@@ -79,13 +77,13 @@ export function Divergence() {
   const bearishSignal = getBearishSignal()
 
   return (
-    <div className="page active">
+    <div className="animate-slide-in-from-bottom">
       <Header
         title="Divergence Analysis"
         subtitle="RSI divergence pattern detection"
         actions={
           <Button variant="secondary" icon="Clock">
-            History
+            <span>History</span>
           </Button>
         }
       />
@@ -93,11 +91,11 @@ export function Divergence() {
       <Card className="mb-6">
         <Card.Header>
           <Icons.Search />
-          Analyze Symbol
+          <span>Analyze Symbol</span>
         </Card.Header>
         <Card.Body>
-          <div className="config-grid" style={{ marginBottom: '16px' }}>
-            <div className="form-group" style={{ marginBottom: 0 }}>
+          <div className="config-grid !mb-4">
+            <div className="form-group !mb-0">
               <label className="form-label">Config ID</label>
               <input
                 type="text"
@@ -108,8 +106,8 @@ export function Divergence() {
               />
             </div>
           </div>
-          <div className="grid-3" style={{ alignItems: 'flex-end' }}>
-            <div className="form-group" style={{ marginBottom: 0 }}>
+          <div className="grid-3 items-end">
+            <div className="form-group !mb-0">
               <label className="form-label">Symbol</label>
               <input
                 type="text"
@@ -119,7 +117,7 @@ export function Divergence() {
                 onChange={(e) => setSymbol(e.target.value.toUpperCase())}
               />
             </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
+            <div className="form-group !mb-0">
               <label className="form-label">Timeframe</label>
               <select
                 className="form-input form-select"
@@ -131,28 +129,29 @@ export function Divergence() {
                 <option value="1M">Monthly (1M)</option>
               </select>
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div className="flex gap-2">
               <Button
-                style={{ flex: 1 }}
+                className="flex-1"
+                variant="primary"
                 icon="TrendUp"
                 onClick={() => handleAnalyze('bullish')}
                 disabled={loading}
               >
-                {loading ? 'Loading...' : 'Bullish'}
+                <span>{loading ? 'Loading...' : 'Bullish'}</span>
               </Button>
               <Button
-                variant="secondary"
-                style={{ flex: 1, borderColor: 'var(--neon-bear)' }}
+                variant="bear"
+                className="flex-1"
                 icon="TrendDown"
                 onClick={() => handleAnalyze('bearish')}
                 disabled={loading}
               >
-                {loading ? 'Loading...' : 'Bearish'}
+                <span>{loading ? 'Loading...' : 'Bearish'}</span>
               </Button>
             </div>
           </div>
           {error && (
-            <div className="text-bear" style={{ marginTop: '12px', fontSize: '13px' }}>
+            <div className="text-[var(--neon-bear)] mt-3 text-[13px]">
               {error}
             </div>
           )}
@@ -207,14 +206,14 @@ export function Divergence() {
       <Card>
         <Card.Header
           action={
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div className="flex gap-2">
               <Badge variant="bull">{String(bullishCount)} Bullish</Badge>
               <Badge variant="bear">{String(bearishCount)} Bearish</Badge>
             </div>
           }
         >
           <Icons.Chart />
-          Price &amp; RSI Chart — {symbol || 'Select a symbol'}
+          <span>Price &amp; RSI Chart — {symbol || 'Select a symbol'}</span>
         </Card.Header>
         <Card.Body>
           <ChartPlaceholder symbol={symbol || 'FPT'} />

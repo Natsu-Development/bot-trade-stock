@@ -82,8 +82,16 @@ export interface DynamicFilter {
 export interface FilterFieldOption {
   value: FilterField
   label: string
+  shortLabel: string
   description: string
   category: 'RS Rating' | 'Volume'
+}
+
+export interface QuickPreset {
+  id: string
+  name: string
+  icon: string
+  filters: Array<{ field: FilterField; operator: FilterOperator; value: number }>
 }
 
 export interface FilterOperatorOption {

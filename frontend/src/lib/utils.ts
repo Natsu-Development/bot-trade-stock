@@ -1,7 +1,9 @@
+import { type ClassValue, clsx } from 'clsx'
+import { twMerge } from 'tailwind-merge'
 import type { BadgeVariant, RSLevel } from '../types'
 
-export function cn(...classes: (string | undefined | false)[]): string {
-  return classes.filter(Boolean).join(' ')
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
 }
 
 export function getRsLevel(value: number): RSLevel {

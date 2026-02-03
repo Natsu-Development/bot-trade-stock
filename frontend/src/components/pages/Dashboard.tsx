@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Header } from '../layout/Header'
-import { Card } from '../ui/Card'
-import { Button } from '../ui/Button'
-import { Table } from '../ui/Table'
-import { Badge } from '../ui/Badge'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
 import { StatCard } from '../features/StatCard'
 import { Icons } from '../icons/Icons'
 import { SearchBox } from '../features/SearchBox'
@@ -11,7 +11,6 @@ import { RSRating } from '../features/RSRating'
 import { formatPrice, formatChange, getBadgeVariantFromExchange } from '../../lib/utils'
 import { api, apiToStock } from '../../lib/api'
 import type { Stock } from '../../types'
-import './Dashboard.css'
 
 export function Dashboard() {
   const [stocks, setStocks] = useState<Stock[]>([])
@@ -31,8 +30,8 @@ export function Dashboard() {
         setCacheInfo({
           totalStocks: info.total_stocks || 0,
           cachedAt: info.cached_at || '',
-          bullishCount: 0, // Will be calculated
-          bearishCount: 0, // Will be calculated
+          bullishCount: 0,
+          bearishCount: 0,
         })
         return true
       }
@@ -49,7 +48,7 @@ export function Dashboard() {
         logic: 'and',
       })
       const converted = response.stocks.map(apiToStock)
-      setStocks(converted.slice(0, 10)) // Top 10
+      setStocks(converted.slice(0, 10))
     } catch (error) {
       console.error('Failed to fetch stocks:', error)
     }
@@ -90,14 +89,14 @@ export function Dashboard() {
     {
       label: 'Bullish Signals',
       value: stocks.filter(s => s.rs52w >= 80).length.toString(),
-      change: 'RS 52W ≥ 80',
+      change: 'RS 52W >= 80',
       variant: 'bullish' as const,
       icon: Icons.TrendUp,
     },
     {
       label: 'Bearish Signals',
       value: stocks.filter(s => s.rs52w <= 30).length.toString(),
-      change: 'RS 52W ≤ 30',
+      change: 'RS 52W <= 30',
       variant: 'bearish' as const,
       icon: Icons.TrendDown,
     },
@@ -111,77 +110,96 @@ export function Dashboard() {
   ]
 
   return (
-    <div className="page active">
+    <div className="animate-slide-in-from-bottom">
       <Header
         title="Dashboard"
         subtitle="Vietnamese Stock Market Overview"
         actions={
-          <Button
-            icon="Refresh"
-            onClick={handleRefresh}
-            disabled={refreshing}
-          >
-            {refreshing ? 'Refreshing...' : 'Refresh Cache'}
+          <Button icon="Refresh" onClick={handleRefresh} disabled={refreshing}>
+            <span>{refreshing ? 'Refreshing...' : 'Refresh Cache'}</span>
           </Button>
         }
       />
 
-      <div className="stats-grid">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-4 gap-4 mb-6 max-lg:grid-cols-2 max-md:grid-cols-1">
         {stats.map((stat, i) => (
           <StatCard key={i} {...stat} />
         ))}
       </div>
 
+      {/* Quick Search */}
       <Card className="mb-6">
         <Card.Header>
           <Icons.Search />
-          Quick Symbol Search
+          <span>Quick Symbol Search</span>
         </Card.Header>
         <Card.Body>
           <SearchBox />
         </Card.Body>
       </Card>
 
+      {/* Top RS Ratings Table */}
       <Card>
-        <Card.Header action={<button className="btn btn-ghost">View All →</button>}>
+        <Card.Header action={<Button variant="ghost">View All →</Button>}>
           <Icons.BarChart />
-          Top RS Ratings
+          <span>Top RS Ratings</span>
         </Card.Header>
-        <Card.Body style={{ padding: 0 }}>
+        <Card.Body className="!p-0">
           {loading ? (
-            <div style={{ padding: '40px', textAlign: 'center' }} className="text-muted">
+            <div className="p-10 text-center text-[var(--text-muted)]">
               Loading...
             </div>
           ) : stocks.length === 0 ? (
-            <div style={{ padding: '40px', textAlign: 'center' }} className="text-muted">
+            <div className="p-10 text-center text-[var(--text-muted)]">
               No stocks found. Click Refresh Cache to load data.
             </div>
           ) : (
-            <Table
-              headers={['Symbol', 'Exchange', 'RS 52W', 'Volume vs SMA', 'Vol/SMA', 'Price', 'Change']}
-            >
-              {stocks.map((stock) => (
-                <tr key={stock.symbol}>
-                  <td>
-                    <div className="symbol-cell">
-                      <div className="symbol-avatar">{stock.symbol}</div>
-                      <span className="symbol-name">{stock.name}</span>
-                    </div>
-                  </td>
-                  <td><Badge variant={getBadgeVariantFromExchange(stock.exchange)}>{stock.exchange}</Badge></td>
-                  <td><RSRating value={stock.rs52w} /></td>
-                  <td className={parseFloat(stock.volume || '') >= 0 ? 'text-bull' : 'text-bear'}>
-                    {stock.volume}
-                  </td>
-                  <td className="text-muted">
-                    {stock.currentVolume?.toLocaleString()} / {stock.volumeSma20?.toLocaleString()}
-                  </td>
-                  <td>{formatPrice(stock.price)}</td>
-                  <td className={stock.change >= 0 ? 'text-bull' : 'text-bear'}>
-                    {formatChange(stock.change)}
-                  </td>
-                </tr>
-              ))}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Symbol</TableHead>
+                  <TableHead>Exchange</TableHead>
+                  <TableHead>RS 52W</TableHead>
+                  <TableHead>Price</TableHead>
+                  <TableHead>Change</TableHead>
+                  <TableHead>Volume</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {stocks.map((stock, index) => (
+                  <TableRow
+                    key={stock.symbol}
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-sm bg-gradient-to-br from-[var(--bg-elevated)] to-[var(--bg-hover)] flex items-center justify-center text-[10px] font-semibold text-[var(--neon-cyan)] border border-[var(--border-glow)]">
+                          {stock.symbol}
+                        </div>
+                        <span className="font-semibold text-[var(--text-primary)] font-display">
+                          {stock.name}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={getBadgeVariantFromExchange(stock.exchange)}>
+                        {stock.exchange}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <RSRating value={stock.rs52w} />
+                    </TableCell>
+                    <TableCell>{formatPrice(stock.price)}</TableCell>
+                    <TableCell className={stock.change >= 0 ? 'text-[var(--neon-bull)]' : 'text-[var(--neon-bear)]'}>
+                      {formatChange(stock.change)}
+                    </TableCell>
+                    <TableCell className="text-[var(--text-muted)]">
+                      {stock.currentVolume ? `${(stock.currentVolume / 1000000).toFixed(1)}M` : '-'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
             </Table>
           )}
         </Card.Body>

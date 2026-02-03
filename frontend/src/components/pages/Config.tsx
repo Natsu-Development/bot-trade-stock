@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Header } from '../layout/Header'
-import { Card } from '../ui/Card'
-import { Button } from '../ui/Button'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Icons } from '../icons/Icons'
 import { SymbolTag } from '../features/SymbolTag'
 
@@ -21,14 +21,14 @@ export function Config() {
   }
 
   return (
-    <div className="page active">
+    <div className="animate-slide-in-from-bottom">
       <Header
         title="Trading Configuration"
         subtitle="Customize analysis parameters and alerts"
         actions={
           <>
-            <Button variant="secondary" icon="Undo">Reset Defaults</Button>
-            <Button icon="Save">Save Config</Button>
+            <Button variant="secondary" icon="Undo"><span>Reset Defaults</span></Button>
+            <Button variant="primary" icon="Save"><span>Save Config</span></Button>
           </>
         }
       />
@@ -40,14 +40,14 @@ export function Config() {
               <div className="config-section">
                 <h3 className="config-section-title">
                   <Icons.Chart />
-                  RSI Settings
+                  <span>RSI Settings</span>
                 </h3>
                 <div className="config-grid-2">
-                  <div className="form-group" style={{ marginBottom: 0 }}>
+                  <div className="form-group !mb-0">
                     <label className="form-label">RSI Period</label>
                     <input type="number" className="form-input" defaultValue={14} />
                   </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
+                  <div className="form-group !mb-0">
                     <label className="form-label">Start Date Offset (days)</label>
                     <input type="number" className="form-input" defaultValue={365} />
                   </div>
@@ -57,22 +57,22 @@ export function Config() {
               <div className="config-section">
                 <h3 className="config-section-title">
                   <Icons.Zap />
-                  Divergence Parameters
+                  <span>Divergence Parameters</span>
                 </h3>
                 <div className="config-grid-2">
-                  <div className="form-group" style={{ marginBottom: 0 }}>
+                  <div className="form-group !mb-0">
                     <label className="form-label">Lookback Left</label>
                     <input type="number" className="form-input" defaultValue={5} />
                   </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
+                  <div className="form-group !mb-0">
                     <label className="form-label">Lookback Right</label>
                     <input type="number" className="form-input" defaultValue={5} />
                   </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
+                  <div className="form-group !mb-0">
                     <label className="form-label">Range Min</label>
                     <input type="number" className="form-input" defaultValue={5} />
                   </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
+                  <div className="form-group !mb-0">
                     <label className="form-label">Range Max</label>
                     <input type="number" className="form-input" defaultValue={60} />
                   </div>
@@ -96,7 +96,7 @@ export function Config() {
               <div className="config-section">
                 <h3 className="config-section-title">
                   <Icons.TrendUp />
-                  Bullish Watch Symbols
+                  <span>Bullish Watch Symbols</span>
                 </h3>
                 <input
                   type="text"
@@ -117,7 +117,7 @@ export function Config() {
               <div className="config-section">
                 <h3 className="config-section-title">
                   <Icons.TrendDown />
-                  Bearish Watch Symbols
+                  <span>Bearish Watch Symbols</span>
                 </h3>
                 <input
                   type="text"
@@ -139,10 +139,10 @@ export function Config() {
 
           <Card>
             <Card.Body>
-              <div className="config-section" style={{ marginBottom: 0 }}>
+              <div className="config-section !mb-0">
                 <h3 className="config-section-title">
                   <Icons.Send />
-                  Telegram Notifications
+                  <span>Telegram Notifications</span>
                 </h3>
                 <label className="form-checkbox mb-4">
                   <input type="checkbox" defaultChecked />
@@ -153,11 +153,11 @@ export function Config() {
                   <input
                     type="password"
                     className="form-input"
-                    value="••••••••••••••••••"
+                    value="•••••••••••••••••••"
                     readOnly
                   />
                 </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
+                <div className="form-group !mb-0">
                   <label className="form-label">Chat ID</label>
                   <input
                     type="text"

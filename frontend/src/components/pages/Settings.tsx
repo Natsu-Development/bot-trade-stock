@@ -1,13 +1,13 @@
 import { Header } from '../layout/Header'
-import { Card } from '../ui/Card'
-import { Button } from '../ui/Button'
-import { SettingsItem } from '../features/SettingsItem'
-import { Toggle } from '../ui/Toggle'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { SettingsItem, SettingsList } from '../features/SettingsItem'
+import { Switch } from '@/components/ui/switch'
 import { Icons } from '../icons/Icons'
 
 export function Settings() {
   return (
-    <div className="page active">
+    <div className="animate-slide-in-from-bottom">
       <Header
         title="Settings"
         subtitle="Application preferences and connections"
@@ -20,12 +20,12 @@ export function Settings() {
               action={
                 <div className="connection-status connected">
                   <span className="dot"></span>
-                  Connected
+                  <span>Connected</span>
                 </div>
               }
             >
               <Icons.Mail />
-              API Connection
+              <span>API Connection</span>
             </Card.Header>
             <Card.Body>
               <div className="form-group">
@@ -36,7 +36,7 @@ export function Settings() {
                 <label className="form-label">Request Timeout (ms)</label>
                 <input type="number" className="form-input" defaultValue={30000} />
               </div>
-              <Button variant="secondary" style={{ width: '100%' }} icon="Refresh">
+              <Button variant="secondary" className="w-full" icon="Refresh">
                 Test Connection
               </Button>
             </Card.Body>
@@ -45,53 +45,82 @@ export function Settings() {
           <Card>
             <Card.Header>
               <Icons.Sun />
-              Appearance
+              <span>Appearance</span>
             </Card.Header>
             <Card.Body>
-              <div className="settings-list">
+              <SettingsList>
                 <SettingsItem
                   icon={<Icons.Moon />}
                   title="Dark Mode"
                   description="Use dark theme throughout"
-                  action={<Toggle active />}
+                  action={<Switch checked={true} />}
                 />
                 <SettingsItem
                   icon={<Icons.GridSmall />}
                   title="Compact Mode"
                   description="Reduce spacing for more data"
-                  action={<Toggle />}
+                  action={<Switch checked={false} />}
                 />
                 <SettingsItem
                   icon={<Icons.Zap />}
                   title="Animations"
                   description="Enable UI animations"
-                  action={<Toggle active />}
+                  action={<Switch checked={true} />}
                 />
-              </div>
+              </SettingsList>
             </Card.Body>
           </Card>
         </div>
 
         <div>
+          <Card>
+            <Card.Header>
+              <Icons.Sun />
+              <span>Appearance</span>
+            </Card.Header>
+            <Card.Body>
+              <SettingsList>
+                <SettingsItem
+                  icon={<Icons.Moon />}
+                  title="Dark Mode"
+                  description="Use dark theme throughout"
+                  action={<Switch checked={true} />}
+                />
+                <SettingsItem
+                  icon={<Icons.GridSmall />}
+                  title="Compact Mode"
+                  description="Reduce spacing for more data"
+                  action={<Switch checked={false} />}
+                />
+                <SettingsItem
+                  icon={<Icons.Zap />}
+                  title="Animations"
+                  description="Enable UI animations"
+                  action={<Switch checked={true} />}
+                />
+              </SettingsList>
+            </Card.Body>
+          </Card>
+
           <Card className="mb-6">
             <Card.Header>
               <Icons.Database />
-              Data Preferences
+              <span>Data Preferences</span>
             </Card.Header>
             <Card.Body>
-              <div className="settings-list">
+              <SettingsList>
                 <SettingsItem
                   icon={<Icons.Refresh />}
                   title="Auto-refresh"
                   description="Refresh data automatically"
-                  action={<Toggle active />}
+                  action={<Switch checked={true} />}
                 />
                 <SettingsItem
                   icon={<Icons.Clock />}
                   title="Refresh Interval"
                   description="How often to refresh data"
                   action={
-                    <select className="form-input form-select" style={{ width: '120px' }}>
+                    <select className="form-input form-select w-[120px]">
                       <option>30 sec</option>
                       <option selected>1 min</option>
                       <option>5 min</option>
@@ -103,38 +132,32 @@ export function Settings() {
                   icon={<Icons.Bell />}
                   title="Sound Alerts"
                   description="Play sound on new signals"
-                  action={<Toggle />}
+                  action={<Switch checked={false} />}
                 />
-              </div>
+              </SettingsList>
             </Card.Body>
           </Card>
 
           <Card>
             <Card.Header>
               <Icons.Info />
-              About
+              <span>About</span>
             </Card.Header>
             <Card.Body>
-              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+              <div className="text-center py-5">
                 <div
-                  className="logo"
-                  style={{
-                    margin: '0 auto 16px',
-                    width: '56px',
-                    height: '56px',
-                    fontSize: '20px',
-                  }}
+                  className="logo mx-auto mb-4 w-14 h-14 text-[20px] flex items-center justify-center rounded-md font-mono font-bold text-[var(--bg-void)] bg-gradient-to-br from-[var(--neon-bull)] to-[var(--neon-cyan)] shadow-[var(--neon-bull-glow)]"
                 >
                   VN
                 </div>
-                <h3 style={{ marginBottom: '4px' }}>VN Trading Terminal</h3>
-                <p className="text-muted" style={{ marginBottom: '16px' }}>
+                <h3 className="mb-1 text-[var(--text-primary)]">VN Trading Terminal</h3>
+                <p className="text-[var(--text-muted)] mb-4">
                   RSI Divergence Analysis Bot
                 </p>
-                <p className="font-mono text-muted" style={{ fontSize: '12px' }}>
+                <p className="font-mono text-[var(--text-muted)] text-xs">
                   Version 1.0.0
                 </p>
-                <p className="font-mono text-muted" style={{ fontSize: '12px', marginTop: '4px' }}>
+                <p className="font-mono text-[var(--text-muted)] text-xs mt-1">
                   Go 1.23 + Python 3.10
                 </p>
               </div>

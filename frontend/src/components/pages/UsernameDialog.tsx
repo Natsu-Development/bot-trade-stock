@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Dialog } from '../ui/Dialog'
+import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogIcon } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import { Icons } from '../icons/Icons'
-import './UsernameDialog.css'
 
 interface UsernameDialogProps {
   isOpen: boolean
@@ -13,7 +13,6 @@ export function UsernameDialog({ isOpen, setConfigId }: UsernameDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Reset form when dialog opens/closes
   useEffect(() => {
     if (isOpen) {
       setUsername('')
@@ -45,64 +44,69 @@ export function UsernameDialog({ isOpen, setConfigId }: UsernameDialogProps) {
   const isValid = username.trim().length >= 2
 
   return (
-    <Dialog isOpen={isOpen} closeOnOverlayClick={false} closeOnEscape={false}>
-      <Dialog.Header icon={<Icons.Users />}>
-        Welcome to Trading Bot
-      </Dialog.Header>
+    <Dialog open={isOpen} onOpenChange={() => {}}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogIcon><Icons.Users /></DialogIcon>
+          Welcome to Trading Bot
+        </DialogHeader>
 
-      <Dialog.Body className="username-dialog-body">
-        <div className="username-dialog-intro">
-          <Icons.Info />
-          <p>Enter your username to access your trading configuration and continue.</p>
-        </div>
+        <DialogBody className="flex flex-col gap-5">
+          <div className="flex items-start gap-3 p-4 bg-[var(--bg-elevated)] rounded-md border border-[var(--border-dim)]">
+            <Icons.Info className="w-5 h-5 text-[var(--neon-cyan)] flex-shrink-0 mt-0.5" />
+            <p className="text-[var(--text-secondary)] text-sm leading-relaxed">
+              Enter your username to access your trading configuration and continue.
+            </p>
+          </div>
 
-        <form onSubmit={handleSubmit} className="username-dialog-form">
-          <div className="form-group">
-            <label htmlFor="username-input" className="form-label">
-              Username
-            </label>
-            <input
-              id="username-input"
-              type="text"
-              value={username}
-              onChange={handleInputChange}
-              placeholder="e.g., trader_jane"
-              className="form-input"
-              autoComplete="username"
-              autoFocus
-              disabled={isSubmitting}
-            />
-            {error && (
-              <div className="username-dialog-error">
-                <Icons.Info />
-                {error}
-              </div>
+          <form onSubmit={handleSubmit} className="flex flex-col">
+            <div className="mb-4">
+              <label htmlFor="username-input" className="block text-xs font-medium text-[var(--text-secondary)] mb-2 uppercase tracking-wider">
+                Username
+              </label>
+              <input
+                id="username-input"
+                type="text"
+                value={username}
+                onChange={handleInputChange}
+                placeholder="e.g., trader_jane"
+                className="w-full px-4 py-3.5 bg-[var(--bg-elevated)] border border-[var(--border-dim)] rounded-md font-mono text-[15px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-all duration-150 focus:outline-none focus:border-[var(--neon-cyan)] focus:ring-[3px] focus:ring-[var(--neon-cyan-dim)] disabled:opacity-50"
+                autoComplete="username"
+                autoFocus
+                disabled={isSubmitting}
+              />
+              {error && (
+                <div className="flex items-center gap-2 mt-2.5 px-3.5 py-2.5 bg-[var(--neon-bear-dim)] rounded-sm text-[var(--neon-bear)] text-[13px]">
+                  <Icons.Info className="w-4 h-4 flex-shrink-0" />
+                  {error}
+                </div>
+              )}
+            </div>
+
+            <p className="-mt-2 text-xs text-[var(--text-muted)]">
+              Use 2-50 characters (letters, numbers, hyphens, underscores)
+            </p>
+          </form>
+        </DialogBody>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => handleSubmit()}
+            disabled={!isValid || isSubmitting}
+          >
+            {isSubmitting ? (
+              <>
+                <span className="inline-block w-3.5 h-3.5 border-2 border-transparent border-t-current rounded-full animate-spin mr-2" />
+                Verifying...
+              </>
+            ) : (
+              'Continue'
             )}
-          </div>
-
-          <div className="username-dialog-hint">
-            Use 2-50 characters (letters, numbers, hyphens, underscores)
-          </div>
-        </form>
-      </Dialog.Body>
-
-      <Dialog.Footer align="right">
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => handleSubmit()}
-          disabled={!isValid || isSubmitting}
-        >
-          {isSubmitting ? (
-            <>
-              <span className="btn-spinner" />
-              Verifying...
-            </>
-          ) : (
-            'Continue'
-          )}
-        </button>
-      </Dialog.Footer>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   )
 }
