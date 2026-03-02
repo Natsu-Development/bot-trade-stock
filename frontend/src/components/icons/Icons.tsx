@@ -16,7 +16,6 @@ export const Icons = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
       <circle cx="11" cy="11" r="8"/>
       <path d="M21 21l-4.35-4.35"/>
-      <path d="M11 8v6M8 11h6"/>
     </svg>
   ),
 
@@ -111,23 +110,10 @@ export const Icons = {
     </svg>
   ),
 
-  Undo: (props: SVGProps<SVGSVGElement>) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
-      <path d="M1 4v6h6"/>
-      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-    </svg>
-  ),
-
   Mail: (props: SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
       <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
       <polyline points="22,6 12,13 2,6"/>
-    </svg>
-  ),
-
-  Send: (props: SVGProps<SVGSVGElement>) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
-      <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
     </svg>
   ),
 
@@ -212,6 +198,13 @@ export const Icons = {
     </svg>
   ),
 
+  Undo: (props: SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M1 4v6h6"/>
+      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+    </svg>
+  ),
+
   List: (props: SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
       <line x1="8" y1="6" x2="21" y2="6"/>
@@ -236,6 +229,12 @@ export const Icons = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
       <circle cx="12" cy="12" r="3"/>
       <path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24"/>
+    </svg>
+  ),
+
+  Send: (props: SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
     </svg>
   ),
 }

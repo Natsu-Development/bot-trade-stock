@@ -16,9 +16,9 @@ const stockMetricsDocID = "latest"
 
 // stockMetricsDocument represents the MongoDB document structure for stock metrics.
 type stockMetricsDocument struct {
-	ID           string                     `bson:"_id"`
+	ID           string                       `bson:"_id"`
 	Metrics      []*stockmetrics.StockMetrics `bson:"metrics"`
-	CalculatedAt time.Time                  `bson:"calculated_at"`
+	CalculatedAt time.Time                    `bson:"calculated_at"`
 }
 
 // StockMetricsRepository implements the StockMetricsRepository interface using MongoDB.

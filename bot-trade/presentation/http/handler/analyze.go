@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"bot-trade/application/port"
+	appPort "bot-trade/application/port"
 	"bot-trade/domain/aggregate/config"
 	"bot-trade/domain/aggregate/market"
 	"bot-trade/presentation/http/mapper"
@@ -12,18 +12,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// BullishDivergenceHandler handles bullish divergence analysis HTTP requests.
-type BullishDivergenceHandler struct {
-	analyzer port.DivergenceAnalyzer
+// AnalyzeHandler handles unified analysis HTTP requests.
+type AnalyzeHandler struct {
+	analyzer appPort.Analyzer
 }
 
-// NewBullishDivergenceHandler creates a new bullish divergence handler.
-func NewBullishDivergenceHandler(analyzer port.DivergenceAnalyzer) *BullishDivergenceHandler {
-	return &BullishDivergenceHandler{analyzer: analyzer}
+// NewAnalyzeHandler creates a new unified analyze handler.
+func NewAnalyzeHandler(analyzer appPort.Analyzer) *AnalyzeHandler {
+	return &AnalyzeHandler{analyzer: analyzer}
 }
 
-// AnalyzeBullishDivergence handles bullish divergence analysis requests.
-func (h *BullishDivergenceHandler) AnalyzeBullishDivergence(c *gin.Context) {
+// Analyze handles GET /analyze/:symbol request.
+// Returns a unified response containing bullish divergence, bearish divergence,
+// and trendline signals in a single API call.
+//
+// Query parameters:
+//   - config_id (required): Configuration ID for analysis
+//   - start_date, end_date, interval (optional): Date range and interval parameters
+func (h *AnalyzeHandler) Analyze(c *gin.Context) {
 	configID := c.Query("config_id")
 	if configID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "config_id is required"})
@@ -51,5 +57,5 @@ func (h *BullishDivergenceHandler) AnalyzeBullishDivergence(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, mapper.AnalysisResultToJSON(result))
+	c.JSON(http.StatusOK, mapper.CombinedAnalysisResultToJSON(result))
 }

@@ -62,17 +62,6 @@ func (h *StockHandler) GetCacheInfo(c *gin.Context) {
 // FilterStocks handles POST /stocks/filter request.
 // Returns cached stock metrics filtered by advanced filter conditions with AND/OR logic.
 //
-// Request body:
-//
-//	{
-//	  "filters": [
-//	    {"field": "rs_52w", "op": ">=", "value": 80},
-//	    {"field": "volume_vs_sma", "op": ">=", "value": 50}
-//	  ],
-//	  "logic": "and",
-//	  "exchanges": ["HOSE", "HNX"]
-//	}
-//
 // Available fields: rs_1m, rs_3m, rs_6m, rs_9m, rs_52w, volume_vs_sma, current_volume, volume_sma20
 // Available operators: >=, <=, >, <, =
 // Logic: "and" (all conditions must match) or "or" (any condition must match)
@@ -155,9 +144,9 @@ func (h *StockHandler) FilterStocks(c *gin.Context) {
 	for _, exchange := range filterReq.Exchanges {
 		if !validExchanges[exchange] {
 			c.JSON(http.StatusBadRequest, gin.H{
-				"error":            "Invalid exchange value",
-				"exchange":         exchange,
-				"valid_exchanges":  []string{"HOSE", "HNX", "UPCOM"},
+				"error":           "Invalid exchange value",
+				"exchange":        exchange,
+				"valid_exchanges": []string{"HOSE", "HNX", "UPCOM"},
 			})
 			return
 		}

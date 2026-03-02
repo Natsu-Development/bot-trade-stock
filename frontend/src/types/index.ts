@@ -2,11 +2,18 @@ export type Page = 'dashboard' | 'screener' | 'divergence' | 'config' | 'setting
 
 export type Exchange = 'HOSE' | 'HNX' | 'UPCOM'
 
+// API Filter Request type
+export interface ApiFilterRequest {
+  filters?: Array<{
+    field: string
+    op: string
+    value: number
+  }>
+  logic?: 'and' | 'or'
+  exchanges?: string[]
+}
+
 export type SignalType = 'bullish' | 'bearish'
-
-export type BadgeVariant = 'hose' | 'hnx' | 'upcom' | 'bull' | 'bear'
-
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost'
 
 export type RSLevel = 'high' | 'medium' | 'low'
 
@@ -24,39 +31,6 @@ export interface Stock {
   volume?: string
   currentVolume?: number
   volumeSma20?: number
-}
-
-export interface ApiStockMetrics {
-  symbol: string
-  exchange: string
-  rs_1m: number
-  rs_3m: number
-  rs_6m: number
-  rs_9m: number
-  rs_52w: number
-  current_volume: number
-  volume_sma20: number
-}
-
-export interface StatCard {
-  label: string
-  value: string | number
-  change?: string
-  variant?: 'bullish' | 'bearish' | 'default'
-}
-
-export interface DivergenceSignal {
-  type: SignalType
-  currentRsi: number
-  confidence: number
-  divergenceType?: string
-  strength: string
-}
-
-export interface FilterChip {
-  label: string
-  active: boolean
-  value: string
 }
 
 // Dynamic Filter Builder Types
@@ -99,16 +73,3 @@ export interface FilterOperatorOption {
   label: string
 }
 
-// Screener filter preset types
-export interface ScreenerFilterPreset {
-  name: string
-  filters: Array<{ field: string; op: string; value: number }>
-  logic: 'and' | 'or'
-  exchanges?: string[]
-  created_at: string
-}
-
-export interface WatchlistAction {
-  type: 'bullish' | 'bearish'
-  symbols: string[]
-}

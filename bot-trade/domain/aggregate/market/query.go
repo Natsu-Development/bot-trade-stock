@@ -78,4 +78,3 @@ func validateAndNormalizeDateRange(startDate, endDate string) (string, string, e
 
 	return startDate, endDate, nil
 }
-

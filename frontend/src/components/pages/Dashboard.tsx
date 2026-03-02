@@ -1,14 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Header } from '../layout/Header'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { StatCard } from '../features/StatCard'
+import { StatCard } from '@/components/ui/StatCard'
 import { Icons } from '../icons/Icons'
 import { SearchBox } from '../features/SearchBox'
 import { RSRating } from '../features/RSRating'
-import { formatPrice, formatChange, getBadgeVariantFromExchange } from '../../lib/utils'
+import { formatPrice, getBadgeVariantFromExchange } from '../../lib/utils'
 import { api, apiToStock } from '../../lib/api'
 import type { Stock } from '../../types'
 
@@ -78,7 +78,7 @@ export function Dashboard() {
     fetchData()
   }, [])
 
-  const stats = [
+  const stats = useMemo(() => [
     {
       label: 'Total Stocks',
       value: cacheInfo?.totalStocks?.toLocaleString() || '-',
@@ -107,7 +107,7 @@ export function Dashboard() {
       variant: 'default' as const,
       icon: Icons.Database,
     },
-  ]
+  ], [cacheInfo, stocks])
 
   return (
     <div className="animate-slide-in-from-bottom">
@@ -192,7 +192,7 @@ export function Dashboard() {
                     </TableCell>
                     <TableCell>{formatPrice(stock.price)}</TableCell>
                     <TableCell className={stock.change >= 0 ? 'text-[var(--neon-bull)]' : 'text-[var(--neon-bear)]'}>
-                      {formatChange(stock.change)}
+                      {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)}%
                     </TableCell>
                     <TableCell className="text-[var(--text-muted)]">
                       {stock.currentVolume ? `${(stock.currentVolume / 1000000).toFixed(1)}M` : '-'}

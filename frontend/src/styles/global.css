@@ -98,6 +98,14 @@
     /* Border Colors */
     --border-dim: #1e1e28;
     --border-glow: #2a2a36;
+    --border-primary: #2a2a36;
+
+    /* Background Colors (additional) */
+    --bg-secondary: #1c1c26;
+    --bg-overlay: rgba(16, 16, 22, 0.9);
+
+    /* Accent Colors */
+    --accent: #00d4ff;
 
     /* Text Colors */
     --text-primary: #f4f4f5;

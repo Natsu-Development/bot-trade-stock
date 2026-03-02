@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Header } from '../layout/Header'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -6,11 +6,15 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogIcon } from '@/components/ui/dialog'
 import { Icons } from '../icons/Icons'
-import { formatPrice, formatChange, getBadgeVariantFromExchange } from '../../lib/utils'
-import { api, apiToStock, getConfigId, type ScreenerFilterPreset } from '../../lib/api'
+import { formatPrice, getBadgeVariantFromExchange } from '../../lib/utils'
+import { api, getConfigId } from '../../lib/api'
 import { toast } from '../ui/Toast'
+import { handleError } from '../../lib/errors'
+import { transformApiStocks } from '../../lib/screenerUtils'
 import { FilterBar } from '../screener/FilterBar'
-import type { Stock, DynamicFilter, FilterField, FilterOperator, FilterFieldOption, FilterOperatorOption } from '../../types'
+import { useScreenerFilters } from '../../hooks/screener/useScreenerFilters'
+import { useStockSelection } from '../../hooks/screener/useStockSelection'
+import type { Stock, FilterFieldOption, FilterOperatorOption } from '../../types'
 
 const filterFieldOptions: FilterFieldOption[] = [
   { value: 'rs_1m', label: 'RS 1M', shortLabel: 'RS 1M', description: '1-Month Relative Strength', category: 'RS Rating' },
@@ -31,219 +35,106 @@ const filterOperatorOptions: FilterOperatorOption[] = [
   { value: '=', label: 'Equal (=)' },
 ]
 
-const getDefaultFilters = (): DynamicFilter[] => [
-  { id: '1', field: 'rs_52w', operator: '>=', value: 70 },
-]
-
-const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2)
-
 export function Screener() {
   const [stocks, setStocks] = useState<Stock[]>([])
   const [loading, setLoading] = useState(false)
   const [activeExchange, setActiveExchange] = useState('All')
 
-  const [dynamicFilters, setDynamicFilters] = useState<DynamicFilter[]>(getDefaultFilters)
-  const [filterLogic, setFilterLogic] = useState<'and' | 'or'>('and')
+  // Custom hooks
+  const {
+    dynamicFilters,
+    filterLogic,
+    savedFilters,
+    selectedPreset,
+    showSaveFilterModal,
+    newFilterName,
+    setDynamicFilters,
+    setFilterLogic,
+    setShowSaveFilterModal,
+    setNewFilterName,
+    handleReset,
+    handleSaveFilter,
+    handleLoadPreset,
+    handleDeletePreset,
+    getFilterRequest,
+  } = useScreenerFilters(activeExchange)
 
-  const [savedFilters, setSavedFilters] = useState<ScreenerFilterPreset[]>([])
-  const [selectedPreset, setSelectedPreset] = useState<string | null>(null)
-  const [showSaveFilterModal, setShowSaveFilterModal] = useState(false)
-  const [newFilterName, setNewFilterName] = useState('')
+  const {
+    selectedStocks,
+    showWatchlistModal,
+    setShowWatchlistModal,
+    handleToggleStockSelection,
+    handleToggleAllSelection,
+    clearSelection,
+    selectAllStocks,
+  } = useStockSelection(stocks)
 
-  const [selectedStocks, setSelectedStocks] = useState<Set<string>>(new Set())
-  const [showWatchlistModal, setShowWatchlistModal] = useState(false)
-
-  useEffect(() => {
-    loadSavedFilters()
-  }, [])
-
-  const loadSavedFilters = async () => {
-    try {
-      const configId = getConfigId()
-      const config = await api.getConfig(configId)
-      setSavedFilters(config.screener_filters || [])
-    } catch (error) {
-      console.error('Failed to load saved filters:', error)
-    }
-  }
-
-  const fetchStocks = async () => {
+  // Fetch stocks with current filters
+  const fetchStocks = useCallback(async () => {
     setLoading(true)
     try {
-      const filters = dynamicFilters
-        .filter(f => f.value !== '' && !isNaN(Number(f.value)))
-        .map(f => ({
-          field: f.field,
-          op: f.operator,
-          value: Number(f.value),
-        }))
+      const filterRequest = getFilterRequest()
 
       const response = await api.filterStocks({
-        filters,
-        logic: filterLogic,
+        ...filterRequest,
         exchanges: activeExchange !== 'All' ? [activeExchange] : undefined,
       })
 
-      const converted = response.stocks.map(apiToStock)
+      const converted = transformApiStocks(response.stocks)
       setStocks(converted)
-      setSelectedStocks(new Set())
-    } catch (error) {
-      console.error('Failed to fetch stocks:', error)
-    }
-    setLoading(false)
-  }
+      clearSelection()
 
+      if (converted.length === 0) {
+        toast.info('No stocks found matching your filters')
+      }
+    } catch (error) {
+      handleError(error, 'Failed to fetch stocks')
+      setStocks([])
+    } finally {
+      setLoading(false)
+    }
+  }, [dynamicFilters, filterLogic, activeExchange, getFilterRequest, clearSelection])
+
+  // Refetch when exchange changes
   useEffect(() => {
     fetchStocks()
-  }, [activeExchange])
+  }, [activeExchange, fetchStocks])
 
-  const handleApplyFilters = () => {
+  const handleApplyFilters = useCallback(() => {
     fetchStocks()
-  }
+  }, [fetchStocks])
 
-  const handleReset = () => {
-    setDynamicFilters(getDefaultFilters())
-    setFilterLogic('and')
+  const handleResetWithExchange = useCallback(() => {
     setActiveExchange('All')
-    setSelectedPreset(null)
-  }
+    handleReset()
+  }, [handleReset])
 
-  const handleSaveFilter = async () => {
-    if (!newFilterName.trim()) {
-      toast.error('Please enter a filter name')
-      return
-    }
-
-    try {
-      const configId = getConfigId()
-      const config = await api.getConfig(configId)
-
-      const newPreset: ScreenerFilterPreset = {
-        name: newFilterName,
-        filters: dynamicFilters
-          .filter(f => f.value !== '' && !isNaN(Number(f.value)))
-          .map(f => ({
-            field: f.field,
-            op: f.operator,
-            value: Number(f.value),
-          })),
-        logic: filterLogic,
-        exchanges: activeExchange !== 'All' ? [activeExchange] : undefined,
-        created_at: new Date().toISOString(),
-      }
-
-      const existingIndex = (config.screener_filters || []).findIndex(f => f.name === newFilterName)
-
-      let updatedFilters: ScreenerFilterPreset[]
-      if (existingIndex >= 0) {
-        updatedFilters = [...(config.screener_filters || [])]
-        updatedFilters[existingIndex] = newPreset
-        toast.success('Filter updated successfully')
-      } else {
-        updatedFilters = [...(config.screener_filters || []), newPreset]
-        toast.success('Filter saved successfully')
-      }
-
-      await api.updateConfig(configId, {
-        screener_filters: updatedFilters,
-      })
-
-      setSavedFilters(updatedFilters)
-      setNewFilterName('')
-      setShowSaveFilterModal(false)
-    } catch (error) {
-      console.error('Failed to save filter:', error)
-      toast.error('Failed to save filter')
-    }
-  }
-
-  const handleLoadPreset = (presetName: string) => {
-    const preset = savedFilters.find(f => f.name === presetName)
-    if (!preset) return
-
-    setSelectedPreset(presetName)
-
-    const loadedFilters: DynamicFilter[] = preset.filters.map((f, index) => ({
-      id: generateId() + index,
-      field: f.field as FilterField,
-      operator: f.op as FilterOperator,
-      value: f.value,
-    }))
-
-    setDynamicFilters(loadedFilters.length > 0 ? loadedFilters : getDefaultFilters())
-    setFilterLogic(preset.logic)
-    if (preset.exchanges && preset.exchanges.length > 0) {
-      setActiveExchange(preset.exchanges[0])
-    } else {
-      setActiveExchange('All')
-    }
-  }
-
-  const handleDeletePreset = async (presetName: string) => {
-    try {
-      const configId = getConfigId()
-      const config = await api.getConfig(configId)
-
-      const updatedFilters = (config.screener_filters || []).filter(f => f.name !== presetName)
-
-      await api.updateConfig(configId, {
-        screener_filters: updatedFilters,
-      })
-
-      setSavedFilters(updatedFilters)
-      if (selectedPreset === presetName) {
-        setSelectedPreset(null)
-      }
-      toast.success('Filter deleted')
-    } catch (error) {
-      console.error('Failed to delete filter:', error)
-      toast.error('Failed to delete filter')
-    }
-  }
-
-  const handleToggleStockSelection = (symbol: string) => {
-    const newSelection = new Set(selectedStocks)
-    if (newSelection.has(symbol)) {
-      newSelection.delete(symbol)
-    } else {
-      newSelection.add(symbol)
-    }
-    setSelectedStocks(newSelection)
-  }
-
-  const handleToggleAllSelection = () => {
-    if (selectedStocks.size === stocks.length) {
-      setSelectedStocks(new Set())
-    } else {
-      setSelectedStocks(new Set(stocks.map(s => s.symbol)))
-    }
-  }
-
-  const handleAddSelectedToWatchlist = () => {
-    if (selectedStocks.size === 0) {
+  const handleAddSelectedToWatchlistWithError = useCallback(() => {
+    const hasSelection = selectedStocks.size > 0
+    if (!hasSelection) {
       toast.error('Please select at least one stock')
       return
     }
     setShowWatchlistModal(true)
-  }
+  }, [selectedStocks])
 
-  const handleAddAllToWatchlist = () => {
+  const handleAddAllToWatchlistWithError = useCallback(() => {
     if (stocks.length === 0) {
       toast.error('No stocks to add')
       return
     }
-    setSelectedStocks(new Set(stocks.map(s => s.symbol)))
+    selectAllStocks()
     setShowWatchlistModal(true)
-  }
+  }, [stocks, selectAllStocks, setShowWatchlistModal])
 
-  const handleConfirmWatchlist = async (listType: 'bullish' | 'bearish') => {
+  const handleConfirmWatchlist = useCallback(async (listType: 'bullish' | 'bearish') => {
     try {
       const configId = getConfigId()
       const symbols = Array.from(selectedStocks)
 
       await api.addSymbolsToWatchlist(configId, listType, symbols)
 
-      setSelectedStocks(new Set())
+      clearSelection()
       setShowWatchlistModal(false)
 
       const listName = listType === 'bullish' ? 'Bullish' : 'Bearish'
@@ -252,7 +143,12 @@ export function Screener() {
       console.error('Failed to add to watchlist:', error)
       toast.error('Failed to add stocks to watchlist')
     }
-  }
+  }, [selectedStocks, clearSelection, setShowWatchlistModal])
+
+  // Memoize sorted stocks for stable rendering
+  const sortedStocks = useMemo(() => {
+    return [...stocks].sort((a, b) => a.symbol.localeCompare(b.symbol))
+  }, [stocks])
 
   return (
     <div className="animate-slide-in-from-bottom">
@@ -285,7 +181,7 @@ export function Screener() {
                     if (e.target.value) {
                       handleLoadPreset(e.target.value)
                     } else {
-                      setSelectedPreset(null)
+                      handleReset()
                     }
                   }}
                 >
@@ -307,7 +203,7 @@ export function Screener() {
               )}
               <button
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] transition-colors [&_svg]:w-[16px] [&_svg]:h-[16px] [&_svg]:flex-shrink-0"
-                onClick={handleReset}
+                onClick={handleResetWithExchange}
               >
                 <Icons.RotateCcw />
                 <span>Reset</span>
@@ -331,7 +227,7 @@ export function Screener() {
             onFiltersChange={setDynamicFilters}
             onLogicChange={setFilterLogic}
             onExchangeChange={setActiveExchange}
-            onReset={handleReset}
+            onReset={handleResetWithExchange}
             onSavePreset={() => setShowSaveFilterModal(true)}
           />
         </Card.Body>
@@ -345,7 +241,7 @@ export function Screener() {
                 <Button
                   variant="primary"
                   icon="Plus"
-                  onClick={handleAddSelectedToWatchlist}
+                  onClick={handleAddSelectedToWatchlistWithError}
                   className="text-xs px-3 py-1.5 h-8"
                 >
                   <span>Add Selected ({selectedStocks.size})</span>
@@ -354,7 +250,7 @@ export function Screener() {
               <Button
                 variant="secondary"
                 icon="List"
-                onClick={handleAddAllToWatchlist}
+                onClick={handleAddAllToWatchlistWithError}
                 disabled={stocks.length === 0}
                 className="text-xs px-3 py-1.5 h-8"
               >
@@ -405,7 +301,7 @@ export function Screener() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {stocks.map((stock, index) => (
+                {sortedStocks.map((stock, index) => (
                   <TableRow
                     key={stock.symbol}
                     selected={selectedStocks.has(stock.symbol)}
@@ -447,7 +343,7 @@ export function Screener() {
                     </TableCell>
                     <TableCell>{formatPrice(stock.price)}</TableCell>
                     <TableCell className={stock.change >= 0 ? 'text-[var(--neon-bull)]' : 'text-[var(--neon-bear)]'}>
-                      {formatChange(stock.change)}
+                      {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)}%
                     </TableCell>
                   </TableRow>
                 ))}

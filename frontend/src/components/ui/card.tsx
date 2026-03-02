@@ -36,26 +36,6 @@ const CardHeader = React.forwardRef<
 ))
 CardHeader.displayName = 'CardHeader'
 
-const CardTitle = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn('text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2', className)}
-    {...props}
-  />
-))
-CardTitle.displayName = 'CardTitle'
-
-const CardDescription = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('text-sm text-[var(--text-muted)]', className)} {...props} />
-))
-CardDescription.displayName = 'CardDescription'
-
 const CardBody = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -72,21 +52,10 @@ const CardContent = React.forwardRef<
 ))
 CardContent.displayName = 'CardContent'
 
-const CardFooter = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('flex items-center p-5 pt-0', className)} {...props} />
-))
-CardFooter.displayName = 'CardFooter'
-
 const Card = Object.assign(CardRoot, {
   Header: CardHeader,
   Body: CardBody,
-  Title: CardTitle,
-  Description: CardDescription,
   Content: CardContent,
-  Footer: CardFooter,
 })
 
-export { Card, CardHeader, CardTitle, CardDescription, CardBody, CardContent, CardFooter }
+export { Card, CardHeader, CardBody, CardContent }
