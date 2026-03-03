@@ -81,6 +81,12 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	)
 	configUseCase := usecase.NewConfigUseCase(configRepository)
 	stockMetricsUseCase := usecase.NewStockMetricsUseCase(marketDataGateway, stockMetricsRepository, appLogger)
+	trendlineAnalyzer := usecase.NewAnalyzeTrendlineUseCase(
+		configRepository, marketDataGateway, appLogger,
+	)
+	unifiedAnalyzer := usecase.NewAnalyzeUseCase(
+		configRepository, marketDataGateway, bullishAnalyzer, bearishAnalyzer, trendlineAnalyzer, appLogger,
+	)
 
 	// Pre-populate stock metrics cache from database
 	loadCtx, loadCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -89,7 +95,7 @@ func New(cfg *config.InfraConfig) (*App, error) {
 		appLogger.Warn("Failed to load stock metrics from database on startup", zap.Error(err))
 	}
 
-	// Create schedulers
+	// Create schedulers (still use individual analyzers for scheduled tasks)
 	bullishScheduler := appService.NewBullishCronScheduler(
 		appLogger, notifier, configRepository, bullishAnalyzer,
 		cfg.BullishIntervals(),
@@ -102,13 +108,13 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	// Create handlers
 	configHandler := presHandler.NewConfigHandler(configUseCase)
 	stockHandler := presHandler.NewStockHandler(stockMetricsUseCase)
+	analyzeHandler := presHandler.NewAnalyzeHandler(unifiedAnalyzer)
 
 	// Create router
 	router := presHTTP.NewRouter(
-		presHandler.NewBullishDivergenceHandler(bullishAnalyzer),
-		presHandler.NewBearishDivergenceHandler(bearishAnalyzer),
 		configHandler,
 		stockHandler,
+		analyzeHandler,
 	)
 
 	appLogger.Info("Application initialized successfully")

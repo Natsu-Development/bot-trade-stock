@@ -11,10 +11,9 @@ import (
 
 // NewRouter creates a new HTTP router with all routes configured
 func NewRouter(
-	bullishDivergenceHandler *handler.BullishDivergenceHandler,
-	bearishDivergenceHandler *handler.BearishDivergenceHandler,
 	configHandler *handler.ConfigHandler,
 	stockHandler *handler.StockHandler,
+	analyzeHandler *handler.AnalyzeHandler,
 ) *gin.Engine {
 	// Set Gin to release mode
 	gin.SetMode(gin.ReleaseMode)
@@ -41,13 +40,12 @@ func NewRouter(
 	router.PUT("/config/:id", configHandler.UpdateConfig)
 	router.DELETE("/config/:id", configHandler.DeleteConfig)
 
-	// API routes group with request validation middleware
-	api := router.Group("/analyze")
-	{
-		// Divergence analysis endpoints
-		api.GET("/:symbol/divergence/bullish", bullishDivergenceHandler.AnalyzeBullishDivergence)
-		api.GET("/:symbol/divergence/bearish", bearishDivergenceHandler.AnalyzeBearishDivergence)
-	}
+	// Watchlist management endpoints
+	router.POST("/config/:id/watchlist", configHandler.AddSymbolsToWatchlist)
+	router.DELETE("/config/:id/watchlist", configHandler.RemoveSymbolsFromWatchlist)
+
+	// Unified analysis endpoint - returns all analysis types in one call
+	router.GET("/analyze/:symbol", analyzeHandler.Analyze)
 
 	// Stock metrics endpoints
 	// POST /stocks/refresh - Fetch all stocks, calculate metrics, cache in RAM

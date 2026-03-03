@@ -61,23 +61,8 @@ func (bcs *BaseCronScheduler) IsRunning() bool {
 	return bcs.isRunning
 }
 
-// GetCron returns the underlying cron scheduler.
-func (bcs *BaseCronScheduler) GetCron() *cron.Cron {
-	return bcs.cron
-}
-
-// GetLogger returns the logger.
-func (bcs *BaseCronScheduler) GetLogger() *zap.Logger {
-	return bcs.logger
-}
-
-// GetDivergenceType returns the divergence type.
-func (bcs *BaseCronScheduler) GetDivergenceType() analysis.DivergenceType {
-	return bcs.divergenceType
-}
-
-// SetRunning sets the running state.
-func (bcs *BaseCronScheduler) SetRunning(running bool) {
+// setRunning sets the running state (internal use).
+func (bcs *BaseCronScheduler) setRunning(running bool) {
 	bcs.mu.Lock()
 	defer bcs.mu.Unlock()
 	bcs.isRunning = running

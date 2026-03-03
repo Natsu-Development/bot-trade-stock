@@ -95,4 +95,3 @@ func (d *Detector) findPivotLows(data []market.PriceDataWithRSI) []pivot {
 
 	return pivots
 }
-

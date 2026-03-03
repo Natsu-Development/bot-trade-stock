@@ -61,4 +61,3 @@ func (d *Detector) createResult(current, previous pivot, divergenceType analysis
 		),
 	}
 }
-
