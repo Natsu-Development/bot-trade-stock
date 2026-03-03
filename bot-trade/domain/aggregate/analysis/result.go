@@ -2,6 +2,12 @@ package analysis
 
 import "time"
 
+// DivergencePoint represents a single point in the divergence pattern with price and date.
+type DivergencePoint struct {
+	Price float64
+	Date  string
+}
+
 // AnalysisResult is the aggregate root for divergence analysis results.
 type AnalysisResult struct {
 	Symbol           string
@@ -16,6 +22,10 @@ type AnalysisResult struct {
 	Interval         string
 	RSIPeriod        int
 	Timestamp        time.Time
+	// DivergencePoints: 2 points showing the divergence pattern
+	// Point[0] = First pivot (older date, FROM)
+	// Point[1] = Second pivot (newer date, TO)
+	DivergencePoints [2]DivergencePoint
 	// Early detection fields
 	EarlySignalDetected bool
 	EarlyDescription    string
@@ -65,4 +75,16 @@ func (r *AnalysisResult) SetEarlySignal(detected bool, description string) {
 // HasEarlySignal returns true if an early signal was detected.
 func (r *AnalysisResult) HasEarlySignal() bool {
 	return r.EarlySignalDetected
+}
+
+// SetDivergencePoints sets the divergence price points.
+// point0 is the older pivot (FROM), point1 is the newer pivot (TO).
+func (r *AnalysisResult) SetDivergencePoints(point0, point1 DivergencePoint) {
+	r.DivergencePoints[0] = point0
+	r.DivergencePoints[1] = point1
+}
+
+// HasDivergencePoints returns true if divergence points are set.
+func (r *AnalysisResult) HasDivergencePoints() bool {
+	return r.DivergencePoints[0].Price > 0 && r.DivergencePoints[1].Price > 0
 }

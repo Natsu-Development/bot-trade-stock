@@ -49,9 +49,21 @@ type DetectionResult struct {
 	Found       bool
 	Type        analysis.DivergenceType
 	Description string
+	// PivotPoints: The two pivots that form the divergence pattern
+	// PivotPoints[0] = First pivot (older date, FROM)
+	// PivotPoints[1] = Second pivot (newer date, TO)
+	PivotPoints []DetectionPivotPoint
 	// Early detection fields
 	EarlySignal      bool
 	EarlyDescription string
+}
+
+// DetectionPivotPoint represents a single pivot point in the divergence pattern.
+type DetectionPivotPoint struct {
+	Price float64
+	RSI   float64
+	Date  string
+	Index int
 }
 
 // Detector is a domain service that detects RSI divergences.

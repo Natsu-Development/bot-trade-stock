@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"bot-trade/application/port/inbound"
+	appAnalyze "bot-trade/application/usecase/analyze"
 	appService "bot-trade/application/service"
 	"bot-trade/application/usecase"
 	"bot-trade/config"
@@ -69,19 +70,14 @@ func New(cfg *config.InfraConfig) (*App, error) {
 		zap.String("retry_transport", "enabled"),
 	)
 
-	bullishAnalyzer := usecase.NewAnalyzeDivergenceUseCase(
-		configRepository, marketDataGateway, analysis.BullishDivergence, appLogger,
-	)
-	bearishAnalyzer := usecase.NewAnalyzeDivergenceUseCase(
-		configRepository, marketDataGateway, analysis.BearishDivergence, appLogger,
-	)
 	configUseCase := usecase.NewConfigUseCase(configRepository)
 	stockMetricsUseCase := usecase.NewStockMetricsUseCase(marketDataGateway, stockMetricsRepository, appLogger)
-	trendlineAnalyzer := usecase.NewAnalyzeTrendlineUseCase(
-		configRepository, marketDataGateway, appLogger,
-	)
-	unifiedAnalyzer := usecase.NewAnalyzeUseCase(
-		configRepository, marketDataGateway, bullishAnalyzer, bearishAnalyzer, trendlineAnalyzer, appLogger,
+
+	// Create the unified analyzer (internal sub-analyzers are created inside)
+	analyzer := appAnalyze.NewAnalyzer(
+		configRepository,
+		marketDataGateway,
+		appLogger,
 	)
 
 	loadCtx, loadCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -92,18 +88,18 @@ func New(cfg *config.InfraConfig) (*App, error) {
 
 	bullishScheduler := appService.NewDivergenceScheduler(
 		infraCron.NewJobScheduler(),
-		appLogger, notifier, configRepository, bullishAnalyzer,
+		appLogger, notifier, configRepository, analyzer,
 		analysis.BullishDivergence, cfg.BullishIntervals(),
 	)
 	bearishScheduler := appService.NewDivergenceScheduler(
 		infraCron.NewJobScheduler(),
-		appLogger, notifier, configRepository, bearishAnalyzer,
+		appLogger, notifier, configRepository, analyzer,
 		analysis.BearishDivergence, cfg.BearishIntervals(),
 	)
 
 	configHandler := presHandler.NewConfigHandler(configUseCase)
 	stockHandler := presHandler.NewStockHandler(stockMetricsUseCase)
-	analyzeHandler := presHandler.NewAnalyzeHandler(unifiedAnalyzer, appLogger)
+	analyzeHandler := presHandler.NewAnalyzeHandler(analyzer, appLogger)
 
 	router := presHTTP.NewRouter(
 		configHandler,

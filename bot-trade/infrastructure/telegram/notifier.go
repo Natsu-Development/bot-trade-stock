@@ -8,6 +8,7 @@ import (
 
 	"bot-trade/application/port/outbound"
 	"bot-trade/domain/aggregate/analysis"
+	"bot-trade/domain/aggregate/config"
 )
 
 const (
@@ -57,23 +58,36 @@ func (n *Notifier) SendMessage(botToken, chatID, message string) error {
 	return nil
 }
 
-// HandleDivergenceResult processes a divergence result and sends notification.
-func (n *Notifier) HandleDivergenceResult(
+// SendNotification sends a notification based on the request type.
+// Implements the single-method Notifier interface per KISS principle.
+func (n *Notifier) SendNotification(req outbound.NotificationRequest) error {
+	if !req.TelegramCfg.Enabled {
+		return nil
+	}
+
+	switch req.Type {
+	case outbound.NotificationTypeDivergence:
+		return n.sendDivergenceNotification(req.DivergenceType, req.Interval, req.Symbol, req.Result, req.TelegramCfg)
+	case outbound.NotificationTypeEarlySignal:
+		return n.sendEarlySignalNotification(req.Interval, req.Symbol, req.Result, req.TelegramCfg)
+	default:
+		return fmt.Errorf("unknown notification type: %s", req.Type)
+	}
+}
+
+// sendDivergenceNotification sends a divergence notification.
+func (n *Notifier) sendDivergenceNotification(
 	divergenceType analysis.DivergenceType,
 	interval, symbol string,
 	result *analysis.AnalysisResult,
-	botToken, chatID string,
+	telegramCfg config.TelegramConfig,
 ) error {
 	if result == nil || !result.DivergenceFound {
 		return nil
 	}
 
-	if botToken == "" || chatID == "" {
-		return nil
-	}
-
 	message := FormatDivergenceAlert(divergenceType.String(), interval, symbol, result.Description)
-	if err := n.SendMessage(botToken, chatID, message); err != nil {
+	if err := n.SendMessage(telegramCfg.BotToken, telegramCfg.ChatID, message); err != nil {
 		return fmt.Errorf("failed to send %s notification for %s [%s]: %w",
 			divergenceType.String(), symbol, interval, err)
 	}
@@ -81,22 +95,18 @@ func (n *Notifier) HandleDivergenceResult(
 	return nil
 }
 
-// HandleEarlySignalResult processes an early signal result and sends notification.
-func (n *Notifier) HandleEarlySignalResult(
+// sendEarlySignalNotification sends an early signal notification.
+func (n *Notifier) sendEarlySignalNotification(
 	interval, symbol string,
 	result *analysis.AnalysisResult,
-	botToken, chatID string,
+	telegramCfg config.TelegramConfig,
 ) error {
 	if result == nil || !result.EarlySignalDetected {
 		return nil
 	}
 
-	if botToken == "" || chatID == "" {
-		return nil
-	}
-
 	message := FormatEarlySignalAlert(interval, symbol, result.EarlyDescription)
-	if err := n.SendMessage(botToken, chatID, message); err != nil {
+	if err := n.SendMessage(telegramCfg.BotToken, telegramCfg.ChatID, message); err != nil {
 		return fmt.Errorf("failed to send early signal notification for %s [%s]: %w",
 			symbol, interval, err)
 	}

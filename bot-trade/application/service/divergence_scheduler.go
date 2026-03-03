@@ -22,12 +22,13 @@ const (
 )
 
 // DivergenceScheduler handles automated divergence analysis for a single divergence type.
+// Uses the unified Analyzer interface and extracts relevant results from CombinedAnalysisResult.
 type DivergenceScheduler struct {
 	scheduler        outbound.JobScheduler
 	logger           *zap.Logger
 	notifier         outbound.Notifier
 	configRepository outbound.ConfigRepository
-	analyzer         inbound.DivergenceAnalyzer
+	analyzer         inbound.Analyzer // Changed from DivergenceAnalyzer to Analyzer
 	divergenceType   analysis.DivergenceType
 	intervals        map[string]outbound.IntervalConfig
 
@@ -41,7 +42,7 @@ func NewDivergenceScheduler(
 	logger *zap.Logger,
 	notifier outbound.Notifier,
 	configRepository outbound.ConfigRepository,
-	analyzer inbound.DivergenceAnalyzer,
+	analyzer inbound.Analyzer, // Changed from DivergenceAnalyzer to Analyzer
 	divergenceType analysis.DivergenceType,
 	intervals map[string]outbound.IntervalConfig,
 ) *DivergenceScheduler {
@@ -157,7 +158,7 @@ func (s *DivergenceScheduler) selectSymbols(cfg *tradingConfig.TradingConfig) []
 
 type symbolResult struct {
 	symbol string
-	result *analysis.AnalysisResult
+	result *market.CombinedAnalysisResult // Changed from AnalysisResult to CombinedAnalysisResult
 }
 
 func (s *DivergenceScheduler) processConfig(ctx context.Context, interval, startDate, endDate string, cfg *tradingConfig.TradingConfig) {
@@ -225,9 +226,21 @@ func (s *DivergenceScheduler) handleResults(interval string, results []symbolRes
 	earlyEnabled := isBearish && cfg.EarlyDetectionEnabled != nil && *cfg.EarlyDetectionEnabled
 
 	for _, sr := range results {
-		symbol, result := sr.symbol, sr.result
+		symbol, combinedResult := sr.symbol, sr.result
 
-		if result.HasDivergence() && result.DivergenceType == s.divergenceType {
+		// Extract the relevant divergence result from CombinedAnalysisResult
+		var divergenceResult *analysis.AnalysisResult
+		if s.divergenceType == analysis.BullishDivergence {
+			divergenceResult = combinedResult.BullishDivergence
+		} else {
+			divergenceResult = combinedResult.BearishDivergence
+		}
+
+		if divergenceResult == nil {
+			continue
+		}
+
+		if divergenceResult.HasDivergence() && divergenceResult.DivergenceType == s.divergenceType {
 			signalCount++
 			signalSymbols = append(signalSymbols, symbol)
 			s.logger.Info("Divergence detected",
@@ -235,12 +248,12 @@ func (s *DivergenceScheduler) handleResults(interval string, results []symbolRes
 				zap.String("configID", cfg.ID),
 				zap.String("interval", interval),
 				zap.String("symbol", symbol),
-				zap.String("description", result.Description),
+				zap.String("description", divergenceResult.Description),
 			)
-			s.sendNotification(interval, symbol, result, cfg)
+			s.sendNotification(interval, symbol, divergenceResult, cfg)
 		}
 
-		if earlyEnabled && result.HasEarlySignal() && !result.HasDivergence() {
+		if earlyEnabled && divergenceResult.HasEarlySignal() && !divergenceResult.HasDivergence() {
 			earlySignalCount++
 			earlySymbols = append(earlySymbols, symbol)
 			s.logger.Info("Early signal detected",
@@ -248,9 +261,9 @@ func (s *DivergenceScheduler) handleResults(interval string, results []symbolRes
 				zap.String("configID", cfg.ID),
 				zap.String("interval", interval),
 				zap.String("symbol", symbol),
-				zap.String("description", result.EarlyDescription),
+				zap.String("description", divergenceResult.EarlyDescription),
 			)
-			s.sendEarlySignalNotification(interval, symbol, result, cfg)
+			s.sendEarlySignalNotification(interval, symbol, divergenceResult, cfg)
 		}
 	}
 
@@ -272,13 +285,15 @@ func (s *DivergenceScheduler) handleResults(interval string, results []symbolRes
 }
 
 func (s *DivergenceScheduler) sendNotification(interval, symbol string, result *analysis.AnalysisResult, cfg *tradingConfig.TradingConfig) {
-	if s.notifier == nil || !cfg.Telegram.Enabled {
-		return
+	req := outbound.NotificationRequest{
+		Type:           outbound.NotificationTypeDivergence,
+		DivergenceType: s.divergenceType,
+		Interval:       interval,
+		Symbol:         symbol,
+		Result:         result,
+		TelegramCfg:    cfg.Telegram,
 	}
-	if err := s.notifier.HandleDivergenceResult(
-		s.divergenceType, interval, symbol, result,
-		cfg.Telegram.BotToken, cfg.Telegram.ChatID,
-	); err != nil {
+	if err := s.notifier.SendNotification(req); err != nil {
 		s.logger.Error("Failed to send notification",
 			zap.String("type", s.divergenceType.String()),
 			zap.String("symbol", symbol),
@@ -289,13 +304,15 @@ func (s *DivergenceScheduler) sendNotification(interval, symbol string, result *
 }
 
 func (s *DivergenceScheduler) sendEarlySignalNotification(interval, symbol string, result *analysis.AnalysisResult, cfg *tradingConfig.TradingConfig) {
-	if s.notifier == nil || !cfg.Telegram.Enabled {
-		return
+	req := outbound.NotificationRequest{
+		Type:           outbound.NotificationTypeEarlySignal,
+		DivergenceType: s.divergenceType,
+		Interval:       interval,
+		Symbol:         symbol,
+		Result:         result,
+		TelegramCfg:    cfg.Telegram,
 	}
-	if err := s.notifier.HandleEarlySignalResult(
-		interval, symbol, result,
-		cfg.Telegram.BotToken, cfg.Telegram.ChatID,
-	); err != nil {
+	if err := s.notifier.SendNotification(req); err != nil {
 		s.logger.Error("Failed to send early signal notification",
 			zap.String("symbol", symbol),
 			zap.String("interval", interval),

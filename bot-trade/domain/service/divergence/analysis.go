@@ -59,5 +59,9 @@ func (d *Detector) createResult(current, previous pivot, divergenceType analysis
 			label, previous.price, current.price, previous.rsi, current.rsi,
 			previous.date, current.date,
 		),
+		PivotPoints: []DetectionPivotPoint{
+			{Price: previous.price, RSI: previous.rsi, Date: previous.date, Index: previous.index}, // FROM (older)
+			{Price: current.price, RSI: current.rsi, Date: current.date, Index: current.index},    // TO (newer)
+		},
 	}
 }
