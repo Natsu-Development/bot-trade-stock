@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"bot-trade/application/usecase"
+	"bot-trade/application/port/inbound"
 	"bot-trade/domain/aggregate/stockmetrics"
 
 	"github.com/gin-gonic/gin"
@@ -12,18 +12,18 @@ import (
 
 // StockHandler handles stock metrics HTTP requests.
 type StockHandler struct {
-	useCase *usecase.StockMetricsUseCase
+	stockMetrics inbound.StockMetricsManager
 }
 
 // NewStockHandler creates a new stock handler.
-func NewStockHandler(useCase *usecase.StockMetricsUseCase) *StockHandler {
-	return &StockHandler{useCase: useCase}
+func NewStockHandler(stockMetrics inbound.StockMetricsManager) *StockHandler {
+	return &StockHandler{stockMetrics: stockMetrics}
 }
 
 // RefreshStocks handles POST /stocks/refresh request.
 // Fetches all stocks from HOSE, HNX, UPCOM, calculates metrics, and caches in RAM.
 func (h *StockHandler) RefreshStocks(c *gin.Context) {
-	result, err := h.useCase.Refresh(c.Request.Context())
+	result, err := h.stockMetrics.Refresh(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to refresh stock metrics",
@@ -43,7 +43,7 @@ func (h *StockHandler) RefreshStocks(c *gin.Context) {
 // GetCacheInfo handles GET /stocks/cache-info request.
 // Returns information about the current cache state.
 func (h *StockHandler) GetCacheInfo(c *gin.Context) {
-	cachedAt, totalStocks, ok := h.useCase.GetCacheInfo()
+	cachedAt, totalStocks, ok := h.stockMetrics.GetCacheInfo()
 	if !ok {
 		c.JSON(http.StatusOK, gin.H{
 			"cached":  false,
@@ -111,9 +111,9 @@ func (h *StockHandler) FilterStocks(c *gin.Context) {
 	}
 
 	// Execute filter
-	result, err := h.useCase.Filter(c.Request.Context(), &filterReq)
+	result, err := h.stockMetrics.Filter(c.Request.Context(), &filterReq)
 	if err != nil {
-		if errors.Is(err, usecase.ErrCacheNotReady) {
+		if errors.Is(err, inbound.ErrCacheNotReady) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error":   "Stock metrics cache not ready",
 				"message": "Please call POST /stocks/refresh first to populate the cache",

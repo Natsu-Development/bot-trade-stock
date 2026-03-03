@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"bot-trade/application/usecase"
+	"bot-trade/application/port/inbound"
 	"bot-trade/domain/aggregate/config"
 
 	"github.com/gin-gonic/gin"
@@ -12,12 +12,12 @@ import (
 
 // ConfigHandler handles configuration CRUD HTTP requests.
 type ConfigHandler struct {
-	configUseCase *usecase.ConfigUseCase
+	configManager inbound.ConfigManager
 }
 
 // NewConfigHandler creates a new ConfigHandler.
-func NewConfigHandler(configUseCase *usecase.ConfigUseCase) *ConfigHandler {
-	return &ConfigHandler{configUseCase: configUseCase}
+func NewConfigHandler(configManager inbound.ConfigManager) *ConfigHandler {
+	return &ConfigHandler{configManager: configManager}
 }
 
 // CreateConfig handles POST /config - creates a new configuration.
@@ -28,7 +28,7 @@ func (h *ConfigHandler) CreateConfig(c *gin.Context) {
 		return
 	}
 
-	configID, err := h.configUseCase.CreateConfig(c.Request.Context(), &cfg)
+	configID, err := h.configManager.CreateConfig(c.Request.Context(), &cfg)
 	if err != nil {
 		var validationErr *config.ValidationError
 		if errors.As(err, &validationErr) {
@@ -50,7 +50,7 @@ func (h *ConfigHandler) GetConfig(c *gin.Context) {
 		return
 	}
 
-	cfg, err := h.configUseCase.GetConfig(c.Request.Context(), id)
+	cfg, err := h.configManager.GetConfig(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, config.ErrConfigNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "configuration not found"})
@@ -77,7 +77,7 @@ func (h *ConfigHandler) UpdateConfig(c *gin.Context) {
 		return
 	}
 
-	updated, err := h.configUseCase.UpdateConfig(c.Request.Context(), id, &cfg)
+	updated, err := h.configManager.UpdateConfig(c.Request.Context(), id, &cfg)
 	if err != nil {
 		if errors.Is(err, config.ErrConfigNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "configuration not found"})
@@ -103,7 +103,7 @@ func (h *ConfigHandler) DeleteConfig(c *gin.Context) {
 		return
 	}
 
-	err := h.configUseCase.DeleteConfig(c.Request.Context(), id)
+	err := h.configManager.DeleteConfig(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, config.ErrConfigNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "configuration not found"})
@@ -136,7 +136,7 @@ func (h *ConfigHandler) AddSymbolsToWatchlist(c *gin.Context) {
 		return
 	}
 
-	err := h.configUseCase.AddSymbols(c.Request.Context(), id, req.ListType, req.Symbols)
+	err := h.configManager.AddSymbols(c.Request.Context(), id, req.ListType, req.Symbols)
 	if err != nil {
 		if errors.Is(err, config.ErrConfigNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "configuration not found"})
@@ -172,7 +172,7 @@ func (h *ConfigHandler) RemoveSymbolsFromWatchlist(c *gin.Context) {
 		return
 	}
 
-	err := h.configUseCase.RemoveSymbols(c.Request.Context(), id, req.ListType, req.Symbols)
+	err := h.configManager.RemoveSymbols(c.Request.Context(), id, req.ListType, req.Symbols)
 	if err != nil {
 		if errors.Is(err, config.ErrConfigNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "configuration not found"})

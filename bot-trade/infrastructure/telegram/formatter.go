@@ -6,7 +6,6 @@ import (
 )
 
 // FormatDivergenceAlert formats a divergence alert as HTML for Telegram.
-// This keeps Telegram-specific formatting in the infrastructure layer.
 func FormatDivergenceAlert(divergenceType, interval, symbol, description string) string {
 	icon := "🔴"
 	if strings.EqualFold(divergenceType, "bullish") {
@@ -19,5 +18,16 @@ func FormatDivergenceAlert(divergenceType, interval, symbol, description string)
 			"⏱ Interval: <b>%s</b>\n"+
 			"📉 %s\n",
 		icon, divergenceType, symbol, interval, description,
+	)
+}
+
+// FormatEarlySignalAlert formats an early bearish signal alert as HTML for Telegram.
+func FormatEarlySignalAlert(interval, symbol, description string) string {
+	return fmt.Sprintf(
+		"⚠️ <b>Early Bearish Signal</b>\n\n"+
+			"📊 Symbol: <b>%s</b>\n"+
+			"⏱ Interval: <b>%s</b>\n"+
+			"📉 %s\n",
+		symbol, interval, description,
 	)
 }

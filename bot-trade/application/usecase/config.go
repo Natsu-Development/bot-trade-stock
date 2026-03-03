@@ -6,19 +6,22 @@ import (
 	"strings"
 	"time"
 
-	appPort "bot-trade/application/port"
+	"bot-trade/application/port/inbound"
+	"bot-trade/application/port/outbound"
 	"bot-trade/domain/aggregate/config"
 
 	"github.com/google/uuid"
 )
 
+var _ inbound.ConfigManager = (*ConfigUseCase)(nil)
+
 // ConfigUseCase handles configuration business operations.
 type ConfigUseCase struct {
-	repo appPort.ConfigRepository
+	repo outbound.ConfigRepository
 }
 
 // NewConfigUseCase creates a new ConfigUseCase.
-func NewConfigUseCase(repo appPort.ConfigRepository) *ConfigUseCase {
+func NewConfigUseCase(repo outbound.ConfigRepository) *ConfigUseCase {
 	return &ConfigUseCase{repo: repo}
 }
 

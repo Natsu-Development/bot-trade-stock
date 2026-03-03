@@ -7,12 +7,13 @@ import (
 	"net/http"
 	"time"
 
-	appPort "bot-trade/application/port"
+	"bot-trade/application/port/inbound"
 	appService "bot-trade/application/service"
 	"bot-trade/application/usecase"
 	"bot-trade/config"
 	"bot-trade/domain/aggregate/analysis"
 	"bot-trade/infrastructure/adapter"
+	infraCron "bot-trade/infrastructure/cron"
 	infraHTTP "bot-trade/infrastructure/http"
 	"bot-trade/infrastructure/mongodb"
 	"bot-trade/infrastructure/telegram"
@@ -30,8 +31,8 @@ type App struct {
 	logger *zap.Logger
 
 	mongoClient      *mongo.Client
-	bearishScheduler appPort.CronScheduler
-	bullishScheduler appPort.CronScheduler
+	bearishScheduler inbound.CronScheduler
+	bullishScheduler inbound.CronScheduler
 	router           http.Handler
 }
 
@@ -47,7 +48,6 @@ func New(cfg *config.InfraConfig) (*App, error) {
 
 	appLogger.Info("Initializing application")
 
-	// Connect to MongoDB
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -57,14 +57,11 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	}
 	appLogger.Info("Connected to MongoDB", zap.String("database", cfg.MongoDBDatabase))
 
-	// Create repositories
 	configRepository := mongodb.NewConfigRepository(mongoClient, cfg.MongoDBDatabase, "bot_config")
 	stockMetricsRepository := mongodb.NewStockMetricsRepository(mongoClient, cfg.MongoDBDatabase, "stock_metrics")
 
-	// Create HTTP client with retry transport for external API calls
 	httpClient := infraHTTP.NewHTTPClientWithRetry(30*time.Second, appLogger)
 
-	// Create infrastructure adapters
 	notifier := telegram.NewNotifier()
 	marketDataGateway := adapter.NewVietCapGateway(httpClient, cfg.VietCapRateLimit)
 	appLogger.Info("VietCap gateway initialized",
@@ -72,7 +69,6 @@ func New(cfg *config.InfraConfig) (*App, error) {
 		zap.String("retry_transport", "enabled"),
 	)
 
-	// Create use cases
 	bullishAnalyzer := usecase.NewAnalyzeDivergenceUseCase(
 		configRepository, marketDataGateway, analysis.BullishDivergence, appLogger,
 	)
@@ -88,29 +84,27 @@ func New(cfg *config.InfraConfig) (*App, error) {
 		configRepository, marketDataGateway, bullishAnalyzer, bearishAnalyzer, trendlineAnalyzer, appLogger,
 	)
 
-	// Pre-populate stock metrics cache from database
 	loadCtx, loadCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer loadCancel()
 	if _, err := stockMetricsUseCase.LoadFromDB(loadCtx); err != nil {
 		appLogger.Warn("Failed to load stock metrics from database on startup", zap.Error(err))
 	}
 
-	// Create schedulers (still use individual analyzers for scheduled tasks)
-	bullishScheduler := appService.NewBullishCronScheduler(
+	bullishScheduler := appService.NewDivergenceScheduler(
+		infraCron.NewJobScheduler(),
 		appLogger, notifier, configRepository, bullishAnalyzer,
-		toServiceIntervals(cfg.BullishIntervals()),
+		analysis.BullishDivergence, cfg.BullishIntervals(),
 	)
-	bearishScheduler := appService.NewBearishCronScheduler(
+	bearishScheduler := appService.NewDivergenceScheduler(
+		infraCron.NewJobScheduler(),
 		appLogger, notifier, configRepository, bearishAnalyzer,
-		toServiceIntervals(cfg.BearishIntervals()),
+		analysis.BearishDivergence, cfg.BearishIntervals(),
 	)
 
-	// Create handlers
 	configHandler := presHandler.NewConfigHandler(configUseCase)
 	stockHandler := presHandler.NewStockHandler(stockMetricsUseCase)
 	analyzeHandler := presHandler.NewAnalyzeHandler(unifiedAnalyzer, appLogger)
 
-	// Create router
 	router := presHTTP.NewRouter(
 		configHandler,
 		stockHandler,
@@ -177,16 +171,4 @@ func (a *App) Close() {
 		a.mongoClient.Disconnect(context.Background())
 	}
 	a.logger.Sync()
-}
-
-// toServiceIntervals converts infrastructure config intervals to application-layer IntervalConfig.
-func toServiceIntervals(infraIntervals map[string]config.IntervalConfig) map[string]appService.IntervalConfig {
-	result := make(map[string]appService.IntervalConfig, len(infraIntervals))
-	for k, v := range infraIntervals {
-		result[k] = appService.IntervalConfig{
-			Enabled:  v.Enabled,
-			Schedule: v.Schedule,
-		}
-	}
-	return result
 }

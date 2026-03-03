@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	appPort "bot-trade/application/port"
+	"bot-trade/application/port/outbound"
 	"bot-trade/domain/aggregate/stockmetrics"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -13,7 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var _ appPort.StockMetricsRepository = (*StockMetricsRepository)(nil)
+var _ outbound.StockMetricsRepository = (*StockMetricsRepository)(nil)
 
 const stockMetricsDocID = "latest"
 

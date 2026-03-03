@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"bot-trade/application/port/outbound"
+
 	"github.com/joho/godotenv"
 )
 
@@ -121,15 +123,9 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	return config, nil
 }
 
-// IntervalConfig holds configuration for a single cron interval.
-type IntervalConfig struct {
-	Enabled  bool
-	Schedule string
-}
-
 // BullishIntervals returns the interval configuration map for bullish analysis.
-func (c *InfraConfig) BullishIntervals() map[string]IntervalConfig {
-	return map[string]IntervalConfig{
+func (c *InfraConfig) BullishIntervals() map[string]outbound.IntervalConfig {
+	return map[string]outbound.IntervalConfig{
 		"30m": {Enabled: c.Bullish30mEnabled, Schedule: c.Bullish30mSchedule},
 		"1H":  {Enabled: c.Bullish1HEnabled, Schedule: c.Bullish1HSchedule},
 		"1D":  {Enabled: c.Bullish1DEnabled, Schedule: c.Bullish1DSchedule},
@@ -138,8 +134,8 @@ func (c *InfraConfig) BullishIntervals() map[string]IntervalConfig {
 }
 
 // BearishIntervals returns the interval configuration map for bearish analysis.
-func (c *InfraConfig) BearishIntervals() map[string]IntervalConfig {
-	return map[string]IntervalConfig{
+func (c *InfraConfig) BearishIntervals() map[string]outbound.IntervalConfig {
+	return map[string]outbound.IntervalConfig{
 		"30m": {Enabled: c.Bearish30mEnabled, Schedule: c.Bearish30mSchedule},
 		"1H":  {Enabled: c.Bearish1HEnabled, Schedule: c.Bearish1HSchedule},
 		"1D":  {Enabled: c.Bearish1DEnabled, Schedule: c.Bearish1DSchedule},

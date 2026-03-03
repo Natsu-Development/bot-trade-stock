@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"time"
 
-	appPort "bot-trade/application/port"
+	"bot-trade/application/port/outbound"
 	"bot-trade/domain/aggregate/analysis"
 )
 
@@ -15,7 +15,7 @@ const (
 	telegramClientTimeout = 10 * time.Second
 )
 
-var _ appPort.Notifier = (*Notifier)(nil)
+var _ outbound.Notifier = (*Notifier)(nil)
 
 // Notifier sends Telegram notifications.
 type Notifier struct {
@@ -69,7 +69,6 @@ func (n *Notifier) HandleDivergenceResult(
 	}
 
 	if botToken == "" || chatID == "" {
-		// Telegram not configured for this config, skip notification
 		return nil
 	}
 
@@ -77,6 +76,29 @@ func (n *Notifier) HandleDivergenceResult(
 	if err := n.SendMessage(botToken, chatID, message); err != nil {
 		return fmt.Errorf("failed to send %s notification for %s [%s]: %w",
 			divergenceType.String(), symbol, interval, err)
+	}
+
+	return nil
+}
+
+// HandleEarlySignalResult processes an early signal result and sends notification.
+func (n *Notifier) HandleEarlySignalResult(
+	interval, symbol string,
+	result *analysis.AnalysisResult,
+	botToken, chatID string,
+) error {
+	if result == nil || !result.EarlySignalDetected {
+		return nil
+	}
+
+	if botToken == "" || chatID == "" {
+		return nil
+	}
+
+	message := FormatEarlySignalAlert(interval, symbol, result.EarlyDescription)
+	if err := n.SendMessage(botToken, chatID, message); err != nil {
+		return fmt.Errorf("failed to send early signal notification for %s [%s]: %w",
+			symbol, interval, err)
 	}
 
 	return nil

@@ -2,13 +2,13 @@ package usecase
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
-	appPort "bot-trade/application/port"
+	"bot-trade/application/port/inbound"
+	"bot-trade/application/port/outbound"
 	"bot-trade/domain/aggregate/market"
 	"bot-trade/domain/aggregate/stockmetrics"
 	metricsService "bot-trade/domain/service/stockmetrics"
@@ -29,13 +29,12 @@ const (
 	maxFailedLogSamples       = 20  // Maximum failed-stock entries shown in the refresh summary log
 )
 
-// ErrCacheNotReady is returned when the cache has not been populated yet.
-var ErrCacheNotReady = errors.New("stock metrics cache not ready, call Refresh first")
+var _ inbound.StockMetricsManager = (*StockMetricsUseCase)(nil)
 
 // StockMetricsUseCase orchestrates the stock metrics calculation for all stocks.
 type StockMetricsUseCase struct {
-	marketDataGateway appPort.MarketDataGateway
-	repository        appPort.StockMetricsRepository
+	marketDataGateway outbound.MarketDataGateway
+	repository        outbound.StockMetricsRepository
 	calculator        *metricsService.Calculator
 	logger            *zap.Logger
 
@@ -47,8 +46,8 @@ type StockMetricsUseCase struct {
 
 // NewStockMetricsUseCase creates a new stock metrics use case.
 func NewStockMetricsUseCase(
-	marketDataGateway appPort.MarketDataGateway,
-	repository appPort.StockMetricsRepository,
+	marketDataGateway outbound.MarketDataGateway,
+	repository outbound.StockMetricsRepository,
 	logger *zap.Logger,
 ) *StockMetricsUseCase {
 	return &StockMetricsUseCase{
@@ -165,7 +164,7 @@ func (uc *StockMetricsUseCase) Filter(ctx context.Context, filterReq *stockmetri
 	defer uc.cacheMu.RUnlock()
 
 	if uc.cachedMetrics == nil {
-		return nil, ErrCacheNotReady
+		return nil, inbound.ErrCacheNotReady
 	}
 
 	// If no filters, return all

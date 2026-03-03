@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	appPort "bot-trade/application/port"
+	"bot-trade/application/port/outbound"
 	"bot-trade/domain/aggregate/market"
 )
 
@@ -54,7 +54,7 @@ type VietCapGateway struct {
 }
 
 // Verify interface compliance at compile time.
-var _ appPort.MarketDataGateway = (*VietCapGateway)(nil)
+var _ outbound.MarketDataGateway = (*VietCapGateway)(nil)
 
 // NewVietCapGateway creates a new VietCap market data gateway.
 // httpClient is the HTTP client to use for requests (should have retry transport configured).

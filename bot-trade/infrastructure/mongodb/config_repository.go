@@ -4,14 +4,14 @@ import (
 	"context"
 	"errors"
 
-	appPort "bot-trade/application/port"
+	"bot-trade/application/port/outbound"
 	"bot-trade/domain/aggregate/config"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-var _ appPort.ConfigRepository = (*ConfigRepository)(nil)
+var _ outbound.ConfigRepository = (*ConfigRepository)(nil)
 
 // ConfigRepository implements the ConfigRepository interface using MongoDB.
 type ConfigRepository struct {

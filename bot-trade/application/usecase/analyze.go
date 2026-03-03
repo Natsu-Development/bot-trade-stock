@@ -5,34 +5,35 @@ import (
 	"fmt"
 	"time"
 
-	appPort "bot-trade/application/port"
+	"bot-trade/application/port/inbound"
+	"bot-trade/application/port/outbound"
 	"bot-trade/domain/aggregate/analysis"
 	"bot-trade/domain/aggregate/market"
 
 	"go.uber.org/zap"
 )
 
-var _ appPort.Analyzer = (*AnalyzeUseCase)(nil)
+var _ inbound.Analyzer = (*AnalyzeUseCase)(nil)
 
 // AnalyzeUseCase orchestrates all analysis types (bullish divergence, bearish divergence, trendline)
 // in a single unified use case. This optimizes performance by fetching market data once
 // and sharing it across all analyses.
 type AnalyzeUseCase struct {
-	configRepository  appPort.ConfigRepository
-	marketDataGateway appPort.MarketDataGateway
-	bullishAnalyzer   appPort.DivergenceAnalyzer
-	bearishAnalyzer   appPort.DivergenceAnalyzer
-	trendlineAnalyzer appPort.TrendlineAnalyzer
+	configRepository  outbound.ConfigRepository
+	marketDataGateway outbound.MarketDataGateway
+	bullishAnalyzer   inbound.DivergenceAnalyzer
+	bearishAnalyzer   inbound.DivergenceAnalyzer
+	trendlineAnalyzer inbound.TrendlineAnalyzer
 	logger            *zap.Logger
 }
 
 // NewAnalyzeUseCase creates a new unified analysis use case.
 func NewAnalyzeUseCase(
-	configRepository appPort.ConfigRepository,
-	marketDataGateway appPort.MarketDataGateway,
-	bullishAnalyzer appPort.DivergenceAnalyzer,
-	bearishAnalyzer appPort.DivergenceAnalyzer,
-	trendlineAnalyzer appPort.TrendlineAnalyzer,
+	configRepository outbound.ConfigRepository,
+	marketDataGateway outbound.MarketDataGateway,
+	bullishAnalyzer inbound.DivergenceAnalyzer,
+	bearishAnalyzer inbound.DivergenceAnalyzer,
+	trendlineAnalyzer inbound.TrendlineAnalyzer,
 	logger *zap.Logger,
 ) *AnalyzeUseCase {
 	return &AnalyzeUseCase{

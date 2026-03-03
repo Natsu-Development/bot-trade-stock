@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	appPort "bot-trade/application/port"
+	"bot-trade/application/port/inbound"
+	"bot-trade/application/port/outbound"
 	"bot-trade/domain/aggregate/analysis"
 	"bot-trade/domain/aggregate/market"
 	"bot-trade/domain/service/divergence"
@@ -14,20 +15,20 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ appPort.DivergenceAnalyzer = (*AnalyzeDivergenceUseCase)(nil)
+var _ inbound.DivergenceAnalyzer = (*AnalyzeDivergenceUseCase)(nil)
 
 // AnalyzeDivergenceUseCase orchestrates divergence analysis.
 type AnalyzeDivergenceUseCase struct {
-	configRepository  appPort.ConfigRepository
-	marketDataGateway appPort.MarketDataGateway
+	configRepository  outbound.ConfigRepository
+	marketDataGateway outbound.MarketDataGateway
 	divergenceType    analysis.DivergenceType
 	logger            *zap.Logger
 }
 
 // NewAnalyzeDivergenceUseCase creates a new divergence analysis use case.
 func NewAnalyzeDivergenceUseCase(
-	configRepository appPort.ConfigRepository,
-	marketDataGateway appPort.MarketDataGateway,
+	configRepository outbound.ConfigRepository,
+	marketDataGateway outbound.MarketDataGateway,
 	divergenceType analysis.DivergenceType,
 	logger *zap.Logger,
 ) *AnalyzeDivergenceUseCase {

@@ -5,26 +5,27 @@ import (
 	"fmt"
 	"time"
 
-	appPort "bot-trade/application/port"
+	"bot-trade/application/port/inbound"
+	"bot-trade/application/port/outbound"
 	"bot-trade/domain/aggregate/market"
 	"bot-trade/domain/service/trendline"
 
 	"go.uber.org/zap"
 )
 
-var _ appPort.TrendlineAnalyzer = (*AnalyzeTrendlineUseCase)(nil)
+var _ inbound.TrendlineAnalyzer = (*AnalyzeTrendlineUseCase)(nil)
 
 // AnalyzeTrendlineUseCase orchestrates trendline-based signal analysis.
 type AnalyzeTrendlineUseCase struct {
-	configRepository  appPort.ConfigRepository
-	marketDataGateway appPort.MarketDataGateway
+	configRepository  outbound.ConfigRepository
+	marketDataGateway outbound.MarketDataGateway
 	logger            *zap.Logger
 }
 
 // NewAnalyzeTrendlineUseCase creates a new trendline analysis use case.
 func NewAnalyzeTrendlineUseCase(
-	configRepository appPort.ConfigRepository,
-	marketDataGateway appPort.MarketDataGateway,
+	configRepository outbound.ConfigRepository,
+	marketDataGateway outbound.MarketDataGateway,
 	logger *zap.Logger,
 ) *AnalyzeTrendlineUseCase {
 	return &AnalyzeTrendlineUseCase{

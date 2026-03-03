@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	appPort "bot-trade/application/port"
+	"bot-trade/application/port/inbound"
 	"bot-trade/domain/aggregate/config"
 	"bot-trade/domain/aggregate/market"
 	"bot-trade/presentation/http/mapper"
@@ -15,12 +15,12 @@ import (
 
 // AnalyzeHandler handles unified analysis HTTP requests.
 type AnalyzeHandler struct {
-	analyzer appPort.Analyzer
+	analyzer inbound.Analyzer
 	logger   *zap.Logger
 }
 
 // NewAnalyzeHandler creates a new unified analyze handler.
-func NewAnalyzeHandler(analyzer appPort.Analyzer, logger *zap.Logger) *AnalyzeHandler {
+func NewAnalyzeHandler(analyzer inbound.Analyzer, logger *zap.Logger) *AnalyzeHandler {
 	return &AnalyzeHandler{analyzer: analyzer, logger: logger}
 }
 
