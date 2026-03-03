@@ -2,8 +2,10 @@ package port
 
 import (
 	"context"
+	"time"
 
 	"bot-trade/domain/aggregate/config"
+	"bot-trade/domain/aggregate/stockmetrics"
 )
 
 // ConfigRepository defines the interface for TradingConfig persistence.
@@ -26,4 +28,16 @@ type ConfigRepository interface {
 	// Delete removes a configuration document by ID.
 	// Returns config.ErrConfigNotFound if document does not exist.
 	Delete(ctx context.Context, id string) error
+}
+
+// StockMetricsRepository defines the interface for stock metrics persistence.
+type StockMetricsRepository interface {
+	// Save persists the stock metrics to the database.
+	// Replaces any existing metrics (upsert with latest).
+	Save(ctx context.Context, metrics []*stockmetrics.StockMetrics, calculatedAt time.Time) error
+
+	// LoadLatest retrieves the most recent stock metrics from the database.
+	// Returns the metrics, the time they were calculated, and any error.
+	// Returns empty slice and zero time if no metrics exist.
+	LoadLatest(ctx context.Context) ([]*stockmetrics.StockMetrics, time.Time, error)
 }

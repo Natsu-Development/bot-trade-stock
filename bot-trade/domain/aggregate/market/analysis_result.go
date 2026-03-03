@@ -1,6 +1,10 @@
 package market
 
-import "time"
+import (
+	"time"
+
+	"bot-trade/domain/aggregate/analysis"
+)
 
 // CombinedAnalysisResult is the aggregate root for unified analysis results.
 // It combines bullish divergence, bearish divergence, and trendline signals
@@ -14,30 +18,11 @@ type CombinedAnalysisResult struct {
 	Interval         string
 	CurrentPrice     float64
 
-	// Individual analysis results
-	BullishDivergence *DivergenceResultWrapper
-	BearishDivergence *DivergenceResultWrapper
+	BullishDivergence *analysis.AnalysisResult
+	BearishDivergence *analysis.AnalysisResult
 	Signals           []TradingSignal
 	PriceHistory      []*PriceData
-	Trendlines        []TrendlineDisplay // All active trendlines for display with pre-calculated data points
-}
-
-// DivergenceResultWrapper wraps the analysis.AnalysisResult for JSON serialization.
-// This avoids circular import issues with the analysis package.
-type DivergenceResultWrapper struct {
-	DivergenceType   string
-	DivergenceFound  bool
-	CurrentPrice     float64
-	CurrentRSI       float64
-	Description      string
-	ProcessingTimeMs int64
-	StartDate        string
-	EndDate          string
-	Interval         string
-	RSIPeriod        int
-	Timestamp        time.Time
-	EarlySignal      bool
-	EarlyDescription string
+	Trendlines        []TrendlineDisplay
 }
 
 // NewCombinedAnalysisResult creates a new CombinedAnalysisResult.
@@ -59,63 +44,13 @@ func NewCombinedAnalysisResult(
 }
 
 // SetBullishDivergence sets the bullish divergence result.
-func (r *CombinedAnalysisResult) SetBullishDivergence(
-	divergenceType string,
-	divergenceFound bool,
-	currentPrice, currentRSI float64,
-	description string,
-	processingTimeMs int64,
-	startDate, endDate, interval string,
-	rsiPeriod int,
-	timestamp time.Time,
-	earlySignal bool,
-	earlyDescription string,
-) {
-	r.BullishDivergence = &DivergenceResultWrapper{
-		DivergenceType:   divergenceType,
-		DivergenceFound:  divergenceFound,
-		CurrentPrice:     currentPrice,
-		CurrentRSI:       currentRSI,
-		Description:      description,
-		ProcessingTimeMs: processingTimeMs,
-		StartDate:        startDate,
-		EndDate:          endDate,
-		Interval:         interval,
-		RSIPeriod:        rsiPeriod,
-		Timestamp:        timestamp,
-		EarlySignal:      earlySignal,
-		EarlyDescription: earlyDescription,
-	}
+func (r *CombinedAnalysisResult) SetBullishDivergence(result *analysis.AnalysisResult) {
+	r.BullishDivergence = result
 }
 
 // SetBearishDivergence sets the bearish divergence result.
-func (r *CombinedAnalysisResult) SetBearishDivergence(
-	divergenceType string,
-	divergenceFound bool,
-	currentPrice, currentRSI float64,
-	description string,
-	processingTimeMs int64,
-	startDate, endDate, interval string,
-	rsiPeriod int,
-	timestamp time.Time,
-	earlySignal bool,
-	earlyDescription string,
-) {
-	r.BearishDivergence = &DivergenceResultWrapper{
-		DivergenceType:   divergenceType,
-		DivergenceFound:  divergenceFound,
-		CurrentPrice:     currentPrice,
-		CurrentRSI:       currentRSI,
-		Description:      description,
-		ProcessingTimeMs: processingTimeMs,
-		StartDate:        startDate,
-		EndDate:          endDate,
-		Interval:         interval,
-		RSIPeriod:        rsiPeriod,
-		Timestamp:        timestamp,
-		EarlySignal:      earlySignal,
-		EarlyDescription: earlyDescription,
-	}
+func (r *CombinedAnalysisResult) SetBearishDivergence(result *analysis.AnalysisResult) {
+	r.BearishDivergence = result
 }
 
 // SetSignals sets the trading signals.
@@ -145,10 +80,10 @@ func (r *CombinedAnalysisResult) HasConfirmedSignals() bool {
 
 // HasAnyDivergence returns true if either bullish or bearish divergence was found.
 func (r *CombinedAnalysisResult) HasAnyDivergence() bool {
-	if r.BullishDivergence != nil && r.BullishDivergence.DivergenceFound {
+	if r.BullishDivergence != nil && r.BullishDivergence.HasDivergence() {
 		return true
 	}
-	if r.BearishDivergence != nil && r.BearishDivergence.DivergenceFound {
+	if r.BearishDivergence != nil && r.BearishDivergence.HasDivergence() {
 		return true
 	}
 	return false

@@ -2,14 +2,16 @@ package mongodb
 
 import (
 	"context"
+	"errors"
 
+	appPort "bot-trade/application/port"
 	"bot-trade/domain/aggregate/config"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-const collectionName = "bot_config"
+var _ appPort.ConfigRepository = (*ConfigRepository)(nil)
 
 // ConfigRepository implements the ConfigRepository interface using MongoDB.
 type ConfigRepository struct {
@@ -17,7 +19,8 @@ type ConfigRepository struct {
 }
 
 // NewConfigRepository creates a new MongoDB-based ConfigRepository.
-func NewConfigRepository(client *mongo.Client, databaseName string) *ConfigRepository {
+// collectionName specifies the MongoDB collection to use (e.g. "bot_config").
+func NewConfigRepository(client *mongo.Client, databaseName, collectionName string) *ConfigRepository {
 	collection := client.Database(databaseName).Collection(collectionName)
 	return &ConfigRepository{collection: collection}
 }
@@ -33,7 +36,7 @@ func (r *ConfigRepository) GetByID(ctx context.Context, id string) (*config.Trad
 	var cfg config.TradingConfig
 	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&cfg)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, config.ErrConfigNotFound
 		}
 		return nil, err

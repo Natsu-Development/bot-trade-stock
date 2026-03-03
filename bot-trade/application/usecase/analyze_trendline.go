@@ -8,7 +8,6 @@ import (
 	appPort "bot-trade/application/port"
 	"bot-trade/domain/aggregate/market"
 	"bot-trade/domain/service/trendline"
-	infraPort "bot-trade/infrastructure/port"
 
 	"go.uber.org/zap"
 )
@@ -17,15 +16,15 @@ var _ appPort.TrendlineAnalyzer = (*AnalyzeTrendlineUseCase)(nil)
 
 // AnalyzeTrendlineUseCase orchestrates trendline-based signal analysis.
 type AnalyzeTrendlineUseCase struct {
-	configRepository  infraPort.ConfigRepository
-	marketDataGateway infraPort.MarketDataGateway
+	configRepository  appPort.ConfigRepository
+	marketDataGateway appPort.MarketDataGateway
 	logger            *zap.Logger
 }
 
 // NewAnalyzeTrendlineUseCase creates a new trendline analysis use case.
 func NewAnalyzeTrendlineUseCase(
-	configRepository infraPort.ConfigRepository,
-	marketDataGateway infraPort.MarketDataGateway,
+	configRepository appPort.ConfigRepository,
+	marketDataGateway appPort.MarketDataGateway,
 	logger *zap.Logger,
 ) *AnalyzeTrendlineUseCase {
 	return &AnalyzeTrendlineUseCase{
@@ -35,11 +34,24 @@ func NewAnalyzeTrendlineUseCase(
 	}
 }
 
-// Execute performs trendline analysis for a single symbol.
+// Execute performs trendline analysis for a single symbol, fetching its own market data.
 func (uc *AnalyzeTrendlineUseCase) Execute(ctx context.Context, q market.MarketDataQuery, configID string) (*market.SignalAnalysisResult, error) {
+	priceHistory, err := uc.marketDataGateway.FetchStockData(ctx, q)
+	if err != nil {
+		uc.logger.Error("Failed to fetch stock data",
+			zap.String("symbol", q.Symbol),
+			zap.Error(err),
+		)
+		return nil, fmt.Errorf("failed to fetch stock data: %w", err)
+	}
+
+	return uc.ExecuteWithData(ctx, priceHistory, q, configID)
+}
+
+// ExecuteWithData performs trendline analysis using pre-fetched price data.
+func (uc *AnalyzeTrendlineUseCase) ExecuteWithData(ctx context.Context, priceHistory []*market.PriceData, q market.MarketDataQuery, configID string) (*market.SignalAnalysisResult, error) {
 	symbol := q.Symbol
 
-	// Load configuration from repository
 	tradingConfig, err := uc.configRepository.GetByID(ctx, configID)
 	if err != nil {
 		uc.logger.Error("Failed to load trading configuration",
@@ -55,18 +67,6 @@ func (uc *AnalyzeTrendlineUseCase) Execute(ctx context.Context, q market.MarketD
 	)
 	startTime := time.Now()
 
-	// Fetch market data
-	response, err := uc.marketDataGateway.FetchStockData(ctx, q)
-	if err != nil {
-		uc.logger.Error("Failed to fetch stock data",
-			zap.String("symbol", symbol),
-			zap.Error(err),
-		)
-		return nil, fmt.Errorf("failed to fetch stock data: %w", err)
-	}
-
-	priceHistory := response.PriceHistory
-
 	indicesRecent := tradingConfig.Divergence.IndicesRecent
 	if len(priceHistory) < indicesRecent {
 		uc.logger.Warn("Insufficient price data",
@@ -79,13 +79,7 @@ func (uc *AnalyzeTrendlineUseCase) Execute(ctx context.Context, q market.MarketD
 
 	recentPriceHistory := priceHistory[len(priceHistory)-indicesRecent:]
 
-	// Create trendline detector with Pine Script style configuration
-	// Pivot length of 9 matches the Pine Script default
-	detectorConfig, err := trendline.NewTrendlineConfig(9) // pivotLength
-	if err != nil {
-		return nil, fmt.Errorf("invalid trendline configuration: %w", err)
-	}
-	detector := trendline.NewDetector(detectorConfig)
+	detector := trendline.NewDetector(trendline.DefaultTrendlineConfig())
 
 	// Detect signals (RSI not needed for trendline-based signals)
 	signalsResult, err := detector.DetectSignals(recentPriceHistory)
@@ -101,7 +95,7 @@ func (uc *AnalyzeTrendlineUseCase) Execute(ctx context.Context, q market.MarketD
 	for _, bs := range signalsResult {
 		signal := market.NewTradingSignal(
 			symbol,
-			market.SignalType(bs.Type),
+			bs.Type,
 			bs.Price,
 			0, // no confidence score
 			bs.Message,
@@ -185,49 +179,6 @@ func (uc *AnalyzeTrendlineUseCase) DetectConfirmedSignals(ctx context.Context, q
 	}
 
 	return result.GetConfirmedSignals(), nil
-}
-
-// GetActiveTrendlines returns all active trendlines with pre-calculated data points for display.
-func (uc *AnalyzeTrendlineUseCase) GetActiveTrendlines(
-	ctx context.Context,
-	q market.MarketDataQuery,
-	configID string,
-) ([]market.TrendlineDisplay, error) {
-	// Load configuration from repository
-	tradingConfig, err := uc.configRepository.GetByID(ctx, configID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load trading configuration: %w", err)
-	}
-
-	// Fetch market data
-	response, err := uc.marketDataGateway.FetchStockData(ctx, q)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch stock data: %w", err)
-	}
-
-	priceHistory := response.PriceHistory
-	indicesRecent := tradingConfig.Divergence.IndicesRecent
-
-	if len(priceHistory) < indicesRecent {
-		return nil, fmt.Errorf("insufficient price data: required %d, got %d", indicesRecent, len(priceHistory))
-	}
-
-	recentPriceHistory := priceHistory[len(priceHistory)-indicesRecent:]
-
-	// Create trendline detector
-	detectorConfig, err := trendline.NewTrendlineConfig(9)
-	if err != nil {
-		return nil, fmt.Errorf("invalid trendline configuration: %w", err)
-	}
-	detector := trendline.NewDetector(detectorConfig)
-
-	// Get active trendlines
-	supportLines, resistanceLines := detector.GetActiveTrendlines(recentPriceHistory)
-
-	// Convert to TrendlineDisplay with pre-calculated data points
-	trendlines := uc.convertToTrendlineDisplays(supportLines, resistanceLines, recentPriceHistory)
-
-	return trendlines, nil
 }
 
 // convertToTrendlineDisplays converts backend trendlines to display format with pre-calculated data points.

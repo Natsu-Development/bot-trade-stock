@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
+	appPort "bot-trade/application/port"
 	"bot-trade/domain/aggregate/market"
 	"bot-trade/domain/aggregate/stockmetrics"
 	metricsService "bot-trade/domain/service/stockmetrics"
-	infraPort "bot-trade/infrastructure/port"
 
 	"go.uber.org/zap"
 )
@@ -23,13 +23,19 @@ import (
 // supportedExchanges defines the Vietnamese stock exchanges to analyze.
 var supportedExchanges = []string{"HOSE", "HNX", "UPCOM"}
 
+const (
+	stockMetricsDateRangeDays = 400 // Days of price history fetched per stock (covers ~1.5 trading years)
+	maxConcurrentStockFetches = 10  // Semaphore size limiting parallel VietCap requests
+	maxFailedLogSamples       = 20  // Maximum failed-stock entries shown in the refresh summary log
+)
+
 // ErrCacheNotReady is returned when the cache has not been populated yet.
 var ErrCacheNotReady = errors.New("stock metrics cache not ready, call Refresh first")
 
 // StockMetricsUseCase orchestrates the stock metrics calculation for all stocks.
 type StockMetricsUseCase struct {
-	marketDataGateway infraPort.MarketDataGateway
-	repository        infraPort.StockMetricsRepository
+	marketDataGateway appPort.MarketDataGateway
+	repository        appPort.StockMetricsRepository
 	calculator        *metricsService.Calculator
 	logger            *zap.Logger
 
@@ -41,8 +47,8 @@ type StockMetricsUseCase struct {
 
 // NewStockMetricsUseCase creates a new stock metrics use case.
 func NewStockMetricsUseCase(
-	marketDataGateway infraPort.MarketDataGateway,
-	repository infraPort.StockMetricsRepository,
+	marketDataGateway appPort.MarketDataGateway,
+	repository appPort.StockMetricsRepository,
 	logger *zap.Logger,
 ) *StockMetricsUseCase {
 	return &StockMetricsUseCase{
@@ -75,7 +81,7 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*stockmetrics.Stock
 
 	// Calculate date range for 252 trading days
 	endDate := time.Now().Format("2006-01-02")
-	startDate := time.Now().AddDate(0, 0, -400).Format("2006-01-02") // 400 days back
+	startDate := time.Now().AddDate(0, 0, -stockMetricsDateRangeDays).Format("2006-01-02")
 
 	// Step 2: Fetch price history for each stock concurrently with retry and failure tracking
 	var (
@@ -83,7 +89,7 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*stockmetrics.Stock
 		failedSymbols = make(map[string]string) // symbol -> error reason
 		mu            sync.Mutex
 		wg            sync.WaitGroup
-		semaphore     = make(chan struct{}, 10) // Limit concurrent requests
+		semaphore     = make(chan struct{}, maxConcurrentStockFetches)
 	)
 
 	for _, stock := range allStocks {
@@ -233,23 +239,22 @@ func (uc *StockMetricsUseCase) fetchAndCalculate(ctx context.Context, symbol, ex
 		return nil, fmt.Errorf("invalid query: %w", err)
 	}
 
-	response, err := uc.marketDataGateway.FetchStockData(ctx, query)
+	priceHistory, err := uc.marketDataGateway.FetchStockData(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("fetch failed: %w", err)
 	}
 
-	if len(response.PriceHistory) == 0 {
-		return nil, nil // No price history available
+	if len(priceHistory) == 0 {
+		return nil, nil
 	}
 
-	// Calculate metrics for this stock (returns nil if insufficient data)
-	metrics := uc.calculator.CalculateForStock(symbol, exchange, response.PriceHistory)
+	metrics := uc.calculator.CalculateForStock(symbol, exchange, priceHistory)
 
 	if metrics != nil {
 		uc.logger.Debug("Calculated metrics for stock",
 			zap.String("symbol", symbol),
 			zap.String("exchange", exchange),
-			zap.Int("data_points", len(response.PriceHistory)),
+			zap.Int("data_points", len(priceHistory)),
 		)
 	}
 
@@ -260,10 +265,9 @@ func (uc *StockMetricsUseCase) fetchAndCalculate(ctx context.Context, symbol, ex
 func (uc *StockMetricsUseCase) logRefreshSummary(totalStocks, successCount int, failedSymbols map[string]string, duration time.Duration) {
 	failedCount := len(failedSymbols)
 
-	// Build failed stocks summary (limit to first 20 for readability)
 	failedList := make([]string, 0, len(failedSymbols))
 	for sym, reason := range failedSymbols {
-		if len(failedList) < 20 {
+		if len(failedList) < maxFailedLogSamples {
 			failedList = append(failedList, fmt.Sprintf("%s: %s", sym, reason))
 		}
 	}
@@ -282,9 +286,9 @@ func (uc *StockMetricsUseCase) logRefreshSummary(totalStocks, successCount int, 
 			zap.Strings("failed_samples", failedList),
 		)
 
-		if failedCount > 20 {
+		if failedCount > maxFailedLogSamples {
 			uc.logger.Warn("Additional failed stocks not shown",
-				zap.Int("hidden_count", failedCount-20),
+				zap.Int("hidden_count", failedCount-maxFailedLogSamples),
 			)
 		}
 	}
@@ -303,15 +307,14 @@ func (uc *StockMetricsUseCase) fetchAllExchangeStocks(ctx context.Context) ([]ma
 
 	resultCh := make(chan exchangeResult, len(supportedExchanges))
 
-	// Fetch from all exchanges concurrently
 	for _, exchange := range supportedExchanges {
 		go func(ex string) {
-			resp, err := uc.marketDataGateway.ListAllStocks(ctx, ex)
+			stocks, err := uc.marketDataGateway.ListAllStocks(ctx, ex)
 			if err != nil {
 				resultCh <- exchangeResult{exchange: ex, err: err}
 				return
 			}
-			resultCh <- exchangeResult{exchange: ex, stocks: resp.Stocks}
+			resultCh <- exchangeResult{exchange: ex, stocks: stocks}
 		}(exchange)
 	}
 

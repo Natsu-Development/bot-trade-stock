@@ -1,12 +1,21 @@
 package trendline
 
-import "bot-trade/domain/aggregate/market"
+import (
+	"sort"
 
-// findPricePivotHighs detects pivot highs based on price.
-// A pivot high is confirmed when a bar's high is higher than all bars
-// in the lookback windows to both left and right.
-// Uses Pine Script style: single pivotLength for both left and right.
-func (d *Detector) findPricePivotHighs(prices []*market.PriceData, pivotLength int) []PricePivot {
+	"bot-trade/domain/aggregate/market"
+)
+
+// findPricePivots is the shared implementation for pivot detection.
+// getField selects which price field to compare (High for highs, Low for lows).
+// exceeds returns true when a neighbor's value disqualifies the center as a pivot
+// (e.g. neighbor >= center for highs, neighbor <= center for lows).
+func (d *Detector) findPricePivots(
+	prices []*market.PriceData,
+	pivotLength int,
+	getField func(*market.PriceData) float64,
+	exceeds func(neighbor, center float64) bool,
+) []PricePivot {
 	minRequired := pivotLength*2 + 1
 	if len(prices) < minRequired {
 		return nil
@@ -14,38 +23,44 @@ func (d *Detector) findPricePivotHighs(prices []*market.PriceData, pivotLength i
 
 	var pivots []PricePivot
 	for i := pivotLength; i < len(prices)-pivotLength; i++ {
-		centerHigh := prices[i].High
-		centerLow := prices[i].Low
-		centerClose := prices[i].Close
+		centerVal := getField(prices[i])
+		isExtreme := true
 
-		isHigh := true
-
-		// Check left: center must be higher than all left highs
-		for j := i - pivotLength; j < i && isHigh; j++ {
-			if prices[j].High >= centerHigh {
-				isHigh = false
+		for j := i - pivotLength; j < i && isExtreme; j++ {
+			if exceeds(getField(prices[j]), centerVal) {
+				isExtreme = false
 			}
 		}
 
-		// Check right: center must be higher than all right highs
-		for j := i + 1; j <= i+pivotLength && isHigh; j++ {
-			if prices[j].High >= centerHigh {
-				isHigh = false
+		for j := i + 1; j <= i+pivotLength && isExtreme; j++ {
+			if exceeds(getField(prices[j]), centerVal) {
+				isExtreme = false
 			}
 		}
 
-		if isHigh {
+		if isExtreme {
 			pivots = append(pivots, PricePivot{
 				Index: i,
-				High:  centerHigh,
-				Low:   centerLow,
-				Close: centerClose,
+				High:  prices[i].High,
+				Low:   prices[i].Low,
+				Close: prices[i].Close,
 				Date:  prices[i].Date,
 			})
 		}
 	}
 
 	return pivots
+}
+
+// findPricePivotHighs detects pivot highs based on price.
+// A pivot high is confirmed when a bar's high is higher than all bars
+// in the lookback windows to both left and right.
+// Uses Pine Script style: single pivotLength for both left and right.
+func (d *Detector) findPricePivotHighs(prices []*market.PriceData, pivotLength int) []PricePivot {
+	return d.findPricePivots(prices, pivotLength,
+		func(p *market.PriceData) float64 { return p.High },
+		func(neighbor, center float64) bool { return neighbor >= center },
+	)
 }
 
 // findPricePivotLows detects pivot lows based on price.
@@ -53,56 +68,17 @@ func (d *Detector) findPricePivotHighs(prices []*market.PriceData, pivotLength i
 // in the lookback windows to both left and right.
 // Uses Pine Script style: single pivotLength for both left and right.
 func (d *Detector) findPricePivotLows(prices []*market.PriceData, pivotLength int) []PricePivot {
-	minRequired := pivotLength*2 + 1
-	if len(prices) < minRequired {
-		return nil
-	}
-
-	var pivots []PricePivot
-	for i := pivotLength; i < len(prices)-pivotLength; i++ {
-		centerHigh := prices[i].High
-		centerLow := prices[i].Low
-		centerClose := prices[i].Close
-
-		isLow := true
-
-		// Check left: center must be lower than all left lows
-		for j := i - pivotLength; j < i && isLow; j++ {
-			if prices[j].Low <= centerLow {
-				isLow = false
-			}
-		}
-
-		// Check right: center must be lower than all right lows
-		for j := i + 1; j <= i+pivotLength && isLow; j++ {
-			if prices[j].Low <= centerLow {
-				isLow = false
-			}
-		}
-
-		if isLow {
-			pivots = append(pivots, PricePivot{
-				Index: i,
-				High:  centerHigh,
-				Low:   centerLow,
-				Close: centerClose,
-				Date:  prices[i].Date,
-			})
-		}
-	}
-
-	return pivots
+	return d.findPricePivots(prices, pivotLength,
+		func(p *market.PriceData) float64 { return p.Low },
+		func(neighbor, center float64) bool { return neighbor <= center },
+	)
 }
 
 // sortByIndex sorts pivots by index in ascending order.
 func sortByIndex(pivots []PricePivot) {
-	for i := 0; i < len(pivots)-1; i++ {
-		for j := i + 1; j < len(pivots); j++ {
-			if pivots[i].Index > pivots[j].Index {
-				pivots[i], pivots[j] = pivots[j], pivots[i]
-			}
-		}
-	}
+	sort.Slice(pivots, func(i, j int) bool {
+		return pivots[i].Index < pivots[j].Index
+	})
 }
 
 // createUptrendLinesPineStyle creates uptrend support lines using Pine Script logic.

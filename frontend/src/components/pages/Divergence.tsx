@@ -8,6 +8,9 @@ import { SignalCard } from '../features/SignalCard'
 import { PriceChart } from '../features/PriceChart'
 import { api, setConfigId, getConfigId, type ApiAnalysisResult } from '../../lib/api'
 
+const CONFIDENCE_HIGH = 85 // Confidence % assigned when a divergence is confirmed
+const CONFIDENCE_LOW = 10  // Confidence % assigned when no divergence is found
+
 type SignalType = 'all' | 'bounce' | 'breakout' | 'confirmed' | 'watching'
 
 const SIGNAL_TYPE_OPTIONS: { value: SignalType; label: string; color: string }[] = [
@@ -83,7 +86,7 @@ export function Divergence() {
     const { divergence } = bullishData
     return {
       currentRsi: divergence.current_rsi,
-      confidence: divergence.divergence_found ? 85 : 10,
+      confidence: divergence.divergence_found ? CONFIDENCE_HIGH : CONFIDENCE_LOW,
       divergenceType: divergence.type || 'N/A',
       strength: divergence.divergence_found ? 'High' : 'None',
     }
@@ -94,7 +97,7 @@ export function Divergence() {
     const { divergence } = bearishData
     return {
       currentRsi: divergence.current_rsi,
-      confidence: divergence.divergence_found ? 85 : 10,
+      confidence: divergence.divergence_found ? CONFIDENCE_HIGH : CONFIDENCE_LOW,
       divergenceType: divergence.type || 'N/A',
       strength: divergence.divergence_found ? 'High' : 'None',
     }

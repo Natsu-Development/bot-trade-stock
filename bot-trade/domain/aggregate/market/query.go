@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+const (
+	defaultDateRangeDays = 300 // Default lookback window when start_date is omitted
+	maxDateRangeDays     = 400 // Hard cap to prevent excessively large requests
+)
+
 // MarketDataQuery is the aggregate root for market data query parameters.
 type MarketDataQuery struct {
 	Symbol    string
@@ -53,7 +58,7 @@ func validateAndNormalizeDateRange(startDate, endDate string) (string, string, e
 
 	var parsedStartDate time.Time
 	if startDate == "" {
-		parsedStartDate = parsedEndDate.AddDate(0, 0, -300)
+		parsedStartDate = parsedEndDate.AddDate(0, 0, -defaultDateRangeDays)
 		startDate = parsedStartDate.Format("2006-01-02")
 	} else {
 		parsedStartDate, err = time.Parse("2006-01-02", startDate)
@@ -71,9 +76,8 @@ func validateAndNormalizeDateRange(startDate, endDate string) (string, string, e
 		return "", "", errors.New("end_date cannot be in the future")
 	}
 
-	maxDays := 400
-	if parsedEndDate.Sub(parsedStartDate) > time.Duration(maxDays)*24*time.Hour {
-		return "", "", fmt.Errorf("date range cannot exceed %d days", maxDays)
+	if parsedEndDate.Sub(parsedStartDate) > time.Duration(maxDateRangeDays)*24*time.Hour {
+		return "", "", fmt.Errorf("date range cannot exceed %d days", maxDateRangeDays)
 	}
 
 	return startDate, endDate, nil

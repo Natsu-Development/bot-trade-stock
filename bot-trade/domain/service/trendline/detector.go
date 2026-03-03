@@ -1,10 +1,13 @@
 package trendline
 
 import (
-	"fmt"
-
 	"bot-trade/domain/aggregate/market"
+	"fmt"
 )
+
+// trendlineTolerance is the fractional band used when comparing price to a trendline.
+// Prices within ±0.1 % of the trendline value are treated as "on the line".
+const trendlineTolerance = 0.001
 
 // Detector detects trendline-based trading signals using Pine Script logic.
 type Detector struct {
@@ -104,22 +107,18 @@ func (d *Detector) detectSupportSignal(line Trendline, currentIndex int, current
 		Time:           date,
 	}
 
-	// Use a small tolerance for floating point comparison
-	const tolerance = 0.001
-
 	switch {
-	case currentPrice > trendlinePrice*(1+tolerance):
+	case currentPrice > trendlinePrice*(1+trendlineTolerance):
 		// Price above support - bounce confirmed
-		signal.Type = BounceConfirmed
+		signal.Type = market.BounceConfirmed
 		signal.Message = fmt.Sprintf(
 			"Bounced off uptrend support at %.2f. Price: %.2f",
 			trendlinePrice, currentPrice,
 		)
 		return signal
 
-	case currentPrice >= trendlinePrice*(1-tolerance):
-		// Price at or below support - potential bounce
-		signal.Type = BouncePotential
+	case currentPrice >= trendlinePrice*(1-trendlineTolerance):
+		signal.Type = market.BouncePotential
 		signal.Message = fmt.Sprintf(
 			"At uptrend support %.2f. Price: %.2f",
 			trendlinePrice, currentPrice,
@@ -145,22 +144,18 @@ func (d *Detector) detectResistanceSignal(line Trendline, currentIndex int, curr
 		Time:           date,
 	}
 
-	// Use a small tolerance for floating point comparison
-	const tolerance = 0.001
-
 	switch {
-	case currentPrice > trendlinePrice*(1+tolerance):
+	case currentPrice > trendlinePrice*(1+trendlineTolerance):
 		// Price broke above resistance - confirmed breakout
-		signal.Type = BreakoutConfirmed
+		signal.Type = market.BreakoutConfirmed
 		signal.Message = fmt.Sprintf(
 			"Breakout above downtrend resistance at %.2f. Price: %.2f",
 			trendlinePrice, currentPrice,
 		)
 		return signal
 
-	case currentPrice <= trendlinePrice*(1+tolerance):
-		// Price at or below resistance - potential breakout
-		signal.Type = BreakoutPotential
+	case currentPrice <= trendlinePrice*(1+trendlineTolerance):
+		signal.Type = market.BreakoutPotential
 		signal.Message = fmt.Sprintf(
 			"At downtrend resistance %.2f. Price: %.2f",
 			trendlinePrice, currentPrice,
@@ -200,14 +195,12 @@ func (d *Detector) detectHistoricalCrosses(lines []Trendline, prices []*market.P
 			bar := prices[j]
 			linePrice := d.getTrendlinePrice(*line, j)
 
-			// Determine which side of the line price is on
-			// Use a small tolerance for "on the line"
-			const tolerance = 0.001
-			var currentSide int
+		// Determine which side of the line price is on
+		var currentSide int
 
-			if bar.Close > linePrice*(1+tolerance) {
-				currentSide = 1 // above
-			} else if bar.Close < linePrice*(1-tolerance) {
+		if bar.Close > linePrice*(1+trendlineTolerance) {
+			currentSide = 1 // above
+		} else if bar.Close < linePrice*(1-trendlineTolerance) {
 				currentSide = -1 // below
 			} else {
 				currentSide = 0 // on the line
@@ -250,17 +243,17 @@ func (d *Detector) detectHistoricalCrosses(lines []Trendline, prices []*market.P
 
 // createCrossSignal creates a signal for a historical cross event.
 func (d *Detector) createCrossSignal(line Trendline, cross CrossEvent) *BullishSignal {
-	signalType := NoSignal
+	signalType := market.NoSignalType
 	message := ""
 
 	if line.Type == UptrendSupport {
-		signalType = BouncePotential
+		signalType = market.BouncePotential
 		message = fmt.Sprintf(
 			"Price crossed below uptrend support at %.2f on %s. Line from %.2f to %.2f",
 			cross.Price, cross.Date, line.StartPivot.Low, line.EndPivot.Low,
 		)
 	} else {
-		signalType = BreakoutConfirmed
+		signalType = market.BreakoutConfirmed
 		message = fmt.Sprintf(
 			"Price crossed above downtrend resistance at %.2f on %s. Line from %.2f to %.2f",
 			cross.Price, cross.Date, line.StartPivot.High, line.EndPivot.High,

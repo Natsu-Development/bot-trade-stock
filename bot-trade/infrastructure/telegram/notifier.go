@@ -6,11 +6,16 @@ import (
 	"net/url"
 	"time"
 
+	appPort "bot-trade/application/port"
 	"bot-trade/domain/aggregate/analysis"
-	"bot-trade/infrastructure/port"
 )
 
-var _ port.Notifier = (*Notifier)(nil)
+const (
+	telegramAPIBaseURL    = "https://api.telegram.org"
+	telegramClientTimeout = 10 * time.Second
+)
+
+var _ appPort.Notifier = (*Notifier)(nil)
 
 // Notifier sends Telegram notifications.
 type Notifier struct {
@@ -21,7 +26,7 @@ type Notifier struct {
 func NewNotifier() *Notifier {
 	return &Notifier{
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: telegramClientTimeout,
 		},
 	}
 }
@@ -32,7 +37,7 @@ func (n *Notifier) SendMessage(botToken, chatID, message string) error {
 		return fmt.Errorf("telegram bot token or chat ID not configured")
 	}
 
-	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", botToken)
+	apiURL := fmt.Sprintf("%s/bot%s/sendMessage", telegramAPIBaseURL, botToken)
 
 	data := url.Values{}
 	data.Set("chat_id", chatID)

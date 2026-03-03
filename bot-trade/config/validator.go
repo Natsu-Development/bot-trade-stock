@@ -73,29 +73,6 @@ func getBoolEnv(key string, errors *[]string) bool {
 	return boolValue
 }
 
-func getSymbolListEnv(key string, errors *[]string) []string {
-	value := os.Getenv(key)
-	if value == "" {
-		*errors = append(*errors, fmt.Sprintf("- %s is required", key))
-		return nil
-	}
-
-	symbols := strings.Split(value, ",")
-	var cleanSymbols []string
-	for _, symbol := range symbols {
-		if trimmed := strings.TrimSpace(symbol); trimmed != "" {
-			cleanSymbols = append(cleanSymbols, trimmed)
-		}
-	}
-
-	if len(cleanSymbols) == 0 {
-		*errors = append(*errors, fmt.Sprintf("- %s must contain at least one valid symbol", key))
-		return nil
-	}
-
-	return cleanSymbols
-}
-
 func getLogLevelEnv(key string, errors *[]string) string {
 	validLevels := []string{"debug", "info", "warn", "error"}
 	value := strings.ToLower(os.Getenv(key))

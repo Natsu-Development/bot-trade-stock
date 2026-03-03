@@ -1,12 +1,15 @@
 package telegram
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // FormatDivergenceAlert formats a divergence alert as HTML for Telegram.
 // This keeps Telegram-specific formatting in the infrastructure layer.
 func FormatDivergenceAlert(divergenceType, interval, symbol, description string) string {
 	icon := "🔴"
-	if divergenceType == "Bullish" || divergenceType == "bullish" {
+	if strings.EqualFold(divergenceType, "bullish") {
 		icon = "🟢"
 	}
 

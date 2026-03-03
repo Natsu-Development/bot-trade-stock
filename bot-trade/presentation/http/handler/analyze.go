@@ -10,16 +10,18 @@ import (
 	"bot-trade/presentation/http/mapper"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // AnalyzeHandler handles unified analysis HTTP requests.
 type AnalyzeHandler struct {
 	analyzer appPort.Analyzer
+	logger   *zap.Logger
 }
 
 // NewAnalyzeHandler creates a new unified analyze handler.
-func NewAnalyzeHandler(analyzer appPort.Analyzer) *AnalyzeHandler {
-	return &AnalyzeHandler{analyzer: analyzer}
+func NewAnalyzeHandler(analyzer appPort.Analyzer, logger *zap.Logger) *AnalyzeHandler {
+	return &AnalyzeHandler{analyzer: analyzer, logger: logger}
 }
 
 // Analyze handles GET /analyze/:symbol request.
@@ -53,6 +55,11 @@ func (h *AnalyzeHandler) Analyze(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "configuration not found"})
 			return
 		}
+		h.logger.Error("Analysis failed",
+			zap.String("symbol", query.Symbol),
+			zap.String("configID", configID),
+			zap.Error(err),
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}

@@ -2,8 +2,10 @@ package mongodb
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	appPort "bot-trade/application/port"
 	"bot-trade/domain/aggregate/stockmetrics"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -11,7 +13,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-const stockMetricsCollectionName = "stock_metrics"
+var _ appPort.StockMetricsRepository = (*StockMetricsRepository)(nil)
+
 const stockMetricsDocID = "latest"
 
 // stockMetricsDocument represents the MongoDB document structure for stock metrics.
@@ -27,8 +30,9 @@ type StockMetricsRepository struct {
 }
 
 // NewStockMetricsRepository creates a new MongoDB-based StockMetricsRepository.
-func NewStockMetricsRepository(client *mongo.Client, databaseName string) *StockMetricsRepository {
-	collection := client.Database(databaseName).Collection(stockMetricsCollectionName)
+// collectionName specifies the MongoDB collection to use (e.g. "stock_metrics").
+func NewStockMetricsRepository(client *mongo.Client, databaseName, collectionName string) *StockMetricsRepository {
+	collection := client.Database(databaseName).Collection(collectionName)
 	return &StockMetricsRepository{collection: collection}
 }
 
@@ -52,7 +56,7 @@ func (r *StockMetricsRepository) LoadLatest(ctx context.Context) ([]*stockmetric
 	var doc stockMetricsDocument
 	err := r.collection.FindOne(ctx, bson.M{"_id": stockMetricsDocID}).Decode(&doc)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, time.Time{}, nil
 		}
 		return nil, time.Time{}, err

@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	appPort "bot-trade/application/port"
 	"bot-trade/domain/aggregate/market"
-	infraPort "bot-trade/infrastructure/port"
 )
 
 const (
@@ -54,7 +54,7 @@ type VietCapGateway struct {
 }
 
 // Verify interface compliance at compile time.
-var _ infraPort.MarketDataGateway = (*VietCapGateway)(nil)
+var _ appPort.MarketDataGateway = (*VietCapGateway)(nil)
 
 // NewVietCapGateway creates a new VietCap market data gateway.
 // httpClient is the HTTP client to use for requests (should have retry transport configured).
@@ -95,7 +95,7 @@ func NewVietCapGateway(httpClient *http.Client, requestsPerMinute int) *VietCapG
 func (g *VietCapGateway) FetchStockData(
 	ctx context.Context,
 	q market.MarketDataQuery,
-) (*market.StockDataResponse, error) {
+) ([]*market.PriceData, error) {
 	// Wait for rate limit token
 	select {
 	case <-g.rateLimiter:
@@ -133,12 +133,7 @@ func (g *VietCapGateway) FetchStockData(
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set required headers
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Origin", "https://trading.vietcap.com.vn")
-	req.Header.Set("Referer", "https://trading.vietcap.com.vn/")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36")
+	g.setDefaultHeaders(req)
 
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
@@ -162,21 +157,11 @@ func (g *VietCapGateway) FetchStockData(
 		return nil, fmt.Errorf("failed to parse OHLCV response: %w", err)
 	}
 
-	// Extract the first item (we only request one symbol)
 	if len(ohlcItems) == 0 {
-		return &market.StockDataResponse{
-			Symbol:       q.Symbol,
-			PriceHistory: nil,
-		}, nil
+		return nil, nil
 	}
 
-	// Transform VietCap data to domain PriceData
-	priceHistory := g.transformOHLCV(ohlcItems[0])
-
-	return &market.StockDataResponse{
-		Symbol:       q.Symbol,
-		PriceHistory: priceHistory,
-	}, nil
+	return g.transformOHLCV(ohlcItems[0]), nil
 }
 
 // ListAllStocks fetches all stocks from VietCap Trading API.
@@ -184,7 +169,7 @@ func (g *VietCapGateway) FetchStockData(
 func (g *VietCapGateway) ListAllStocks(
 	ctx context.Context,
 	exchange string,
-) (*market.ListStocksResponse, error) {
+) ([]market.StockInfo, error) {
 	// Wait for rate limit token
 	select {
 	case <-g.rateLimiter:
@@ -199,12 +184,7 @@ func (g *VietCapGateway) ListAllStocks(
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set required headers
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Origin", "https://trading.vietcap.com.vn")
-	req.Header.Set("Referer", "https://trading.vietcap.com.vn/")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36")
+	g.setDefaultHeaders(req)
 
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
@@ -228,7 +208,6 @@ func (g *VietCapGateway) ListAllStocks(
 		return nil, fmt.Errorf("failed to parse stock list response: %w", err)
 	}
 
-	// Transform to domain types
 	stocks := make([]market.StockInfo, 0, len(stockItems))
 	for _, s := range stockItems {
 		stocks = append(stocks, market.StockInfo{
@@ -237,10 +216,16 @@ func (g *VietCapGateway) ListAllStocks(
 		})
 	}
 
-	return &market.ListStocksResponse{
-		Stocks:     stocks,
-		TotalCount: len(stocks),
-	}, nil
+	return stocks, nil
+}
+
+// setDefaultHeaders sets the required HTTP headers for VietCap API requests.
+func (g *VietCapGateway) setDefaultHeaders(req *http.Request) {
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Origin", "https://trading.vietcap.com.vn")
+	req.Header.Set("Referer", "https://trading.vietcap.com.vn/")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36")
 }
 
 // transformOHLCV converts VietCap OHLC item to domain PriceData slice.

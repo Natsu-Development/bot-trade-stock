@@ -8,7 +8,6 @@ import (
 	appPort "bot-trade/application/port"
 	"bot-trade/domain/aggregate/analysis"
 	"bot-trade/domain/aggregate/market"
-	infraPort "bot-trade/infrastructure/port"
 
 	"go.uber.org/zap"
 )
@@ -19,8 +18,8 @@ var _ appPort.Analyzer = (*AnalyzeUseCase)(nil)
 // in a single unified use case. This optimizes performance by fetching market data once
 // and sharing it across all analyses.
 type AnalyzeUseCase struct {
-	configRepository  infraPort.ConfigRepository
-	marketDataGateway infraPort.MarketDataGateway
+	configRepository  appPort.ConfigRepository
+	marketDataGateway appPort.MarketDataGateway
 	bullishAnalyzer   appPort.DivergenceAnalyzer
 	bearishAnalyzer   appPort.DivergenceAnalyzer
 	trendlineAnalyzer appPort.TrendlineAnalyzer
@@ -29,8 +28,8 @@ type AnalyzeUseCase struct {
 
 // NewAnalyzeUseCase creates a new unified analysis use case.
 func NewAnalyzeUseCase(
-	configRepository infraPort.ConfigRepository,
-	marketDataGateway infraPort.MarketDataGateway,
+	configRepository appPort.ConfigRepository,
+	marketDataGateway appPort.MarketDataGateway,
 	bullishAnalyzer appPort.DivergenceAnalyzer,
 	bearishAnalyzer appPort.DivergenceAnalyzer,
 	trendlineAnalyzer appPort.TrendlineAnalyzer,
@@ -47,11 +46,10 @@ func NewAnalyzeUseCase(
 }
 
 // Execute performs all analysis types for a single symbol.
-// This includes bullish divergence, bearish divergence, and trendline signals.
+// Fetches market data once and shares it across all sub-analyzers to avoid redundant API calls.
 func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery, configID string) (*market.CombinedAnalysisResult, error) {
 	symbol := q.Symbol
 
-	// Load configuration from repository
 	_, err := uc.configRepository.GetByID(ctx, configID)
 	if err != nil {
 		uc.logger.Error("Failed to load trading configuration",
@@ -67,7 +65,16 @@ func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery,
 	)
 	startTime := time.Now()
 
-	// Run all analyses in parallel using goroutines
+	// Fetch market data once for all sub-analyzers
+	priceHistory, err := uc.marketDataGateway.FetchStockData(ctx, q)
+	if err != nil {
+		uc.logger.Error("Failed to fetch stock data",
+			zap.String("symbol", symbol),
+			zap.Error(err),
+		)
+		return nil, fmt.Errorf("failed to fetch stock data: %w", err)
+	}
+
 	type resultPair struct {
 		result *analysis.AnalysisResult
 		err    error
@@ -82,30 +89,25 @@ func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery,
 	bearishCh := make(chan resultPair, 1)
 	signalsCh := make(chan signalPair, 1)
 
-	// Run bullish divergence analysis
 	go func() {
-		result, err := uc.bullishAnalyzer.Execute(ctx, q, configID)
+		result, err := uc.bullishAnalyzer.ExecuteWithData(ctx, priceHistory, q, configID)
 		bullishCh <- resultPair{result, err}
 	}()
 
-	// Run bearish divergence analysis
 	go func() {
-		result, err := uc.bearishAnalyzer.Execute(ctx, q, configID)
+		result, err := uc.bearishAnalyzer.ExecuteWithData(ctx, priceHistory, q, configID)
 		bearishCh <- resultPair{result, err}
 	}()
 
-	// Run trendline signal analysis
 	go func() {
-		result, err := uc.trendlineAnalyzer.Execute(ctx, q, configID)
+		result, err := uc.trendlineAnalyzer.ExecuteWithData(ctx, priceHistory, q, configID)
 		signalsCh <- signalPair{result, err}
 	}()
 
-	// Collect results
 	bullishResult := <-bullishCh
 	bearishResult := <-bearishCh
 	signalsResult := <-signalsCh
 
-	// Check for errors
 	if bullishResult.err != nil {
 		return nil, fmt.Errorf("bullish divergence analysis failed: %w", bullishResult.err)
 	}
@@ -128,42 +130,11 @@ func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery,
 		signalsResult.result.CurrentPrice,
 	)
 
-	// Set bullish divergence result
 	if bullishResult.result != nil {
-		combinedResult.SetBullishDivergence(
-			bullishResult.result.DivergenceType.String(),
-			bullishResult.result.DivergenceFound,
-			bullishResult.result.CurrentPrice,
-			bullishResult.result.CurrentRSI,
-			bullishResult.result.Description,
-			bullishResult.result.ProcessingTimeMs,
-			bullishResult.result.StartDate,
-			bullishResult.result.EndDate,
-			bullishResult.result.Interval,
-			bullishResult.result.RSIPeriod,
-			bullishResult.result.Timestamp,
-			bullishResult.result.EarlySignalDetected,
-			bullishResult.result.EarlyDescription,
-		)
+		combinedResult.SetBullishDivergence(bullishResult.result)
 	}
-
-	// Set bearish divergence result
 	if bearishResult.result != nil {
-		combinedResult.SetBearishDivergence(
-			bearishResult.result.DivergenceType.String(),
-			bearishResult.result.DivergenceFound,
-			bearishResult.result.CurrentPrice,
-			bearishResult.result.CurrentRSI,
-			bearishResult.result.Description,
-			bearishResult.result.ProcessingTimeMs,
-			bearishResult.result.StartDate,
-			bearishResult.result.EndDate,
-			bearishResult.result.Interval,
-			bearishResult.result.RSIPeriod,
-			bearishResult.result.Timestamp,
-			bearishResult.result.EarlySignalDetected,
-			bearishResult.result.EarlyDescription,
-		)
+		combinedResult.SetBearishDivergence(bearishResult.result)
 	}
 
 	// Set signals
@@ -176,8 +147,8 @@ func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery,
 	uc.logger.Info("Unified analysis completed",
 		zap.String("symbol", symbol),
 		zap.Duration("duration", processingTime),
-		zap.Bool("bullish_divergence", combinedResult.BullishDivergence != nil && combinedResult.BullishDivergence.DivergenceFound),
-		zap.Bool("bearish_divergence", combinedResult.BearishDivergence != nil && combinedResult.BearishDivergence.DivergenceFound),
+		zap.Bool("bullish_divergence", combinedResult.BullishDivergence != nil && combinedResult.BullishDivergence.HasDivergence()),
+		zap.Bool("bearish_divergence", combinedResult.BearishDivergence != nil && combinedResult.BearishDivergence.HasDivergence()),
 		zap.Int("signals_count", len(combinedResult.Signals)),
 	)
 

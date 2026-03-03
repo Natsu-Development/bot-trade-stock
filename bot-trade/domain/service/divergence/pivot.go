@@ -10,8 +10,13 @@ type pivot struct {
 	date  string
 }
 
-// findPivotHighs detects RSI pivot highs (peaks).
-func (d *Detector) findPivotHighs(data []market.PriceDataWithRSI) []pivot {
+// pivotComparator returns true when a neighbor's RSI value disqualifies the
+// center bar as a pivot (e.g. neighbor >= center for highs, <= center for lows).
+type pivotComparator func(neighbor, center float64) bool
+
+// findPivots is the shared implementation for RSI pivot detection.
+// cmp defines the extremity condition for highs vs lows.
+func (d *Detector) findPivots(data []market.PriceDataWithRSI, cmp pivotComparator) []pivot {
 	minRequired := d.config.LookbackLeft + d.config.LookbackRight + 1
 	if len(data) < minRequired {
 		return nil
@@ -23,24 +28,22 @@ func (d *Detector) findPivotHighs(data []market.PriceDataWithRSI) []pivot {
 			continue
 		}
 
-		isHigh := true
 		centerRSI := data[i].RSI
+		isExtreme := true
 
-		// Check left: center must be higher than all left values
-		for j := i - d.config.LookbackLeft; j < i && isHigh; j++ {
-			if data[j].RSI != 0 && data[j].RSI >= centerRSI {
-				isHigh = false
+		for j := i - d.config.LookbackLeft; j < i && isExtreme; j++ {
+			if data[j].RSI != 0 && cmp(data[j].RSI, centerRSI) {
+				isExtreme = false
 			}
 		}
 
-		// Check right: center must be higher than all right values
-		for j := i + 1; j <= i+d.config.LookbackRight && isHigh; j++ {
-			if data[j].RSI != 0 && data[j].RSI >= centerRSI {
-				isHigh = false
+		for j := i + 1; j <= i+d.config.LookbackRight && isExtreme; j++ {
+			if data[j].RSI != 0 && cmp(data[j].RSI, centerRSI) {
+				isExtreme = false
 			}
 		}
 
-		if isHigh {
+		if isExtreme {
 			pivots = append(pivots, pivot{
 				index: data[i].Index,
 				price: data[i].Close,
@@ -53,45 +56,12 @@ func (d *Detector) findPivotHighs(data []market.PriceDataWithRSI) []pivot {
 	return pivots
 }
 
+// findPivotHighs detects RSI pivot highs (peaks).
+func (d *Detector) findPivotHighs(data []market.PriceDataWithRSI) []pivot {
+	return d.findPivots(data, func(neighbor, center float64) bool { return neighbor >= center })
+}
+
 // findPivotLows detects RSI pivot lows (troughs).
 func (d *Detector) findPivotLows(data []market.PriceDataWithRSI) []pivot {
-	minRequired := d.config.LookbackLeft + d.config.LookbackRight + 1
-	if len(data) < minRequired {
-		return nil
-	}
-
-	var pivots []pivot
-	for i := d.config.LookbackLeft; i < len(data)-d.config.LookbackRight; i++ {
-		if data[i].RSI == 0 {
-			continue
-		}
-
-		isLow := true
-		centerRSI := data[i].RSI
-
-		// Check left: center must be lower than all left values
-		for j := i - d.config.LookbackLeft; j < i && isLow; j++ {
-			if data[j].RSI != 0 && data[j].RSI <= centerRSI {
-				isLow = false
-			}
-		}
-
-		// Check right: center must be lower than all right values
-		for j := i + 1; j <= i+d.config.LookbackRight && isLow; j++ {
-			if data[j].RSI != 0 && data[j].RSI <= centerRSI {
-				isLow = false
-			}
-		}
-
-		if isLow {
-			pivots = append(pivots, pivot{
-				index: data[i].Index,
-				price: data[i].Close,
-				rsi:   data[i].RSI,
-				date:  data[i].Date,
-			})
-		}
-	}
-
-	return pivots
+	return d.findPivots(data, func(neighbor, center float64) bool { return neighbor <= center })
 }

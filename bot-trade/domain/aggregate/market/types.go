@@ -23,18 +23,6 @@ type StockInfo struct {
 	Exchange string
 }
 
-// StockDataResponse is the domain response for market data.
-type StockDataResponse struct {
-	Symbol       string
-	PriceHistory []*PriceData
-}
-
-// ListStocksResponse is the domain response for stock listing.
-type ListStocksResponse struct {
-	Stocks     []StockInfo
-	TotalCount int
-}
-
 // Symbol is a value object representing a stock symbol.
 type Symbol string
 

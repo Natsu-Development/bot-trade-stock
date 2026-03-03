@@ -1,7 +1,10 @@
 // Package stockmetrics provides stock metrics domain model including RS ratings and volume analysis.
 package stockmetrics
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // PeriodReturns holds cumulative ROC for each time period.
 type PeriodReturns struct {
@@ -74,6 +77,72 @@ type FilterRequest struct {
 	Conditions []FilterCondition `json:"filters"`
 	Logic      FilterLogic       `json:"logic"`               // "and" or "or", defaults to "and"
 	Exchanges  []string          `json:"exchanges,omitempty"` // Filter by exchanges (HOSE, HNX, UPCOM)
+}
+
+var validFields = map[string]bool{
+	"rs_1m": true, "rs_3m": true, "rs_6m": true, "rs_9m": true, "rs_52w": true,
+	"volume_vs_sma": true, "current_volume": true, "volume_sma20": true,
+}
+
+var validOperators = map[FilterOperator]bool{
+	OpGreaterEqual: true, OpLessEqual: true, OpGreater: true, OpLess: true, OpEqual: true,
+}
+
+var validExchanges = map[string]bool{
+	"HOSE": true, "HNX": true, "UPCOM": true,
+}
+
+// ValidFields returns the list of valid filter field names.
+func ValidFields() []string {
+	return []string{"rs_1m", "rs_3m", "rs_6m", "rs_9m", "rs_52w", "volume_vs_sma", "current_volume", "volume_sma20"}
+}
+
+// ValidOperators returns the list of valid filter operators.
+func ValidOperators() []string {
+	return []string{">=", "<=", ">", "<", "="}
+}
+
+// ValidExchanges returns the list of valid exchange names.
+func ValidExchangesList() []string {
+	return []string{"HOSE", "HNX", "UPCOM"}
+}
+
+// FilterValidationError provides structured context about what failed validation.
+type FilterValidationError struct {
+	Type  string // "field", "operator", "logic", "exchange"
+	Index int    // condition index (-1 if N/A)
+	Value string // the invalid value
+}
+
+func (e *FilterValidationError) Error() string {
+	if e.Index >= 0 {
+		return fmt.Sprintf("invalid %s at condition %d: %s", e.Type, e.Index, e.Value)
+	}
+	return fmt.Sprintf("invalid %s: %s", e.Type, e.Value)
+}
+
+// Validate checks all filter conditions, logic, and exchanges against allowed values.
+func (r *FilterRequest) Validate() error {
+	for i, cond := range r.Conditions {
+		if !validFields[cond.Field] {
+			return &FilterValidationError{Type: "field", Index: i, Value: cond.Field}
+		}
+		if !validOperators[cond.Operator] {
+			return &FilterValidationError{Type: "operator", Index: i, Value: string(cond.Operator)}
+		}
+	}
+
+	if r.Logic != "" && r.Logic != LogicAnd && r.Logic != LogicOr {
+		return &FilterValidationError{Type: "logic", Index: -1, Value: string(r.Logic)}
+	}
+
+	for _, exchange := range r.Exchanges {
+		if !validExchanges[exchange] {
+			return &FilterValidationError{Type: "exchange", Index: -1, Value: exchange}
+		}
+	}
+
+	return nil
 }
 
 // GetFieldValue returns the value of a field for comparison.

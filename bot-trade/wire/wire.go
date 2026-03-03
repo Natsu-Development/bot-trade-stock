@@ -58,8 +58,8 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	appLogger.Info("Connected to MongoDB", zap.String("database", cfg.MongoDBDatabase))
 
 	// Create repositories
-	configRepository := mongodb.NewConfigRepository(mongoClient, cfg.MongoDBDatabase)
-	stockMetricsRepository := mongodb.NewStockMetricsRepository(mongoClient, cfg.MongoDBDatabase)
+	configRepository := mongodb.NewConfigRepository(mongoClient, cfg.MongoDBDatabase, "bot_config")
+	stockMetricsRepository := mongodb.NewStockMetricsRepository(mongoClient, cfg.MongoDBDatabase, "stock_metrics")
 
 	// Create HTTP client with retry transport for external API calls
 	httpClient := infraHTTP.NewHTTPClientWithRetry(30*time.Second, appLogger)
@@ -98,17 +98,17 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	// Create schedulers (still use individual analyzers for scheduled tasks)
 	bullishScheduler := appService.NewBullishCronScheduler(
 		appLogger, notifier, configRepository, bullishAnalyzer,
-		cfg.BullishIntervals(),
+		toServiceIntervals(cfg.BullishIntervals()),
 	)
 	bearishScheduler := appService.NewBearishCronScheduler(
 		appLogger, notifier, configRepository, bearishAnalyzer,
-		cfg.BearishIntervals(),
+		toServiceIntervals(cfg.BearishIntervals()),
 	)
 
 	// Create handlers
 	configHandler := presHandler.NewConfigHandler(configUseCase)
 	stockHandler := presHandler.NewStockHandler(stockMetricsUseCase)
-	analyzeHandler := presHandler.NewAnalyzeHandler(unifiedAnalyzer)
+	analyzeHandler := presHandler.NewAnalyzeHandler(unifiedAnalyzer, appLogger)
 
 	// Create router
 	router := presHTTP.NewRouter(
@@ -177,4 +177,16 @@ func (a *App) Close() {
 		a.mongoClient.Disconnect(context.Background())
 	}
 	a.logger.Sync()
+}
+
+// toServiceIntervals converts infrastructure config intervals to application-layer IntervalConfig.
+func toServiceIntervals(infraIntervals map[string]config.IntervalConfig) map[string]appService.IntervalConfig {
+	result := make(map[string]appService.IntervalConfig, len(infraIntervals))
+	for k, v := range infraIntervals {
+		result[k] = appService.IntervalConfig{
+			Enabled:  v.Enabled,
+			Schedule: v.Schedule,
+		}
+	}
+	return result
 }

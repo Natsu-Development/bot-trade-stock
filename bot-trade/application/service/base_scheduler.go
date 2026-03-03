@@ -5,21 +5,24 @@ import (
 	"sync"
 	"time"
 
+	appPort "bot-trade/application/port"
 	"bot-trade/domain/aggregate/analysis"
 	"bot-trade/domain/aggregate/config"
 	"bot-trade/domain/aggregate/market"
-	infraPort "bot-trade/infrastructure/port"
 
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 )
 
+// analysisContextTimeout is the maximum time allowed for a single scheduled analysis run.
+const analysisContextTimeout = 10 * time.Minute
+
 // BaseCronScheduler provides shared utilities for cron schedulers.
 type BaseCronScheduler struct {
 	cron             *cron.Cron
 	logger           *zap.Logger
-	notifier         infraPort.Notifier
-	configRepository infraPort.ConfigRepository
+	notifier         appPort.Notifier
+	configRepository appPort.ConfigRepository
 	isRunning        bool
 	mu               sync.RWMutex
 	divergenceType   analysis.DivergenceType
@@ -28,8 +31,8 @@ type BaseCronScheduler struct {
 // NewBaseCronScheduler creates a new base cron scheduler.
 func NewBaseCronScheduler(
 	logger *zap.Logger,
-	notifier infraPort.Notifier,
-	configRepository infraPort.ConfigRepository,
+	notifier appPort.Notifier,
+	configRepository appPort.ConfigRepository,
 	divergenceType analysis.DivergenceType,
 ) *BaseCronScheduler {
 	return &BaseCronScheduler{
@@ -87,56 +90,57 @@ func (bcs *BaseCronScheduler) CalculateDateRange(startDateOffset int) (string, s
 
 // CreateAnalysisContext creates a context with timeout for analysis operations.
 func (bcs *BaseCronScheduler) CreateAnalysisContext() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), 10*time.Minute)
+	return context.WithTimeout(context.Background(), analysisContextTimeout)
 }
 
-// ProcessSymbolsConcurrently processes symbols concurrently and returns results.
-func (bcs *BaseCronScheduler) ProcessSymbolsConcurrently(
+// itemResult holds the outcome of processing a single item concurrently.
+type itemResult[T any] struct {
+	key    string
+	result *T
+	err    error
+}
+
+// ProcessItemsConcurrently processes items concurrently by key and returns results.
+// This is a generic function that can be reused across different scheduler types.
+func ProcessItemsConcurrently[T any](
 	ctx context.Context,
-	symbols []string,
-	processFunc func(context.Context, string) (*analysis.AnalysisResult, error),
-) (map[string]*analysis.AnalysisResult, map[string]error) {
-	results := make(map[string]*analysis.AnalysisResult)
-	errors := make(map[string]error)
+	items []string,
+	processFunc func(context.Context, string) (*T, error),
+	logger *zap.Logger,
+) (map[string]*T, map[string]error) {
+	results := make(map[string]*T)
+	errs := make(map[string]error)
 
 	var wg sync.WaitGroup
-	resultChan := make(chan struct {
-		symbol string
-		result *analysis.AnalysisResult
-		err    error
-	}, len(symbols))
+	ch := make(chan itemResult[T], len(items))
 
-	for _, symbol := range symbols {
+	for _, item := range items {
 		wg.Add(1)
-		go func(sym string) {
+		go func(key string) {
 			defer wg.Done()
-			result, err := processFunc(ctx, sym)
-			resultChan <- struct {
-				symbol string
-				result *analysis.AnalysisResult
-				err    error
-			}{sym, result, err}
-		}(symbol)
+			result, err := processFunc(ctx, key)
+			ch <- itemResult[T]{key: key, result: result, err: err}
+		}(item)
 	}
 
 	go func() {
 		wg.Wait()
-		close(resultChan)
+		close(ch)
 	}()
 
-	for result := range resultChan {
-		if result.err != nil {
-			errors[result.symbol] = result.err
-			bcs.logger.Error("Analysis failed",
-				zap.String("symbol", result.symbol),
-				zap.Error(result.err),
+	for r := range ch {
+		if r.err != nil {
+			errs[r.key] = r.err
+			logger.Error("Processing failed",
+				zap.String("key", r.key),
+				zap.Error(r.err),
 			)
 		} else {
-			results[result.symbol] = result.result
+			results[r.key] = r.result
 		}
 	}
 
-	return results, errors
+	return results, errs
 }
 
 // HandleResult delegates result handling to the notifier.

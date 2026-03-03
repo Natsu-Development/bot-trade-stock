@@ -13,10 +13,11 @@ import (
 // rather than a concrete use case implementation, following the Dependency
 // Inversion Principle.
 type DivergenceAnalyzer interface {
-	// Execute performs divergence analysis for the given query using the specified config.
-	// Returns an AnalysisResult domain entity with the analysis results or an error
-	// if the analysis could not be completed.
+	// Execute performs divergence analysis, fetching its own market data.
 	Execute(ctx context.Context, q market.MarketDataQuery, configID string) (*analysis.AnalysisResult, error)
+	// ExecuteWithData performs divergence analysis using pre-fetched price data,
+	// avoiding redundant API calls when used alongside other analyzers.
+	ExecuteWithData(ctx context.Context, priceHistory []*market.PriceData, q market.MarketDataQuery, configID string) (*analysis.AnalysisResult, error)
 }
 
 // TrendlineAnalyzer defines the interface for trendline-based signal analysis use cases.
@@ -24,10 +25,11 @@ type DivergenceAnalyzer interface {
 // rather than a concrete use case implementation, following the Dependency
 // Inversion Principle.
 type TrendlineAnalyzer interface {
-	// Execute performs trendline analysis for the given query using the specified config.
-	// Returns a SignalAnalysisResult domain entity with the analysis results or an error
-	// if the analysis could not be completed.
+	// Execute performs trendline analysis, fetching its own market data.
 	Execute(ctx context.Context, q market.MarketDataQuery, configID string) (*market.SignalAnalysisResult, error)
+	// ExecuteWithData performs trendline analysis using pre-fetched price data,
+	// avoiding redundant API calls when used alongside other analyzers.
+	ExecuteWithData(ctx context.Context, priceHistory []*market.PriceData, q market.MarketDataQuery, configID string) (*market.SignalAnalysisResult, error)
 }
 
 // Analyzer defines the interface for unified analysis use cases.

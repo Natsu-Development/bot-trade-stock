@@ -84,72 +84,30 @@ func (h *StockHandler) FilterStocks(c *gin.Context) {
 		return
 	}
 
-	// Validate filter conditions
-	validFields := map[string]bool{
-		"rs_1m":          true,
-		"rs_3m":          true,
-		"rs_6m":          true,
-		"rs_9m":          true,
-		"rs_52w":         true,
-		"volume_vs_sma":  true,
-		"current_volume": true,
-		"volume_sma20":   true,
-	}
-
-	validOps := map[stockmetrics.FilterOperator]bool{
-		stockmetrics.OpGreaterEqual: true,
-		stockmetrics.OpLessEqual:    true,
-		stockmetrics.OpGreater:      true,
-		stockmetrics.OpLess:         true,
-		stockmetrics.OpEqual:        true,
-	}
-
-	for i, cond := range filterReq.Conditions {
-		if !validFields[cond.Field] {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":        "Invalid field in filter condition",
-				"condition":    i,
-				"field":        cond.Field,
-				"valid_fields": []string{"rs_1m", "rs_3m", "rs_6m", "rs_9m", "rs_52w", "volume_vs_sma", "current_volume", "volume_sma20"},
-			})
-			return
+	if err := filterReq.Validate(); err != nil {
+		if ve, ok := err.(*stockmetrics.FilterValidationError); ok {
+			resp := gin.H{"error": err.Error()}
+			switch ve.Type {
+			case "field":
+				resp["condition"] = ve.Index
+				resp["field"] = ve.Value
+				resp["valid_fields"] = stockmetrics.ValidFields()
+			case "operator":
+				resp["condition"] = ve.Index
+				resp["operator"] = ve.Value
+				resp["valid_ops"] = stockmetrics.ValidOperators()
+			case "logic":
+				resp["logic"] = ve.Value
+				resp["valid_values"] = []string{"and", "or"}
+			case "exchange":
+				resp["exchange"] = ve.Value
+				resp["valid_exchanges"] = stockmetrics.ValidExchangesList()
+			}
+			c.JSON(http.StatusBadRequest, resp)
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		}
-		if !validOps[cond.Operator] {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":     "Invalid operator in filter condition",
-				"condition": i,
-				"operator":  cond.Operator,
-				"valid_ops": []string{">=", "<=", ">", "<", "="},
-			})
-			return
-		}
-	}
-
-	// Validate logic
-	if filterReq.Logic != "" && filterReq.Logic != stockmetrics.LogicAnd && filterReq.Logic != stockmetrics.LogicOr {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":        "Invalid logic value",
-			"logic":        filterReq.Logic,
-			"valid_values": []string{"and", "or"},
-		})
 		return
-	}
-
-	// Validate exchanges
-	validExchanges := map[string]bool{
-		"HOSE":  true,
-		"HNX":   true,
-		"UPCOM": true,
-	}
-	for _, exchange := range filterReq.Exchanges {
-		if !validExchanges[exchange] {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":           "Invalid exchange value",
-				"exchange":        exchange,
-				"valid_exchanges": []string{"HOSE", "HNX", "UPCOM"},
-			})
-			return
-		}
 	}
 
 	// Execute filter

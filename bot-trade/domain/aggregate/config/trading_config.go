@@ -20,7 +20,7 @@ type TradingConfig struct {
 	RSIPeriod             int                     `json:"rsi_period" bson:"rsi_period"`
 	StartDateOffset       int                     `json:"start_date_offset" bson:"start_date_offset"` // Days of historical data
 	Divergence            DivergenceConfig        `json:"divergence" bson:"divergence"`
-	EarlyDetectionEnabled bool                    `json:"early_detection_enabled" bson:"early_detection_enabled"` // Enable early bearish divergence detection
+	EarlyDetectionEnabled *bool                   `json:"early_detection_enabled,omitempty" bson:"early_detection_enabled,omitempty"` // Enable early bearish divergence detection
 	BearishSymbols        []string                `json:"bearish_symbols" bson:"bearish_symbols"`                 // Holding stocks for exit signals
 	BullishSymbols        []string                `json:"bullish_symbols" bson:"bullish_symbols"`                 // Watchlist stocks for entry signals
 	Telegram              TelegramConfig          `json:"telegram" bson:"telegram"`

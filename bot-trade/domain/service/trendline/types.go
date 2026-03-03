@@ -1,18 +1,14 @@
 package trendline
 
-import "math"
+import (
+	"math"
 
-// SignalType represents the type of bullish trading signal detected.
-type SignalType string
+	"bot-trade/domain/aggregate/market"
+)
 
 const (
-	BounceConfirmed   SignalType = "bounce_confirmed"   // Bounced off uptrend support
-	BouncePotential   SignalType = "bounce_potential"   // Approaching uptrend support
-	BounceWatching    SignalType = "bounce_watching"    // Near uptrend support
-	BreakoutConfirmed SignalType = "breakout_confirmed" // Broke above downtrend resistance
-	BreakoutPotential SignalType = "breakout_potential" // Approaching downtrend resistance
-	BreakoutWatching  SignalType = "breakout_watching"  // Near downtrend resistance
-	NoSignal          SignalType = "no_signal"
+	defaultPivotLength   = 9   // Pine Script default pivot lookback on each side
+	defaultMaxLineLength = 252 // Approx. one trading year; lines older than this are removed
 )
 
 // LineType represents whether a trendline is support or resistance.
@@ -93,9 +89,9 @@ type TrendlineConfig struct {
 // DefaultTrendlineConfig returns a configuration with Pine Script defaults.
 func DefaultTrendlineConfig() TrendlineConfig {
 	return TrendlineConfig{
-		PivotLength:   9,   // Pine Script default
-		MaxLineLength: 252, // Pine Script default
-		UseLogScale:   false, // Use linear scale to match frontend chart scale
+		PivotLength:   defaultPivotLength,
+		MaxLineLength: defaultMaxLineLength,
+		UseLogScale:   false, // Linear scale matches the frontend chart scale
 	}
 }
 
@@ -129,7 +125,7 @@ func NewTrendlineConfigWithCustom(pivotLength, maxLineLength int) (TrendlineConf
 
 // BullishSignal represents a detected bullish trading signal.
 type BullishSignal struct {
-	Type           SignalType
+	Type           market.SignalType
 	Price          float64
 	Trendline      Trendline
 	TrendlinePrice float64 // Price of the trendline at current bar

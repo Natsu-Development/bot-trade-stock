@@ -6,19 +6,19 @@ import (
 	"strings"
 	"time"
 
+	appPort "bot-trade/application/port"
 	"bot-trade/domain/aggregate/config"
-	infraPort "bot-trade/infrastructure/port"
 
 	"github.com/google/uuid"
 )
 
 // ConfigUseCase handles configuration business operations.
 type ConfigUseCase struct {
-	repo infraPort.ConfigRepository
+	repo appPort.ConfigRepository
 }
 
 // NewConfigUseCase creates a new ConfigUseCase.
-func NewConfigUseCase(repo infraPort.ConfigRepository) *ConfigUseCase {
+func NewConfigUseCase(repo appPort.ConfigRepository) *ConfigUseCase {
 	return &ConfigUseCase{repo: repo}
 }
 
@@ -98,7 +98,7 @@ func (uc *ConfigUseCase) mergeConfig(existing *config.TradingConfig, update *con
 	if update.StartDateOffset > 0 {
 		merged.StartDateOffset = update.StartDateOffset
 	}
-	if update.EarlyDetectionEnabled {
+	if update.EarlyDetectionEnabled != nil {
 		merged.EarlyDetectionEnabled = update.EarlyDetectionEnabled
 	}
 
