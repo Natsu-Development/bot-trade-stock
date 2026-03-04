@@ -2,7 +2,6 @@ package analyze
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"bot-trade/domain/aggregate/config"
@@ -23,14 +22,14 @@ func newTrendlineAnalyzer(logger *zap.Logger) *trendlineAnalyzer {
 }
 
 // detect performs ONLY trendline detection using pre-sliced price data.
-// Data preparation (fetching, slicing) happens in the orchestrator.
+// Returns trading signals, price history, and trendlines for display.
 func (ta *trendlineAnalyzer) detect(
 	_ context.Context,
-	recentPriceHistory []*market.PriceData,
+	recentPriceHistory []market.MarketData,
 	currentPrice float64,
 	q market.MarketDataQuery,
 	cfg *config.TradingConfig,
-) (*market.SignalAnalysisResult, error) {
+) ([]market.TradingSignal, []*market.PriceData, []market.TrendlineDisplay, error) {
 	symbol := q.Symbol
 
 	ta.logger.Debug("Trendline detection",
@@ -43,7 +42,7 @@ func (ta *trendlineAnalyzer) detect(
 
 	signalsResult, err := detector.DetectSignals(recentPriceHistory)
 	if err != nil {
-		return nil, fmt.Errorf("failed to detect signals: %w", err)
+		return nil, nil, nil, err
 	}
 
 	signals := make([]market.TradingSignal, 0, len(signalsResult))
@@ -82,23 +81,23 @@ func (ta *trendlineAnalyzer) detect(
 		zap.Int("signals_found", len(signals)),
 	)
 
-	result := market.NewSignalAnalysisResult(
-		symbol,
-		signals,
-		processingTime.Milliseconds(),
-		q.StartDate,
-		q.EndDate,
-		q.Interval,
-		currentPrice,
-		0,
-	)
-	result.SetPriceHistory(recentPriceHistory)
-
 	supportLines, resistanceLines := detector.GetActiveTrendlines(recentPriceHistory)
 	trendlines := ta.convertToTrendlineDisplays(supportLines, resistanceLines, recentPriceHistory)
-	result.SetTrendlines(trendlines)
 
-	return result, nil
+	// Convert MarketData back to PriceData for the API response
+	priceHistory := make([]*market.PriceData, len(recentPriceHistory))
+	for i, md := range recentPriceHistory {
+		priceHistory[i] = &market.PriceData{
+			Date:   md.Date,
+			Open:   md.Open,
+			High:   md.High,
+			Low:    md.Low,
+			Close:  md.Close,
+			Volume: md.Volume,
+		}
+	}
+
+	return signals, priceHistory, trendlines, nil
 }
 
 // trendlinePivotPrices extracts pivot prices from a trendline.
@@ -112,7 +111,7 @@ func (ta *trendlineAnalyzer) trendlinePivotPrices(line trendline.Trendline) (sta
 // convertToTrendlineDisplays converts backend trendlines to display format with pre-calculated data points.
 func (ta *trendlineAnalyzer) convertToTrendlineDisplays(
 	supportLines, resistanceLines []trendline.Trendline,
-	priceHistory []*market.PriceData,
+	priceHistory []market.MarketData,
 ) []market.TrendlineDisplay {
 	trendlines := make([]market.TrendlineDisplay, 0, len(supportLines)+len(resistanceLines))
 
@@ -127,10 +126,9 @@ func (ta *trendlineAnalyzer) convertToTrendlineDisplays(
 }
 
 // createTrendlineDisplay creates a TrendlineDisplay from a Trendline with pre-calculated data points.
-// Trendlines extend from start_date to broken_at (if crossed) or end_date (if not broken).
 func (ta *trendlineAnalyzer) createTrendlineDisplay(
 	line trendline.Trendline,
-	priceHistory []*market.PriceData,
+	priceHistory []market.MarketData,
 ) market.TrendlineDisplay {
 	startPrice, endPrice := ta.trendlinePivotPrices(line)
 
@@ -139,37 +137,20 @@ func (ta *trendlineAnalyzer) createTrendlineDisplay(
 		dateToIndexMap[p.Date] = i
 	}
 
-	var brokenAt *string
-	var brokenType *string
-	if len(line.Crosses) > 0 {
-		earliestCross := line.Crosses[0]
-		brokenAt = &earliestCross.Date
-		brokenType = &earliestCross.CrossType
-	}
+	startDate := line.StartPivot.Date
+	endDate := line.EndPivot.Date
 
 	var dataPoints []market.TrendlineDataPoint
-
-	startDate := line.StartPivot.Date
-	effectiveEndDate := line.EndPivot.Date
-	if brokenAt != nil {
-		effectiveEndDate = *brokenAt
-	}
-
 	for _, p := range priceHistory {
 		if p.Date < startDate {
 			continue
 		}
-		if p.Date > effectiveEndDate {
+		if p.Date > endDate {
 			break
 		}
 
 		index := dateToIndexMap[p.Date]
-		var trendlinePrice float64
-		if line.UseLogScale {
-			trendlinePrice = line.PriceAtLog(index)
-		} else {
-			trendlinePrice = line.PriceAt(index)
-		}
+		trendlinePrice := line.PriceAt(index)
 		dataPoints = append(dataPoints, market.TrendlineDataPoint{
 			Date:  p.Date,
 			Price: trendlinePrice,
@@ -184,7 +165,5 @@ func (ta *trendlineAnalyzer) createTrendlineDisplay(
 		StartDate:  line.StartPivot.Date,
 		EndDate:    line.EndPivot.Date,
 		Slope:      line.Slope,
-		BrokenAt:   brokenAt,
-		BrokenType: brokenType,
 	}
 }

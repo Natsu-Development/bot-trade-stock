@@ -8,6 +8,7 @@ import (
 
 	"bot-trade/application/port/inbound"
 	"bot-trade/application/port/outbound"
+	"bot-trade/domain/aggregate"
 	"bot-trade/domain/aggregate/config"
 
 	"github.com/google/uuid"
@@ -41,7 +42,7 @@ func (uc *ConfigUseCase) CreateConfig(ctx context.Context, cfg *config.TradingCo
 		// Check if config ID already exists
 		_, err := uc.repo.GetByID(ctx, cfg.ID)
 		if err == nil {
-			return "", &config.ValidationError{Errors: []string{"config ID already exists"}}
+			return "", aggregate.NewValidationError("config ID already exists")
 		}
 		if !errors.Is(err, config.ErrConfigNotFound) {
 			return "", err
@@ -106,11 +107,8 @@ func (uc *ConfigUseCase) mergeConfig(existing *config.TradingConfig, update *con
 	}
 
 	// Merge divergence config (only if non-zero values are provided)
-	if update.Divergence.LookbackLeft > 0 {
-		merged.Divergence.LookbackLeft = update.Divergence.LookbackLeft
-	}
-	if update.Divergence.LookbackRight > 0 {
-		merged.Divergence.LookbackRight = update.Divergence.LookbackRight
+	if update.Divergence.Lookback > 0 {
+		merged.Divergence.Lookback = update.Divergence.Lookback
 	}
 	if update.Divergence.RangeMin > 0 {
 		merged.Divergence.RangeMin = update.Divergence.RangeMin
@@ -178,7 +176,7 @@ func (uc *ConfigUseCase) AddSymbols(ctx context.Context, configID string, listTy
 	case "bearish":
 		cfg.BearishSymbols = appendUnique(cfg.BearishSymbols, symbols...)
 	default:
-		return &config.ValidationError{Errors: []string{"list_type must be 'bullish' or 'bearish'"}}
+		return aggregate.NewValidationError("list_type must be 'bullish' or 'bearish'")
 	}
 
 	cfg.UpdatedAt = time.Now()
@@ -203,7 +201,7 @@ func (uc *ConfigUseCase) RemoveSymbols(ctx context.Context, configID string, lis
 	case "bearish":
 		cfg.BearishSymbols = removeSymbols(cfg.BearishSymbols, symbols...)
 	default:
-		return &config.ValidationError{Errors: []string{"list_type must be 'bullish' or 'bearish'"}}
+		return aggregate.NewValidationError("list_type must be 'bullish' or 'bearish'")
 	}
 
 	cfg.UpdatedAt = time.Now()

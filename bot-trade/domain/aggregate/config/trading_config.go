@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"bot-trade/domain/aggregate"
 )
 
 // ErrConfigNotFound indicates the requested config ID does not exist.
@@ -31,8 +33,7 @@ type TradingConfig struct {
 
 // DivergenceConfig holds divergence detection parameters.
 type DivergenceConfig struct {
-	LookbackLeft  int `json:"lookback_left" bson:"lookback_left"`
-	LookbackRight int `json:"lookback_right" bson:"lookback_right"`
+	Lookback      int `json:"lookback" bson:"lookback"`
 	RangeMin      int `json:"range_min" bson:"range_min"`
 	RangeMax      int `json:"range_max" bson:"range_max"`
 	IndicesRecent int `json:"indices_recent" bson:"indices_recent"`
@@ -86,7 +87,7 @@ func (c *TradingConfig) Validate() error {
 	}
 
 	if len(errs) > 0 {
-		return &ValidationError{Errors: errs}
+		return aggregate.NewValidationError(errs...)
 	}
 
 	return nil
@@ -96,11 +97,8 @@ func (c *TradingConfig) Validate() error {
 func (d *DivergenceConfig) Validate() error {
 	var errs []string
 
-	if d.LookbackLeft <= 0 {
-		errs = append(errs, "divergence.lookback_left must be a positive integer")
-	}
-	if d.LookbackRight <= 0 {
-		errs = append(errs, "divergence.lookback_right must be a positive integer")
+	if d.Lookback <= 0 {
+		errs = append(errs, "divergence.lookback must be a positive integer")
 	}
 	if d.RangeMin <= 0 {
 		errs = append(errs, "divergence.range_min must be a positive integer")
@@ -116,7 +114,7 @@ func (d *DivergenceConfig) Validate() error {
 	}
 
 	if len(errs) > 0 {
-		return &ValidationError{Errors: errs}
+		return aggregate.NewValidationError(errs...)
 	}
 
 	return nil
@@ -132,30 +130,11 @@ func (t *TelegramConfig) Validate() error {
 		if t.ChatID == "" {
 			errs = append(errs, "telegram.chat_id is required when telegram is enabled")
 		}
-		if len(errs) > 0 {
-			return &ValidationError{Errors: errs}
+			if len(errs) > 0 {
+			return aggregate.NewValidationError(errs...)
 		}
 	}
 	return nil
-}
-
-// ValidationError contains multiple validation errors.
-type ValidationError struct {
-	Errors []string
-}
-
-func (e *ValidationError) Error() string {
-	if len(e.Errors) == 1 {
-		return e.Errors[0]
-	}
-	result := "validation errors: "
-	for i, err := range e.Errors {
-		if i > 0 {
-			result += "; "
-		}
-		result += err
-	}
-	return result
 }
 
 // ValidateConfigID validates a config ID (username) format.
@@ -163,21 +142,21 @@ func ValidateConfigID(id string) error {
 	trimmed := strings.TrimSpace(id)
 
 	if trimmed == "" {
-		return &ValidationError{Errors: []string{"config ID is required"}}
+		return aggregate.NewValidationError("config ID is required")
 	}
 
 	if len(trimmed) < 2 {
-		return &ValidationError{Errors: []string{"config ID must be at least 2 characters"}}
+		return aggregate.NewValidationError("config ID must be at least 2 characters")
 	}
 
 	if len(trimmed) > 50 {
-		return &ValidationError{Errors: []string{"config ID must be less than 50 characters"}}
+		return aggregate.NewValidationError("config ID must be less than 50 characters")
 	}
 
 	// Allow alphanumeric, hyphens, and underscores only
 	validPattern := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 	if !validPattern.MatchString(trimmed) {
-		return &ValidationError{Errors: []string{"config ID can only contain letters, numbers, hyphens, and underscores"}}
+		return aggregate.NewValidationError("config ID can only contain letters, numbers, hyphens, and underscores")
 	}
 
 	return nil

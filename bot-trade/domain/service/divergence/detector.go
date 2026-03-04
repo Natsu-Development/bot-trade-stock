@@ -8,23 +8,20 @@ import (
 
 	"bot-trade/domain/aggregate/analysis"
 	"bot-trade/domain/aggregate/market"
+	"bot-trade/domain/service/pivot"
 )
 
 // Config holds configuration for divergence detection.
 type Config struct {
-	LookbackLeft  int
-	LookbackRight int
-	RangeMin      int
-	RangeMax      int
+	Lookback int
+	RangeMin int
+	RangeMax int
 }
 
 // NewConfig creates a validated Config.
-func NewConfig(lookbackLeft, lookbackRight, rangeMin, rangeMax int) (Config, error) {
-	if lookbackLeft <= 0 {
-		return Config{}, errors.New("lookbackLeft must be positive")
-	}
-	if lookbackRight <= 0 {
-		return Config{}, errors.New("lookbackRight must be positive")
+func NewConfig(lookback, rangeMin, rangeMax int) (Config, error) {
+	if lookback <= 0 {
+		return Config{}, errors.New("lookback must be positive")
 	}
 	if rangeMin <= 0 {
 		return Config{}, errors.New("rangeMin must be positive")
@@ -37,10 +34,9 @@ func NewConfig(lookbackLeft, lookbackRight, rangeMin, rangeMax int) (Config, err
 	}
 
 	return Config{
-		LookbackLeft:  lookbackLeft,
-		LookbackRight: lookbackRight,
-		RangeMin:      rangeMin,
-		RangeMax:      rangeMax,
+		Lookback: lookback,
+		RangeMin: rangeMin,
+		RangeMax: rangeMax,
 	}, nil
 }
 
@@ -58,13 +54,8 @@ type DetectionResult struct {
 	EarlyDescription string
 }
 
-// DetectionPivotPoint represents a single pivot point in the divergence pattern.
-type DetectionPivotPoint struct {
-	Price float64
-	RSI   float64
-	Date  string
-	Index int
-}
+// DetectionPivotPoint is an alias for the shared PivotPoint type.
+type DetectionPivotPoint = pivot.PivotPoint
 
 // Detector is a domain service that detects RSI divergences.
 type Detector struct {
@@ -77,44 +68,44 @@ func NewDetector(config Config) *Detector {
 }
 
 // DetectBullish detects bullish divergence (Price Lower Low + RSI Higher Low).
-func (d *Detector) DetectBullish(data []market.PriceDataWithRSI) DetectionResult {
+func (d *Detector) DetectBullish(data []market.MarketData) DetectionResult {
 	if len(data) == 0 {
 		return DetectionResult{Found: false, Type: analysis.NoDivergence}
 	}
-	pivots := d.findPivotLows(data)
+	finder := pivot.NewFinder(d.config.Lookback)
+	pivots := finder.FindLows(data, pivot.FieldRSI)
 	return d.analyze(pivots, analysis.BullishDivergence)
 }
 
 // DetectBearish detects bearish divergence (Price Higher High + RSI Lower High).
-func (d *Detector) DetectBearish(data []market.PriceDataWithRSI) DetectionResult {
+func (d *Detector) DetectBearish(data []market.MarketData) DetectionResult {
 	if len(data) == 0 {
 		return DetectionResult{Found: false, Type: analysis.NoDivergence}
 	}
-	pivots := d.findPivotHighs(data)
+	finder := pivot.NewFinder(d.config.Lookback)
+	pivots := finder.FindHighs(data, pivot.FieldRSI)
 	return d.analyze(pivots, analysis.BearishDivergence)
 }
 
 // DetectEarlyBearish detects forming bearish divergence using the current price.
 // It compares the current bar with the most recent confirmed RSI high pivot.
 // Returns early signal if: current price > pivot price AND current RSI < pivot RSI.
-func (d *Detector) DetectEarlyBearish(data []market.PriceDataWithRSI) DetectionResult {
+func (d *Detector) DetectEarlyBearish(data []market.MarketData) DetectionResult {
 	if len(data) == 0 {
 		return DetectionResult{}
 	}
 
-	// Find confirmed pivot highs (requires LookbackLeft + LookbackRight for confirmation)
-	pivots := d.findPivotHighs(data)
+	finder := pivot.NewFinder(d.config.Lookback)
+	pivots := finder.FindHighs(data, pivot.FieldRSI)
 	if len(pivots) == 0 {
 		return DetectionResult{}
 	}
 
-	// Sort pivots by index descending (most recent first)
 	sort.Slice(pivots, func(i, j int) bool {
-		return pivots[i].index > pivots[j].index
+		return pivots[i].Index > pivots[j].Index
 	})
 
-	// Get current bar (last data point with valid RSI)
-	var current market.PriceDataWithRSI
+	var current market.MarketData
 	for i := len(data) - 1; i >= 0; i-- {
 		if data[i].RSI != 0 {
 			current = data[i]
@@ -126,19 +117,15 @@ func (d *Detector) DetectEarlyBearish(data []market.PriceDataWithRSI) DetectionR
 		return DetectionResult{}
 	}
 
-	// Get most recent confirmed pivot
 	lastPivot := pivots[0]
 
-	// Check forming bearish divergence:
-	// - Price makes Higher High (current > pivot)
-	// - RSI makes Lower High (current RSI < pivot RSI)
-	if current.Close > lastPivot.price && current.RSI < lastPivot.rsi {
+	if current.Close > lastPivot.Price && current.RSI < lastPivot.RSI {
 		return DetectionResult{
 			EarlySignal: true,
 			Type:        analysis.BearishDivergence,
 			EarlyDescription: fmt.Sprintf(
 				"Forming Bearish: Price %.2f > %.2f, RSI %.2f < %.2f, Date %s",
-				current.Close, lastPivot.price, current.RSI, lastPivot.rsi, current.Date,
+				current.Close, lastPivot.Low, current.RSI, lastPivot.RSI, current.Date,
 			),
 		}
 	}

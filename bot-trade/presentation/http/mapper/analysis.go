@@ -5,6 +5,7 @@ import (
 	"sort"
 	"time"
 
+	"bot-trade/application/dto"
 	"bot-trade/domain/aggregate/analysis"
 	"bot-trade/domain/aggregate/market"
 )
@@ -43,8 +44,8 @@ func DivergenceResultToJSON(r *analysis.AnalysisResult) map[string]interface{} {
 	return result
 }
 
-// CombinedAnalysisResultToJSON converts a domain CombinedAnalysisResult to API response format.
-func CombinedAnalysisResultToJSON(r *market.CombinedAnalysisResult) map[string]interface{} {
+// AnalysisResultToJSON converts a DTO AnalysisResult to API response format.
+func AnalysisResultToJSON(r *dto.AnalysisResult) map[string]interface{} {
 	if r == nil {
 		return map[string]interface{}{
 			"error": "nil result",
@@ -88,13 +89,14 @@ func CombinedAnalysisResultToJSON(r *market.CombinedAnalysisResult) map[string]i
 			"end_date":      r.EndDate,
 			"interval":      r.Interval,
 			"current_price": r.CurrentPrice,
+			"current_rsi":   r.CurrentRSI,
 		},
 		"bullish_divergence": DivergenceResultToJSON(r.BullishDivergence),
 		"bearish_divergence": DivergenceResultToJSON(r.BearishDivergence),
 		"signals":            signalsJSON,
 		"signals_count":      len(r.Signals),
 		"has_confirmed":      r.HasConfirmedSignals(),
-		"has_watching":       len(r.GetWatchingSignals()) > 0,
+		"has_watching":       r.HasWatchingSignals(),
 		"price_history":      priceHistoryJSON,
 	}
 
@@ -130,6 +132,11 @@ func CombinedAnalysisResultToJSON(r *market.CombinedAnalysisResult) map[string]i
 	response["trendlines"] = trendlinesJSON
 
 	return response
+}
+
+// CombinedAnalysisResultToJSON is an alias for AnalysisResultToJSON for backward compatibility.
+func CombinedAnalysisResultToJSON(r *dto.AnalysisResult) map[string]interface{} {
+	return AnalysisResultToJSON(r)
 }
 
 // TradingSignalToJSON converts a domain TradingSignal to API response format.

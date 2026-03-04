@@ -16,6 +16,20 @@ type PriceData struct {
 	Volume int64
 }
 
+// MarketData represents complete OHLCV data with RSI for pivot detection.
+// This unified type combines PriceData and RSI, eliminating the need for
+// separate conversion between PriceData and PriceDataWithRSI.
+type MarketData struct {
+	Index  int
+	Date   string
+	Open   float64
+	High   float64
+	Low    float64
+	Close  float64
+	Volume int64
+	RSI    float64
+}
+
 // StockInfo represents a listed stock.
 type StockInfo struct {
 	Symbol   string

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"bot-trade/application/port/inbound"
+	"bot-trade/domain/aggregate"
 	"bot-trade/domain/aggregate/stockmetrics"
 
 	"github.com/gin-gonic/gin"
@@ -85,28 +86,14 @@ func (h *StockHandler) FilterStocks(c *gin.Context) {
 	}
 
 	if err := filterReq.Validate(); err != nil {
-		if ve, ok := err.(*stockmetrics.FilterValidationError); ok {
-			resp := gin.H{"error": err.Error()}
-			switch ve.Type {
-			case "field":
-				resp["condition"] = ve.Index
-				resp["field"] = ve.Value
-				resp["valid_fields"] = stockmetrics.ValidFields()
-			case "operator":
-				resp["condition"] = ve.Index
-				resp["operator"] = ve.Value
-				resp["valid_ops"] = stockmetrics.ValidOperators()
-			case "logic":
-				resp["logic"] = ve.Value
-				resp["valid_values"] = []string{"and", "or"}
-			case "exchange":
-				resp["exchange"] = ve.Value
-				resp["valid_exchanges"] = stockmetrics.ValidExchangesList()
-			}
-			c.JSON(http.StatusBadRequest, resp)
-		} else {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		resp := gin.H{"error": err.Error()}
+		// Add helpful hints for validation errors
+		if _, ok := err.(*aggregate.ValidationError); ok {
+			resp["valid_fields"] = stockmetrics.ValidFields()
+			resp["valid_operators"] = stockmetrics.ValidOperators()
+			resp["valid_exchanges"] = stockmetrics.ValidExchangesList()
 		}
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 

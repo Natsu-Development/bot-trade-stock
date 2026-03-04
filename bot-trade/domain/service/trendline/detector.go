@@ -2,290 +2,216 @@ package trendline
 
 import (
 	"bot-trade/domain/aggregate/market"
+	"bot-trade/domain/service/pivot"
 	"fmt"
 )
 
-// trendlineTolerance is the fractional band used when comparing price to a trendline.
-// Prices within ±0.1 % of the trendline value are treated as "on the line".
-const trendlineTolerance = 0.001
+const (
+	trendlineTolerance = 0.001 // ±0.1% band for "on the line"
+)
 
-// Detector detects trendline-based trading signals using Pine Script logic.
+// Detector detects trendline-based trading signals.
+// Simplified version without Pine Script emulation complexity.
 type Detector struct {
-	config TrendlineConfig
+	pivotLength int
+	maxLines    int
 }
 
-// NewDetector creates a new trendline signal detector.
+// NewDetector creates a new trendline detector.
 func NewDetector(config TrendlineConfig) *Detector {
-	return &Detector{config: config}
+	pivotLength := config.PivotLength
+	if pivotLength <= 0 {
+		pivotLength = defaultPivotLength
+	}
+	maxLines := config.MaxLineLength
+	if maxLines <= 0 {
+		maxLines = 3 // Keep only recent 3 lines
+	}
+	return &Detector{
+		pivotLength: pivotLength,
+		maxLines:    maxLines,
+	}
 }
 
-// DetectSignals analyzes price data and returns all trendline signals.
-// Uses Pine Script style sequential pivot detection and trendline creation.
-// Detects historical cross events throughout the entire price history.
-func (d *Detector) DetectSignals(prices []*market.PriceData) ([]BullishSignal, error) {
-	if len(prices) == 0 {
+// DetectSignals analyzes price data and returns trading signals.
+func (d *Detector) DetectSignals(data []market.MarketData) ([]BullishSignal, error) {
+	if len(data) < d.pivotLength*2+1 {
 		return nil, nil
 	}
 
 	var signals []BullishSignal
 
-	// Find pivot highs and lows using Pine Script style (single pivotLength)
-	pivotHighs := d.findPricePivotHighs(prices, d.config.PivotLength)
-	pivotLows := d.findPricePivotLows(prices, d.config.PivotLength)
+	// Find pivots directly using shared pivot finder
+	finder := pivot.NewFinder(d.pivotLength)
+	pivotHighs := finder.FindHighs(data, pivot.FieldHigh)
+	pivotLows := finder.FindLows(data, pivot.FieldLow)
 
-	if len(pivotHighs) < 2 && len(pivotLows) < 2 {
-		return signals, nil
-	}
+	// Create trendlines from consecutive pivots
+	supportLines := d.createSupportLines(pivotLows)
+	resistanceLines := d.createResistanceLines(pivotHighs)
 
-	// Get current bar index
-	currentIndex := len(prices) - 1
+	// Get current price and date
+	currentIndex := len(data) - 1
+	currentPrice := data[currentIndex].Close
+	currentDate := data[currentIndex].Date
 
-	// Create trendlines using Pine Script logic
-	uptrendLines := d.createUptrendLinesPineStyle(pivotLows, currentIndex)
-	downtrendLines := d.createDowntrendLinesPineStyle(pivotHighs, currentIndex)
-
-	// Remove old lines that exceeded MaxLineLength
-	uptrendLines = d.removeOldLines(uptrendLines, currentIndex)
-	downtrendLines = d.removeOldLines(downtrendLines, currentIndex)
-
-	// Detect historical crosses for all trendlines
-	d.detectHistoricalCrosses(uptrendLines, prices, currentIndex)
-	d.detectHistoricalCrosses(downtrendLines, prices, currentIndex)
-
-	// Get current bar data
-	currentPrice := prices[currentIndex].Close
-
-	// Detect signals from support lines (bounce signals)
-	for _, line := range uptrendLines {
-		signal := d.detectSupportSignal(line, currentIndex, currentPrice, prices[currentIndex].Date)
-		if signal != nil {
+	// Detect signals from support lines
+	for _, line := range supportLines {
+		if signal := d.checkSupportSignal(line, currentIndex, currentPrice, currentDate); signal != nil {
 			signals = append(signals, *signal)
 		}
 	}
 
-	// Detect signals from resistance lines (breakout signals)
-	for _, line := range downtrendLines {
-		signal := d.detectResistanceSignal(line, currentIndex, currentPrice, prices[currentIndex].Date)
-		if signal != nil {
+	// Detect signals from resistance lines
+	for _, line := range resistanceLines {
+		if signal := d.checkResistanceSignal(line, currentIndex, currentPrice, currentDate); signal != nil {
 			signals = append(signals, *signal)
-		}
-	}
-
-	// Add signals for historical crosses
-	allLines := append(uptrendLines, downtrendLines...)
-	for _, line := range allLines {
-		for _, cross := range line.Crosses {
-			signal := d.createCrossSignal(line, cross)
-			if signal != nil {
-				signals = append(signals, *signal)
-			}
 		}
 	}
 
 	return signals, nil
 }
 
-// getTrendlinePrice returns the trendline price at current index.
-func (d *Detector) getTrendlinePrice(line Trendline, currentIndex int) float64 {
-	if d.config.UseLogScale {
-		return d.getSlopeLog(line, currentIndex)
-	}
-	return d.getSlope(line, currentIndex)
+// GetActiveTrendlines returns trendlines for display.
+func (d *Detector) GetActiveTrendlines(data []market.MarketData) (support, resistance []Trendline) {
+	finder := pivot.NewFinder(d.pivotLength)
+	pivotHighs := finder.FindHighs(data, pivot.FieldHigh)
+	pivotLows := finder.FindLows(data, pivot.FieldLow)
+
+	support = d.createSupportLines(pivotLows)
+	resistance = d.createResistanceLines(pivotHighs)
+
+	return support, resistance
 }
 
-// detectSupportSignal detects signals from an uptrend support line.
-// Simplified logic: price at support = potential, price above = bounce
-func (d *Detector) detectSupportSignal(line Trendline, currentIndex int, currentPrice float64, date string) *BullishSignal {
-	trendlinePrice := d.getTrendlinePrice(line, currentIndex)
-	distance := d.distanceToTrendline(currentPrice, trendlinePrice, UptrendSupport)
-
-	signal := &BullishSignal{
-		Trendline:      line,
-		Price:          currentPrice,
-		TrendlinePrice: trendlinePrice,
-		Distance:       distance,
-		Time:           date,
-	}
-
-	switch {
-	case currentPrice > trendlinePrice*(1+trendlineTolerance):
-		// Price above support - bounce confirmed
-		signal.Type = market.BounceConfirmed
-		signal.Message = fmt.Sprintf(
-			"Bounced off uptrend support at %.2f. Price: %.2f",
-			trendlinePrice, currentPrice,
-		)
-		return signal
-
-	case currentPrice >= trendlinePrice*(1-trendlineTolerance):
-		signal.Type = market.BouncePotential
-		signal.Message = fmt.Sprintf(
-			"At uptrend support %.2f. Price: %.2f",
-			trendlinePrice, currentPrice,
-		)
-		return signal
-
-	default:
-		return nil
-	}
-}
-
-// detectResistanceSignal detects signals from a downtrend resistance line.
-// Simplified logic: price at or below resistance = potential, price above = breakout
-func (d *Detector) detectResistanceSignal(line Trendline, currentIndex int, currentPrice float64, date string) *BullishSignal {
-	trendlinePrice := d.getTrendlinePrice(line, currentIndex)
-	distance := d.distanceToTrendline(currentPrice, trendlinePrice, DowntrendResistance)
-
-	signal := &BullishSignal{
-		Trendline:      line,
-		Price:          currentPrice,
-		TrendlinePrice: trendlinePrice,
-		Distance:       distance,
-		Time:           date,
-	}
-
-	switch {
-	case currentPrice > trendlinePrice*(1+trendlineTolerance):
-		// Price broke above resistance - confirmed breakout
-		signal.Type = market.BreakoutConfirmed
-		signal.Message = fmt.Sprintf(
-			"Breakout above downtrend resistance at %.2f. Price: %.2f",
-			trendlinePrice, currentPrice,
-		)
-		return signal
-
-	case currentPrice <= trendlinePrice*(1+trendlineTolerance):
-		signal.Type = market.BreakoutPotential
-		signal.Message = fmt.Sprintf(
-			"At downtrend resistance %.2f. Price: %.2f",
-			trendlinePrice, currentPrice,
-		)
-		return signal
-
-	default:
-		return nil
-	}
-}
-
-// detectHistoricalCrosses scans price history and records all cross events for a set of trendlines.
-// This matches TradingView behavior where crosses are shown throughout the chart history.
-//
-// For each bar, we check if price crossed from one side of the trendline to the other.
-// A cross is detected when:
-// - For support: price was above line, then closes below line
-// - For resistance: price was below line, then closes above line
-func (d *Detector) detectHistoricalCrosses(lines []Trendline, prices []*market.PriceData, currentIndex int) {
-	if len(prices) == 0 {
-		return
-	}
-
-	// For each trendline, scan from its start point to current bar
-	for i := range lines {
-		line := &lines[i]
-		startIndex := line.StartPivot.Index
-
-		// Scan each bar from trendline start to current
-		var previousSide int // -1: below, 0: on, 1: above
-
-		for j := startIndex; j <= currentIndex; j++ {
-			if j >= len(prices) {
-				break
+// createSupportLines creates uptrend support lines from consecutive ascending lows.
+func (d *Detector) createSupportLines(lows []PricePivot) []Trendline {
+	var lines []Trendline
+	for i := 1; i < len(lows); i++ {
+		if lows[i-1].Low < lows[i].Low { // Ascending
+			line := Trendline{
+				StartPivot: lows[i-1],
+				EndPivot:   lows[i],
+				Type:       UptrendSupport,
+				IsValid:    true,
 			}
-
-			bar := prices[j]
-			linePrice := d.getTrendlinePrice(*line, j)
-
-		// Determine which side of the line price is on
-		var currentSide int
-
-		if bar.Close > linePrice*(1+trendlineTolerance) {
-			currentSide = 1 // above
-		} else if bar.Close < linePrice*(1-trendlineTolerance) {
-				currentSide = -1 // below
-			} else {
-				currentSide = 0 // on the line
-			}
-
-			// Check for cross: side changed from previous bar
-			// Skip first bar since we need a previous side to compare
-			if j > startIndex {
-				crossType := ""
-				isCross := false
-
-				if line.Type == UptrendSupport {
-					// Support cross: price went from above to below
-					if previousSide >= 0 && currentSide < 0 {
-						crossType = "cross_below"
-						isCross = true
-					}
-				} else { // DowntrendResistance
-					// Resistance cross: price went from below to above
-					if previousSide <= 0 && currentSide > 0 {
-						crossType = "cross_above"
-						isCross = true
-					}
-				}
-
-				if isCross {
-					line.Crosses = append(line.Crosses, CrossEvent{
-						Index:     j,
-						Date:      bar.Date,
-						Price:     bar.Close,
-						CrossType: crossType,
-					})
-				}
-			}
-
-			previousSide = currentSide
+			d.calculateLineMetrics(&line, lows[i-1].Low, lows[i].Low)
+			lines = append(lines, line)
 		}
 	}
+	return d.truncateLines(lines)
 }
 
-// createCrossSignal creates a signal for a historical cross event.
-func (d *Detector) createCrossSignal(line Trendline, cross CrossEvent) *BullishSignal {
-	signalType := market.NoSignalType
-	message := ""
+// createResistanceLines creates downtrend resistance lines from consecutive descending highs.
+func (d *Detector) createResistanceLines(highs []PricePivot) []Trendline {
+	var lines []Trendline
+	for i := 1; i < len(highs); i++ {
+		if highs[i-1].High > highs[i].High { // Descending
+			line := Trendline{
+				StartPivot: highs[i-1],
+				EndPivot:   highs[i],
+				Type:       DowntrendResistance,
+				IsValid:    true,
+			}
+			d.calculateLineMetrics(&line, highs[i-1].High, highs[i].High)
+			lines = append(lines, line)
+		}
+	}
+	return d.truncateLines(lines)
+}
 
-	if line.Type == UptrendSupport {
-		signalType = market.BouncePotential
-		message = fmt.Sprintf(
-			"Price crossed below uptrend support at %.2f on %s. Line from %.2f to %.2f",
-			cross.Price, cross.Date, line.StartPivot.Low, line.EndPivot.Low,
-		)
+// truncateLines keeps only the most recent lines.
+func (d *Detector) truncateLines(lines []Trendline) []Trendline {
+	if len(lines) <= d.maxLines {
+		return lines
+	}
+	return lines[len(lines)-d.maxLines:]
+}
+
+// calculateLineMetrics calculates and sets the slope and intercept for a trendline.
+// Uses linear equation: y = mx + b, where m is slope and b is intercept.
+func (d *Detector) calculateLineMetrics(line *Trendline, startPrice, endPrice float64) {
+	startIndex := line.StartPivot.Index
+	endIndex := line.EndPivot.Index
+
+	// Calculate slope: (y2 - y1) / (x2 - x1)
+	if endIndex != startIndex {
+		line.Slope = (endPrice - startPrice) / float64(endIndex-startIndex)
 	} else {
-		signalType = market.BreakoutConfirmed
-		message = fmt.Sprintf(
-			"Price crossed above downtrend resistance at %.2f on %s. Line from %.2f to %.2f",
-			cross.Price, cross.Date, line.StartPivot.High, line.EndPivot.High,
-		)
+		line.Slope = 0
 	}
 
-	return &BullishSignal{
-		Type:      signalType,
-		Trendline: line,
-		Price:     cross.Price,
-		Time:      cross.Date,
-		Message:   message,
-	}
+	// Calculate intercept: b = y - mx
+	// Using start point: intercept = startPrice - slope * startIndex
+	line.Intercept = startPrice - line.Slope*float64(startIndex)
 }
 
-// GetActiveTrendlines returns all active trendlines for a symbol.
-// Also detects historical crosses to properly set broken_at for trendlines that have been crossed.
-func (d *Detector) GetActiveTrendlines(prices []*market.PriceData) (supportLines, resistanceLines []Trendline) {
-	pivotHighs := d.findPricePivotHighs(prices, d.config.PivotLength)
-	pivotLows := d.findPricePivotLows(prices, d.config.PivotLength)
+// getLinePrice calculates the trendline price at a given index using linear scale.
+func (d *Detector) getLinePrice(line Trendline, index int) float64 {
+	// Simple linear interpolation: price = startPrice + slope * (index - startIndex)
+	var startPrice, endPrice float64
+	if line.Type == UptrendSupport {
+		startPrice = line.StartPivot.Low
+		endPrice = line.EndPivot.Low
+	} else {
+		startPrice = line.StartPivot.High
+		endPrice = line.EndPivot.High
+	}
 
-	currentIndex := len(prices) - 1
-	supportLines = d.createUptrendLinesPineStyle(pivotLows, currentIndex)
-	resistanceLines = d.createDowntrendLinesPineStyle(pivotHighs, currentIndex)
+	slope := (endPrice - startPrice) / float64(line.EndPivot.Index-line.StartPivot.Index)
+	return startPrice + slope*float64(index-line.StartPivot.Index)
+}
 
-	d.extendTrendlinesToCurrentBar(supportLines, currentIndex)
-	d.extendTrendlinesToCurrentBar(resistanceLines, currentIndex)
+// checkSupportSignal detects signals from an uptrend support line.
+func (d *Detector) checkSupportSignal(line Trendline, currentIndex int, currentPrice float64, currentDate string) *BullishSignal {
+	linePrice := d.getLinePrice(line, currentIndex)
 
-	// Detect historical crosses for all trendlines
-	// This ensures broken_at is properly set for trendlines that have been crossed
-	d.detectHistoricalCrosses(supportLines, prices, currentIndex)
-	d.detectHistoricalCrosses(resistanceLines, prices, currentIndex)
+	if currentPrice > linePrice*(1+trendlineTolerance) {
+		return &BullishSignal{
+			Type:      market.BounceConfirmed,
+			Trendline: line,
+			Price:     currentPrice,
+			Time:      currentDate,
+			Message:   fmt.Sprintf("Bounced off uptrend support at %.2f. Price: %.2f", linePrice, currentPrice),
+		}
+	}
 
-	return supportLines, resistanceLines
+	if currentPrice >= linePrice*(1-trendlineTolerance) {
+		return &BullishSignal{
+			Type:      market.BouncePotential,
+			Trendline: line,
+			Price:     currentPrice,
+			Time:      currentDate,
+			Message:   fmt.Sprintf("At uptrend support %.2f. Price: %.2f", linePrice, currentPrice),
+		}
+	}
+
+	return nil
+}
+
+// checkResistanceSignal detects signals from a downtrend resistance line.
+func (d *Detector) checkResistanceSignal(line Trendline, currentIndex int, currentPrice float64, currentDate string) *BullishSignal {
+	linePrice := d.getLinePrice(line, currentIndex)
+
+	if currentPrice > linePrice*(1+trendlineTolerance) {
+		return &BullishSignal{
+			Type:      market.BreakoutConfirmed,
+			Trendline: line,
+			Price:     currentPrice,
+			Time:      currentDate,
+			Message:   fmt.Sprintf("Breakout above downtrend resistance at %.2f. Price: %.2f", linePrice, currentPrice),
+		}
+	}
+
+	if currentPrice <= linePrice*(1+trendlineTolerance) {
+		return &BullishSignal{
+			Type:      market.BreakoutPotential,
+			Trendline: line,
+			Price:     currentPrice,
+			Time:      currentDate,
+			Message:   fmt.Sprintf("At downtrend resistance %.2f. Price: %.2f", linePrice, currentPrice),
+		}
+	}
+
+	return nil
 }

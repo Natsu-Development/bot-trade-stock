@@ -7,15 +7,15 @@ import (
 	"bot-trade/domain/aggregate/analysis"
 )
 
-// analyze checks for divergence patterns between price and RSI pivots.
-func (d *Detector) analyze(pivots []pivot, divergenceType analysis.DivergenceType) DetectionResult {
+// analyze checks for divergence patterns between price and RSI pivot points.
+func (d *Detector) analyze(pivots []DetectionPivotPoint, divergenceType analysis.DivergenceType) DetectionResult {
 	if len(pivots) < 2 {
 		return DetectionResult{Found: false, Type: analysis.NoDivergence}
 	}
 
 	// Sort pivots by index descending (most recent first)
 	sort.Slice(pivots, func(i, j int) bool {
-		return pivots[i].index > pivots[j].index
+		return pivots[i].Index > pivots[j].Index
 	})
 
 	// Check adjacent pivot pairs for divergence
@@ -23,7 +23,7 @@ func (d *Detector) analyze(pivots []pivot, divergenceType analysis.DivergenceTyp
 		current := pivots[i]
 		previous := pivots[i+1]
 
-		barsBetween := current.index - previous.index
+		barsBetween := current.Index - previous.Index
 		if barsBetween < d.config.RangeMin || barsBetween > d.config.RangeMax {
 			continue
 		}
@@ -36,16 +36,16 @@ func (d *Detector) analyze(pivots []pivot, divergenceType analysis.DivergenceTyp
 	return DetectionResult{Found: false, Type: analysis.NoDivergence}
 }
 
-func (d *Detector) isDivergence(current, previous pivot, divergenceType analysis.DivergenceType) bool {
+func (d *Detector) isDivergence(current, previous DetectionPivotPoint, divergenceType analysis.DivergenceType) bool {
 	if divergenceType == analysis.BullishDivergence {
 		// Bullish: Price makes Lower Low, RSI makes Higher Low
-		return current.price < previous.price && current.rsi > previous.rsi
+		return current.Price < previous.Price && current.RSI > previous.RSI
 	}
 	// Bearish: Price makes Higher High, RSI makes Lower High
-	return current.price > previous.price && current.rsi < previous.rsi
+	return current.Price > previous.Price && current.RSI < previous.RSI
 }
 
-func (d *Detector) createResult(current, previous pivot, divergenceType analysis.DivergenceType) DetectionResult {
+func (d *Detector) createResult(current, previous DetectionPivotPoint, divergenceType analysis.DivergenceType) DetectionResult {
 	label := "Bullish"
 	if divergenceType == analysis.BearishDivergence {
 		label = "Bearish"
@@ -56,12 +56,12 @@ func (d *Detector) createResult(current, previous pivot, divergenceType analysis
 		Type:  divergenceType,
 		Description: fmt.Sprintf(
 			"%s: Price %.2f->%.2f, RSI %.2f->%.2f, Date %s->%s",
-			label, previous.price, current.price, previous.rsi, current.rsi,
-			previous.date, current.date,
+			label, previous.Price, current.Price, previous.RSI, current.RSI,
+			previous.Date, current.Date,
 		),
 		PivotPoints: []DetectionPivotPoint{
-			{Price: previous.price, RSI: previous.rsi, Date: previous.date, Index: previous.index}, // FROM (older)
-			{Price: current.price, RSI: current.rsi, Date: current.date, Index: current.index},    // TO (newer)
+			{Price: previous.Price, RSI: previous.RSI, Date: previous.Date, Index: previous.Index}, // FROM (older)
+			{Price: current.Price, RSI: current.RSI, Date: current.Date, Index: current.Index},    // TO (newer)
 		},
 	}
 }

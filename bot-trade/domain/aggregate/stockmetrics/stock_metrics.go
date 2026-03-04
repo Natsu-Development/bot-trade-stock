@@ -4,6 +4,8 @@ package stockmetrics
 import (
 	"fmt"
 	"time"
+
+	"bot-trade/domain/aggregate"
 )
 
 // PeriodReturns holds cumulative ROC for each time period.
@@ -107,38 +109,24 @@ func ValidExchangesList() []string {
 	return []string{"HOSE", "HNX", "UPCOM"}
 }
 
-// FilterValidationError provides structured context about what failed validation.
-type FilterValidationError struct {
-	Type  string // "field", "operator", "logic", "exchange"
-	Index int    // condition index (-1 if N/A)
-	Value string // the invalid value
-}
-
-func (e *FilterValidationError) Error() string {
-	if e.Index >= 0 {
-		return fmt.Sprintf("invalid %s at condition %d: %s", e.Type, e.Index, e.Value)
-	}
-	return fmt.Sprintf("invalid %s: %s", e.Type, e.Value)
-}
-
 // Validate checks all filter conditions, logic, and exchanges against allowed values.
 func (r *FilterRequest) Validate() error {
 	for i, cond := range r.Conditions {
 		if !validFields[cond.Field] {
-			return &FilterValidationError{Type: "field", Index: i, Value: cond.Field}
+			return aggregate.NewFieldValidationError("filters", fmt.Sprintf("invalid field at condition %d: %s", i, cond.Field))
 		}
 		if !validOperators[cond.Operator] {
-			return &FilterValidationError{Type: "operator", Index: i, Value: string(cond.Operator)}
+			return aggregate.NewFieldValidationError("filters", fmt.Sprintf("invalid operator at condition %d: %s", i, cond.Operator))
 		}
 	}
 
 	if r.Logic != "" && r.Logic != LogicAnd && r.Logic != LogicOr {
-		return &FilterValidationError{Type: "logic", Index: -1, Value: string(r.Logic)}
+		return aggregate.NewFieldValidationError("logic", fmt.Sprintf("invalid logic: %s", r.Logic))
 	}
 
 	for _, exchange := range r.Exchanges {
 		if !validExchanges[exchange] {
-			return &FilterValidationError{Type: "exchange", Index: -1, Value: exchange}
+			return aggregate.NewFieldValidationError("exchanges", fmt.Sprintf("invalid exchange: %s", exchange))
 		}
 	}
 

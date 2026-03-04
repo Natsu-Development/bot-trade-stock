@@ -9,25 +9,14 @@ const (
 	BearishDivergence
 )
 
-const (
-	Bearish = "bearish"
-	Bullish = "bullish"
-	None    = "none"
-)
-
 // String returns string representation of DivergenceType
 func (dt DivergenceType) String() string {
 	switch dt {
 	case BullishDivergence:
-		return Bullish
+		return "bullish"
 	case BearishDivergence:
-		return Bearish
+		return "bearish"
 	default:
-		return None
+		return "none"
 	}
-}
-
-// HasDivergence returns true if there is any divergence detected
-func (dt DivergenceType) HasDivergence() bool {
-	return dt != NoDivergence
 }

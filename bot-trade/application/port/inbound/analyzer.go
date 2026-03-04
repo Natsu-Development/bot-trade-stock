@@ -6,6 +6,7 @@ package inbound
 import (
 	"context"
 
+	"bot-trade/application/dto"
 	"bot-trade/domain/aggregate/market"
 )
 
@@ -13,5 +14,5 @@ import (
 // Combines bullish divergence, bearish divergence, and trendline signals
 // into a single analysis, reducing redundant API calls.
 type Analyzer interface {
-	Execute(ctx context.Context, q market.MarketDataQuery, configID string) (*market.CombinedAnalysisResult, error)
+	Execute(ctx context.Context, q market.MarketDataQuery, configID string) (*dto.AnalysisResult, error)
 }

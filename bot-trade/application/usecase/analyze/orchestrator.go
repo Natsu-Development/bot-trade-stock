@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"bot-trade/application/dto"
 	"bot-trade/application/port/inbound"
 	"bot-trade/application/port/outbound"
 	"bot-trade/domain/aggregate/analysis"
@@ -47,7 +48,7 @@ func NewAnalyzer(
 // Execute performs all analysis types for a single symbol.
 // Fetches config and market data once, prepares data (slicing, RSI calculation),
 // then runs internal sub-analyzers in parallel.
-func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery, configID string) (*market.CombinedAnalysisResult, error) {
+func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery, configID string) (*dto.AnalysisResult, error) {
 	symbol := q.Symbol
 
 	// 1. Fetch config
@@ -66,7 +67,7 @@ func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery,
 	)
 	startTime := time.Now()
 
-	// 2. Fetch market data (FLATTENED - no helper function)
+	// 2. Fetch market data
 	priceHistory, err := uc.marketDataGateway.FetchStockData(ctx, q)
 	if err != nil {
 		uc.logger.Error("Failed to fetch stock data",
@@ -79,26 +80,39 @@ func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery,
 		return nil, fmt.Errorf("no price data available for %s", q.Symbol)
 	}
 
-	// 3. Slice recent data (FLATTENED - inline, no helper function)
+	// 3. Calculate RSI on FULL price history first (requires period+1 data points)
+	// Convert []*PriceData to []*PriceData for RSI calculation
+	priceDataForRSI := make([]*market.PriceData, len(priceHistory))
+	for i := range priceHistory {
+		priceDataForRSI[i] = &market.PriceData{
+			Date:   priceHistory[i].Date,
+			Open:   priceHistory[i].Open,
+			High:   priceHistory[i].High,
+			Low:    priceHistory[i].Low,
+			Close:  priceHistory[i].Close,
+			Volume: priceHistory[i].Volume,
+		}
+	}
+
+	dataWithRSI := indicator.CalculateRSI(priceDataForRSI, tradingConfig.RSIPeriod)
+	if len(dataWithRSI) == 0 {
+		return nil, fmt.Errorf("insufficient data for RSI calculation: need at least %d data points", tradingConfig.RSIPeriod+1)
+	}
+
+	// 4. Slice recent data AFTER RSI calculation
 	indicesCount := tradingConfig.Divergence.IndicesRecent
-	if len(priceHistory) < indicesCount {
-		uc.logger.Warn("Insufficient price data",
+	if len(dataWithRSI) < indicesCount {
+		uc.logger.Warn("Insufficient RSI data",
 			zap.String("symbol", symbol),
 			zap.Int("required", indicesCount),
-			zap.Int("actual", len(priceHistory)),
+			zap.Int("actual", len(dataWithRSI)),
 		)
-		return nil, fmt.Errorf("insufficient price data: required %d, got %d", indicesCount, len(priceHistory))
+		return nil, fmt.Errorf("insufficient RSI data: required %d, got %d", indicesCount, len(dataWithRSI))
 	}
-	startIndex := len(priceHistory) - indicesCount
-	recentPriceHistory := priceHistory[startIndex:]
+	startIndex := len(dataWithRSI) - indicesCount
+	recentDataWithRSI := dataWithRSI[startIndex:]
 
-	// 4. Calculate RSI ONCE
-	dataWithRSI := indicator.CalculateRSI(recentPriceHistory, tradingConfig.RSIPeriod)
-	if len(dataWithRSI) == 0 {
-		return nil, fmt.Errorf("insufficient data for RSI calculation")
-	}
-
-	// 5. Extract current price and RSI (FLATTENED - inline)
+	// 5. Extract current price and RSI from MarketData
 	var currentPrice, currentRSI float64
 	for i := len(dataWithRSI) - 1; i >= 0; i-- {
 		if dataWithRSI[i].RSI != 0 {
@@ -109,17 +123,18 @@ func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery,
 	}
 
 	// 6. Run internal sub-analyzers with PREPARED DATA (parallel)
-	// Sub-analyzers only perform detection logic
 	var (
-		bullishResult *analysis.AnalysisResult
-		bearishResult *analysis.AnalysisResult
-		signalsResult *market.SignalAnalysisResult
+		bullishResult  *analysis.AnalysisResult
+		bearishResult  *analysis.AnalysisResult
+		trendSignals   []market.TradingSignal
+		trendHistory   []*market.PriceData
+		trendTrendlines []market.TrendlineDisplay
 	)
 
 	g, gctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		result, err := uc.bullishDivergence.detect(gctx, dataWithRSI, currentPrice, currentRSI, q, tradingConfig)
+		result, err := uc.bullishDivergence.detect(gctx, recentDataWithRSI, currentPrice, currentRSI, q, tradingConfig)
 		if err != nil {
 			return fmt.Errorf("bullish divergence analysis failed: %w", err)
 		}
@@ -128,7 +143,7 @@ func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery,
 	})
 
 	g.Go(func() error {
-		result, err := uc.bearishDivergence.detect(gctx, dataWithRSI, currentPrice, currentRSI, q, tradingConfig)
+		result, err := uc.bearishDivergence.detect(gctx, recentDataWithRSI, currentPrice, currentRSI, q, tradingConfig)
 		if err != nil {
 			return fmt.Errorf("bearish divergence analysis failed: %w", err)
 		}
@@ -137,11 +152,13 @@ func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery,
 	})
 
 	g.Go(func() error {
-		result, err := uc.trendlineAnalyzer.detect(gctx, recentPriceHistory, currentPrice, q, tradingConfig)
+		signals, history, trendlines, err := uc.trendlineAnalyzer.detect(gctx, recentDataWithRSI, currentPrice, q, tradingConfig)
 		if err != nil {
 			return fmt.Errorf("trendline signal analysis failed: %w", err)
 		}
-		signalsResult = result
+		trendSignals = signals
+		trendHistory = history
+		trendTrendlines = trendlines
 		return nil
 	})
 
@@ -151,33 +168,32 @@ func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery,
 
 	processingTime := time.Since(startTime)
 
-	combinedResult := market.NewCombinedAnalysisResult(
+	// Create DTO with builder pattern
+	combinedResult := dto.NewAnalysisResult(
 		symbol,
-		processingTime.Milliseconds(),
 		q.StartDate,
 		q.EndDate,
 		q.Interval,
 		currentPrice,
-	)
+	).
+		WithProcessingTime(processingTime.Milliseconds()).
+		WithCurrentRSI(currentRSI)
 
 	if bullishResult != nil {
-		combinedResult.SetBullishDivergence(bullishResult)
+		combinedResult.WithBullishDivergence(bullishResult)
 	}
 	if bearishResult != nil {
-		combinedResult.SetBearishDivergence(bearishResult)
+		combinedResult.WithBearishDivergence(bearishResult)
 	}
 
-	if signalsResult != nil {
-		combinedResult.SetSignals(signalsResult.Signals)
-		combinedResult.SetPriceHistory(signalsResult.PriceHistory)
-		combinedResult.SetTrendlines(signalsResult.Trendlines)
-	}
+	combinedResult.WithSignals(trendSignals)
+	combinedResult.WithPriceHistory(trendHistory)
+	combinedResult.WithTrendlines(trendTrendlines)
 
 	uc.logger.Info("Unified analysis completed",
 		zap.String("symbol", symbol),
 		zap.Duration("duration", processingTime),
-		zap.Bool("bullish_divergence", combinedResult.BullishDivergence != nil && combinedResult.BullishDivergence.HasDivergence()),
-		zap.Bool("bearish_divergence", combinedResult.BearishDivergence != nil && combinedResult.BearishDivergence.HasDivergence()),
+		zap.Bool("bullish_divergence", combinedResult.HasAnyDivergence()),
 		zap.Int("signals_count", len(combinedResult.Signals)),
 	)
 

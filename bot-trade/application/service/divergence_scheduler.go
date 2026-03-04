@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"bot-trade/application/dto"
 	"bot-trade/application/port/inbound"
 	"bot-trade/application/port/outbound"
 	"bot-trade/domain/aggregate/analysis"
@@ -158,7 +159,7 @@ func (s *DivergenceScheduler) selectSymbols(cfg *tradingConfig.TradingConfig) []
 
 type symbolResult struct {
 	symbol string
-	result *market.CombinedAnalysisResult // Changed from AnalysisResult to CombinedAnalysisResult
+	result *dto.AnalysisResult
 }
 
 func (s *DivergenceScheduler) processConfig(ctx context.Context, interval, startDate, endDate string, cfg *tradingConfig.TradingConfig) {

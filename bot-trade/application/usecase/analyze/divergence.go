@@ -31,7 +31,7 @@ func newDivergenceAnalyzer(divergenceType analysis.DivergenceType, logger *zap.L
 // Data preparation (fetching, slicing, RSI calculation) happens in the orchestrator.
 func (da *divergenceAnalyzer) detect(
 	_ context.Context,
-	dataWithRSI []market.PriceDataWithRSI,
+	dataWithRSI []market.MarketData,
 	currentPrice, currentRSI float64,
 	q market.MarketDataQuery,
 	cfg *config.TradingConfig,
@@ -47,8 +47,7 @@ func (da *divergenceAnalyzer) detect(
 
 	// Create detector configuration
 	detectorConfig, err := divergence.NewConfig(
-		cfg.Divergence.LookbackLeft,
-		cfg.Divergence.LookbackRight,
+		cfg.Divergence.Lookback,
 		cfg.Divergence.RangeMin,
 		cfg.Divergence.RangeMax,
 	)

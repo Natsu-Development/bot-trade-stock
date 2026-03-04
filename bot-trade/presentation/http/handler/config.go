@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"bot-trade/application/port/inbound"
+	"bot-trade/domain/aggregate"
 	"bot-trade/domain/aggregate/config"
 
 	"github.com/gin-gonic/gin"
@@ -30,7 +31,7 @@ func (h *ConfigHandler) CreateConfig(c *gin.Context) {
 
 	configID, err := h.configManager.CreateConfig(c.Request.Context(), &cfg)
 	if err != nil {
-		var validationErr *config.ValidationError
+		var validationErr *aggregate.ValidationError
 		if errors.As(err, &validationErr) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "validation failed", "details": validationErr.Errors})
 			return
@@ -83,7 +84,7 @@ func (h *ConfigHandler) UpdateConfig(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "configuration not found"})
 			return
 		}
-		var validationErr *config.ValidationError
+		var validationErr *aggregate.ValidationError
 		if errors.As(err, &validationErr) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "validation failed", "details": validationErr.Errors})
 			return
@@ -142,7 +143,7 @@ func (h *ConfigHandler) AddSymbolsToWatchlist(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "configuration not found"})
 			return
 		}
-		var validationErr *config.ValidationError
+		var validationErr *aggregate.ValidationError
 		if errors.As(err, &validationErr) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "validation failed", "details": validationErr.Errors})
 			return
@@ -178,7 +179,7 @@ func (h *ConfigHandler) RemoveSymbolsFromWatchlist(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "configuration not found"})
 			return
 		}
-		var validationErr *config.ValidationError
+		var validationErr *aggregate.ValidationError
 		if errors.As(err, &validationErr) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "validation failed", "details": validationErr.Errors})
 			return
