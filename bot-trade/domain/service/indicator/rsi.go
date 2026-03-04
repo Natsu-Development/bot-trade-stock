@@ -8,16 +8,18 @@ import (
 )
 
 // CalculateRSI computes RSI for price history using Wilder's smoothing method.
-// Returns enriched MarketData with RSI values starting from index=period.
-func CalculateRSI(prices []*market.PriceData, period int) []market.MarketData {
-	if len(prices) < period+1 {
+// Takes []MarketData with Index already initialized and returns a new slice
+// with RSI values calculated. RSI is 0 for indices before the period.
+func CalculateRSI(data []market.MarketData, period int) []market.MarketData {
+	if len(data) < period+1 {
 		return nil
 	}
 
-	gains := make([]float64, len(prices)-1)
-	losses := make([]float64, len(prices)-1)
-	for i := 1; i < len(prices); i++ {
-		change := prices[i].Close - prices[i-1].Close
+	// Calculate gains/losses from data.Close
+	gains := make([]float64, len(data)-1)
+	losses := make([]float64, len(data)-1)
+	for i := 1; i < len(data); i++ {
+		change := data[i].Close - data[i-1].Close
 		if change > 0 {
 			gains[i-1] = change
 		} else if change < 0 {
@@ -25,6 +27,7 @@ func CalculateRSI(prices []*market.PriceData, period int) []market.MarketData {
 		}
 	}
 
+	// Calculate initial averages
 	var avgGain, avgLoss float64
 	for i := 0; i < period; i++ {
 		avgGain += gains[i]
@@ -33,31 +36,24 @@ func CalculateRSI(prices []*market.PriceData, period int) []market.MarketData {
 	avgGain /= float64(period)
 	avgLoss /= float64(period)
 
-	result := make([]market.MarketData, len(prices))
-	result[period] = market.MarketData{
-		Index:  period,
-		Date:   prices[period].Date,
-		Open:   prices[period].Open,
-		High:   prices[period].High,
-		Low:    prices[period].Low,
-		Close:  prices[period].Close,
-		Volume: prices[period].Volume,
-		RSI:    rsiValue(avgGain, avgLoss),
+	// Create result slice with RSI values
+	result := make([]market.MarketData, len(data))
+
+	// Copy data before period (RSI stays 0, Index is already set)
+	for i := 0; i < period; i++ {
+		result[i] = data[i]
+		result[i].RSI = 0
 	}
 
-	for i := period + 1; i < len(prices); i++ {
+	// Add RSI from period onwards (Index is already set)
+	result[period] = data[period]
+	result[period].RSI = rsiValue(avgGain, avgLoss)
+
+	for i := period + 1; i < len(data); i++ {
 		avgGain = (avgGain*float64(period-1) + gains[i-1]) / float64(period)
 		avgLoss = (avgLoss*float64(period-1) + losses[i-1]) / float64(period)
-		result[i] = market.MarketData{
-			Index:  i,
-			Date:   prices[i].Date,
-			Open:   prices[i].Open,
-			High:   prices[i].High,
-			Low:    prices[i].Low,
-			Close:  prices[i].Close,
-			Volume: prices[i].Volume,
-			RSI:    rsiValue(avgGain, avgLoss),
-		}
+		result[i] = data[i]
+		result[i].RSI = rsiValue(avgGain, avgLoss)
 	}
 
 	return result

@@ -26,7 +26,7 @@ type AnalysisResult struct {
 	BullishDivergence *analysis.AnalysisResult
 	BearishDivergence *analysis.AnalysisResult
 	Signals           []market.TradingSignal
-	PriceHistory      []*market.PriceData
+	PriceHistory      []market.MarketData
 	Trendlines        []market.TrendlineDisplay
 }
 
@@ -94,7 +94,7 @@ func (r *AnalysisResult) WithSignals(signals []market.TradingSignal) *AnalysisRe
 }
 
 // WithPriceHistory sets the price history data.
-func (r *AnalysisResult) WithPriceHistory(history []*market.PriceData) *AnalysisResult {
+func (r *AnalysisResult) WithPriceHistory(history []market.MarketData) *AnalysisResult {
 	r.PriceHistory = history
 	return r
 }

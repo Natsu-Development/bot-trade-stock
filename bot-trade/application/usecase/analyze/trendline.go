@@ -29,7 +29,7 @@ func (ta *trendlineAnalyzer) detect(
 	currentPrice float64,
 	q market.MarketDataQuery,
 	cfg *config.TradingConfig,
-) ([]market.TradingSignal, []*market.PriceData, []market.TrendlineDisplay, error) {
+) ([]market.TradingSignal, []market.MarketData, []market.TrendlineDisplay, error) {
 	symbol := q.Symbol
 
 	ta.logger.Debug("Trendline detection",
@@ -84,20 +84,8 @@ func (ta *trendlineAnalyzer) detect(
 	supportLines, resistanceLines := detector.GetActiveTrendlines(recentPriceHistory)
 	trendlines := ta.convertToTrendlineDisplays(supportLines, resistanceLines, recentPriceHistory)
 
-	// Convert MarketData back to PriceData for the API response
-	priceHistory := make([]*market.PriceData, len(recentPriceHistory))
-	for i, md := range recentPriceHistory {
-		priceHistory[i] = &market.PriceData{
-			Date:   md.Date,
-			Open:   md.Open,
-			High:   md.High,
-			Low:    md.Low,
-			Close:  md.Close,
-			Volume: md.Volume,
-		}
-	}
-
-	return signals, priceHistory, trendlines, nil
+	// Return recentPriceHistory directly (it's already []market.MarketData)
+	return signals, recentPriceHistory, trendlines, nil
 }
 
 // trendlinePivotPrices extracts pivot prices from a trendline.

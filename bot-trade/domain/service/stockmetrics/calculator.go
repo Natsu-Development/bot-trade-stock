@@ -37,7 +37,7 @@ func NewCalculator() *Calculator {
 // Returns nil if there is insufficient data (less than MinDataPoints = 21 days).
 // Calculates partial RS for periods with enough data, sets 0 for periods without enough data.
 // Percentile ratings are assigned later in RankAll based on relative position.
-func (c *Calculator) CalculateForStock(symbol, exchange string, priceHistory []*market.PriceData) *stockmetrics.StockMetrics {
+func (c *Calculator) CalculateForStock(symbol, exchange string, priceHistory []market.MarketData) *stockmetrics.StockMetrics {
 	n := len(priceHistory)
 
 	if n < MinDataPoints {
@@ -86,7 +86,7 @@ func (c *Calculator) CalculateForStock(symbol, exchange string, priceHistory []*
 }
 
 // calculateVolumeSMA20 calculates the current volume and 20-day SMA of volume.
-func (c *Calculator) calculateVolumeSMA20(priceHistory []*market.PriceData) (currentVolume, sma20 int64) {
+func (c *Calculator) calculateVolumeSMA20(priceHistory []market.MarketData) (currentVolume, sma20 int64) {
 	n := len(priceHistory)
 	if n == 0 {
 		return 0, 0

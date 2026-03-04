@@ -95,7 +95,7 @@ func NewVietCapGateway(httpClient *http.Client, requestsPerMinute int) *VietCapG
 func (g *VietCapGateway) FetchStockData(
 	ctx context.Context,
 	q market.MarketDataQuery,
-) ([]*market.PriceData, error) {
+) ([]market.MarketData, error) {
 	// Wait for rate limit token
 	select {
 	case <-g.rateLimiter:
@@ -228,9 +228,10 @@ func (g *VietCapGateway) setDefaultHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36")
 }
 
-// transformOHLCV converts VietCap OHLC item to domain PriceData slice.
+// transformOHLCV converts VietCap OHLC item to domain MarketData slice.
 // Handles string timestamps and float64 prices.
-func (g *VietCapGateway) transformOHLCV(item vietcapOHLCItem) []*market.PriceData {
+// Index is initialized here (0-based position in the array).
+func (g *VietCapGateway) transformOHLCV(item vietcapOHLCItem) []market.MarketData {
 	n := len(item.T)
 	if n == 0 {
 		return nil
@@ -241,7 +242,7 @@ func (g *VietCapGateway) transformOHLCV(item vietcapOHLCItem) []*market.PriceDat
 		return nil
 	}
 
-	priceData := make([]*market.PriceData, n)
+	priceData := make([]market.MarketData, 0, n)
 	for i := 0; i < n; i++ {
 		// Parse string timestamp to int64
 		timestamp, err := strconv.ParseInt(item.T[i], 10, 64)
@@ -255,14 +256,16 @@ func (g *VietCapGateway) transformOHLCV(item vietcapOHLCItem) []*market.PriceDat
 			volume = item.V[i]
 		}
 
-		priceData[i] = &market.PriceData{
+		priceData = append(priceData, market.MarketData{
+			Index:  i,  // Initialize Index here!
 			Date:   t.Format("2006-01-02"),
 			Open:   item.O[i],
 			High:   item.H[i],
 			Low:    item.L[i],
 			Close:  item.C[i],
 			Volume: volume,
-		}
+			RSI:    0,  // Will be calculated later
+		})
 	}
 
 	return priceData

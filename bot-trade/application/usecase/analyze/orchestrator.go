@@ -81,20 +81,8 @@ func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery,
 	}
 
 	// 3. Calculate RSI on FULL price history first (requires period+1 data points)
-	// Convert []*PriceData to []*PriceData for RSI calculation
-	priceDataForRSI := make([]*market.PriceData, len(priceHistory))
-	for i := range priceHistory {
-		priceDataForRSI[i] = &market.PriceData{
-			Date:   priceHistory[i].Date,
-			Open:   priceHistory[i].Open,
-			High:   priceHistory[i].High,
-			Low:    priceHistory[i].Low,
-			Close:  priceHistory[i].Close,
-			Volume: priceHistory[i].Volume,
-		}
-	}
-
-	dataWithRSI := indicator.CalculateRSI(priceDataForRSI, tradingConfig.RSIPeriod)
+	// priceHistory is already []MarketData with Index initialized
+	dataWithRSI := indicator.CalculateRSI(priceHistory, tradingConfig.RSIPeriod)
 	if len(dataWithRSI) == 0 {
 		return nil, fmt.Errorf("insufficient data for RSI calculation: need at least %d data points", tradingConfig.RSIPeriod+1)
 	}
@@ -112,7 +100,7 @@ func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery,
 	startIndex := len(dataWithRSI) - indicesCount
 	recentDataWithRSI := dataWithRSI[startIndex:]
 
-	// 5. Extract current price and RSI from MarketData
+	// 6. Extract current price and RSI from MarketData
 	var currentPrice, currentRSI float64
 	for i := len(dataWithRSI) - 1; i >= 0; i-- {
 		if dataWithRSI[i].RSI != 0 {
@@ -122,12 +110,12 @@ func (uc *AnalyzeUseCase) Execute(ctx context.Context, q market.MarketDataQuery,
 		}
 	}
 
-	// 6. Run internal sub-analyzers with PREPARED DATA (parallel)
+	// 5. Run internal sub-analyzers with PREPARED DATA (parallel)
 	var (
 		bullishResult  *analysis.AnalysisResult
 		bearishResult  *analysis.AnalysisResult
 		trendSignals   []market.TradingSignal
-		trendHistory   []*market.PriceData
+		trendHistory   []market.MarketData
 		trendTrendlines []market.TrendlineDisplay
 	)
 

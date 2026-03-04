@@ -6,19 +6,9 @@ import (
 	"strings"
 )
 
-// PriceData represents individual OHLCV price point data.
-type PriceData struct {
-	Date   string
-	Open   float64
-	High   float64
-	Low    float64
-	Close  float64
-	Volume int64
-}
-
-// MarketData represents complete OHLCV data with RSI for pivot detection.
-// This unified type combines PriceData and RSI, eliminating the need for
-// separate conversion between PriceData and PriceDataWithRSI.
+// MarketData represents complete OHLCV data with Index and optional RSI.
+// Index is 0-based position in the data array.
+// RSI is 0 if not calculated yet.
 type MarketData struct {
 	Index  int
 	Date   string

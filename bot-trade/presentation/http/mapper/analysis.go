@@ -64,19 +64,17 @@ func AnalysisResultToJSON(r *dto.AnalysisResult) map[string]interface{} {
 		signalsJSON = append(signalsJSON, TradingSignalToJSON(s))
 	}
 
-	priceHistoryJSON := make([]map[string]interface{}, 0)
+	priceHistoryJSON := make([]map[string]interface{}, 0, len(r.PriceHistory))
 	if r.PriceHistory != nil {
 		for _, p := range r.PriceHistory {
-			if p != nil {
-				priceHistoryJSON = append(priceHistoryJSON, map[string]interface{}{
-					"date":   p.Date,
-					"open":   p.Open,
-					"high":   p.High,
-					"low":    p.Low,
-					"close":  p.Close,
-					"volume": p.Volume,
-				})
-			}
+			priceHistoryJSON = append(priceHistoryJSON, map[string]interface{}{
+				"date":   p.Date,
+				"open":   p.Open,
+				"high":   p.High,
+				"low":    p.Low,
+				"close":  p.Close,
+				"volume": p.Volume,
+			})
 		}
 	}
 
