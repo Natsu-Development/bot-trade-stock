@@ -3,11 +3,11 @@ package outbound
 import (
 	"context"
 
-	"bot-trade/domain/aggregate/market"
+	marketvo "bot-trade/domain/shared/valueobject/market"
 )
 
 // MarketDataGateway defines the interface for fetching market data from external sources.
 type MarketDataGateway interface {
-	FetchStockData(ctx context.Context, q market.MarketDataQuery) ([]market.MarketData, error)
-	ListAllStocks(ctx context.Context, exchange string) ([]market.StockInfo, error)
+	FetchStockData(ctx context.Context, q marketvo.MarketDataQuery) ([]marketvo.MarketData, error)
+	ListAllStocks(ctx context.Context, exchange string) ([]marketvo.StockInfo, error)
 }

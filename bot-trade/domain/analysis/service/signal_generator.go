@@ -3,52 +3,107 @@ package service
 
 import (
 	"bot-trade/domain/analysis/valueobject"
+	marketvo "bot-trade/domain/shared/valueobject/market"
 )
 
+// findSliceIndex finds the starting slice position after a given pivot index.
+// Returns (startPosition, true) if pivot exists and has bars after it.
+// Returns (0, false) if pivot not found or is the last bar.
+func findSliceIndex(data []marketvo.MarketData, pivotIndex int) (int, bool) {
+	for i, bar := range data {
+		if bar.Index == pivotIndex {
+			// Found pivot - return position after it
+			if i+1 < len(data) {
+				return i + 1, true
+			}
+			// Pivot is the last bar - nothing to check
+			return 0, false
+		}
+	}
+	// Pivot not in this slice
+	return 0, false
+}
+
+// findCrossingPointAbove finds the first bar where price crossed above the trendline.
+func findCrossingPointAbove(
+	data []marketvo.MarketData,
+	line valueobject.Trendline,
+) valueobject.CrossingPoint {
+	startPos, valid := findSliceIndex(data, line.EndPivot.Index)
+	if !valid {
+		return valueobject.NotFoundCrossing()
+	}
+
+	for i := startPos; i < len(data); i++ {
+		bar := data[i]
+		linePrice := line.PriceAt(bar.Index)
+
+		if bar.Close > linePrice {
+			return valueobject.NewCrossingPoint(bar.Date, bar.Close)
+		}
+	}
+
+	return valueobject.NotFoundCrossing()
+}
+
+// findCrossingPointBelow finds the first bar where price crossed below the trendline.
+func findCrossingPointBelow(
+	data []marketvo.MarketData,
+	line valueobject.Trendline,
+) valueobject.CrossingPoint {
+	startPos, valid := findSliceIndex(data, line.EndPivot.Index)
+	if !valid {
+		return valueobject.NotFoundCrossing()
+	}
+
+	for i := startPos; i < len(data); i++ {
+		bar := data[i]
+		linePrice := line.PriceAt(bar.Index)
+
+		if bar.Close < linePrice {
+			return valueobject.NewCrossingPoint(bar.Date, bar.Close)
+		}
+	}
+
+	return valueobject.NotFoundCrossing()
+}
+
 // GenerateSupportSignals creates bounce signals from support trendlines.
-// Pure function - returns slice of Signal value objects.
-//
-// Parameters:
-//   - trendlines: Support trendlines to analyze for signals
-//   - currentPrice: Current market price
-//   - currentDate: Current bar date
-//   - proximityPercent: Percentage distance from price to trendline for signal generation
-//   - currentIndex: Current bar index for linear extension calculation
-//
-// Returns: Slice of detected bounce signals (BounceConfirmed, BouncePotential).
 func GenerateSupportSignals(
 	trendlines []valueobject.Trendline,
-	currentPrice float64,
-	currentDate string,
+	dataRecent []marketvo.MarketData,
 	proximityPercent float64,
-	currentIndex int,
 ) []valueobject.Signal {
 	var signals []valueobject.Signal
 
-	for _, line := range trendlines {
-		linePrice := line.PriceAt(currentIndex)
-		distance := (currentPrice - linePrice) / linePrice
+	currentPrice := dataRecent[len(dataRecent)-1].Close
+	currentDate := dataRecent[len(dataRecent)-1].Date
+	currentIndex := dataRecent[len(dataRecent)-1].Index
 
-		// Price crossed above the support line (bounce confirmed)
-		if distance > proximityPercent {
+	for _, line := range trendlines {
+		var crossing valueobject.CrossingPoint
+		crossing = findCrossingPointBelow(dataRecent, line)
+
+		if crossing.Found {
+			linePrice := line.PriceAt(currentIndex)
 			signals = append(signals, valueobject.Signal{
 				Type:      valueobject.BounceConfirmed,
-				Price:     currentPrice,
-				Time:      currentDate,
-				Trendline: &line,
-				Source:    "trendline",
+				Price:     crossing.Price,
+				Time:      crossing.Date,
+				PriceLine: linePrice,
 			})
 			continue
 		}
 
-		// Price is on the support line (bounce potential)
+		linePrice := line.PriceAt(currentIndex)
+		distance := (currentPrice - linePrice) / linePrice
+
 		if distance >= -proximityPercent && distance <= proximityPercent {
 			signals = append(signals, valueobject.Signal{
 				Type:      valueobject.BouncePotential,
 				Price:     currentPrice,
 				Time:      currentDate,
-				Trendline: &line,
-				Source:    "trendline",
+				PriceLine: linePrice,
 			})
 		}
 	}
@@ -57,49 +112,41 @@ func GenerateSupportSignals(
 }
 
 // GenerateResistanceSignals creates breakout signals from resistance trendlines.
-// Pure function - returns slice of Signal value objects.
-//
-// Parameters:
-//   - trendlines: Resistance trendlines to analyze for signals
-//   - currentPrice: Current market price
-//   - currentDate: Current bar date
-//   - proximityPercent: Percentage distance from price to trendline for signal generation
-//   - currentIndex: Current bar index for linear extension calculation
-//
-// Returns: Slice of detected breakout signals (BreakoutConfirmed, BreakoutPotential).
 func GenerateResistanceSignals(
 	trendlines []valueobject.Trendline,
-	currentPrice float64,
-	currentDate string,
+	dataRecent []marketvo.MarketData,
 	proximityPercent float64,
-	currentIndex int,
 ) []valueobject.Signal {
 	var signals []valueobject.Signal
 
-	for _, line := range trendlines {
-		linePrice := line.PriceAt(currentIndex)
-		distance := (currentPrice - linePrice) / linePrice
+	currentPrice := dataRecent[len(dataRecent)-1].Close
+	currentDate := dataRecent[len(dataRecent)-1].Date
+	currentIndex := dataRecent[len(dataRecent)-1].Index
 
-		// Price crossed above the resistance line (breakout confirmed)
-		if distance > proximityPercent {
+	for _, line := range trendlines {
+		var crossing valueobject.CrossingPoint
+		crossing = findCrossingPointAbove(dataRecent, line)
+
+		if crossing.Found {
+			linePrice := line.PriceAt(currentIndex)
 			signals = append(signals, valueobject.Signal{
 				Type:      valueobject.BreakoutConfirmed,
-				Price:     currentPrice,
-				Time:      currentDate,
-				Trendline: &line,
-				Source:    "trendline",
+				Price:     crossing.Price,
+				Time:      crossing.Date,
+				PriceLine: linePrice,
 			})
 			continue
 		}
 
-		// Price is on the resistance line (breakout potential)
+		linePrice := line.PriceAt(currentIndex)
+		distance := (currentPrice - linePrice) / linePrice
+
 		if distance >= -proximityPercent && distance <= proximityPercent {
 			signals = append(signals, valueobject.Signal{
 				Type:      valueobject.BreakoutPotential,
 				Price:     currentPrice,
 				Time:      currentDate,
-				Trendline: &line,
-				Source:    "trendline",
+				PriceLine: linePrice,
 			})
 		}
 	}

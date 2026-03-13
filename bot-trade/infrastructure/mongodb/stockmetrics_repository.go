@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"bot-trade/application/port/outbound"
-	"bot-trade/domain/aggregate/stockmetrics"
+	metricsagg "bot-trade/domain/metrics/aggregate"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -19,9 +19,9 @@ const stockMetricsDocID = "latest"
 
 // stockMetricsDocument represents the MongoDB document structure for stock metrics.
 type stockMetricsDocument struct {
-	ID           string                       `bson:"_id"`
-	Metrics      []*stockmetrics.StockMetrics `bson:"metrics"`
-	CalculatedAt time.Time                    `bson:"calculated_at"`
+	ID           string                     `bson:"_id"`
+	Metrics      []*metricsagg.StockMetrics `bson:"metrics"`
+	CalculatedAt time.Time                  `bson:"calculated_at"`
 }
 
 // StockMetricsRepository implements the StockMetricsRepository interface using MongoDB.
@@ -38,7 +38,7 @@ func NewStockMetricsRepository(client *mongo.Client, databaseName, collectionNam
 
 // Save persists the stock metrics to MongoDB.
 // Uses upsert to replace the existing document with the new metrics.
-func (r *StockMetricsRepository) Save(ctx context.Context, metrics []*stockmetrics.StockMetrics, calculatedAt time.Time) error {
+func (r *StockMetricsRepository) Save(ctx context.Context, metrics []*metricsagg.StockMetrics, calculatedAt time.Time) error {
 	doc := stockMetricsDocument{
 		ID:           stockMetricsDocID,
 		Metrics:      metrics,
@@ -52,7 +52,7 @@ func (r *StockMetricsRepository) Save(ctx context.Context, metrics []*stockmetri
 
 // LoadLatest retrieves the most recent stock metrics from MongoDB.
 // Returns empty slice and zero time if no metrics exist.
-func (r *StockMetricsRepository) LoadLatest(ctx context.Context) ([]*stockmetrics.StockMetrics, time.Time, error) {
+func (r *StockMetricsRepository) LoadLatest(ctx context.Context) ([]*metricsagg.StockMetrics, time.Time, error) {
 	var doc stockMetricsDocument
 	err := r.collection.FindOne(ctx, bson.M{"_id": stockMetricsDocID}).Decode(&doc)
 	if err != nil {

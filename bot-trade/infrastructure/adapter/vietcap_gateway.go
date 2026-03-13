@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"bot-trade/application/port/outbound"
-	"bot-trade/domain/aggregate/market"
+	marketvo "bot-trade/domain/shared/valueobject/market"
 )
 
 const (
@@ -94,8 +94,8 @@ func NewVietCapGateway(httpClient *http.Client, requestsPerMinute int) *VietCapG
 // Endpoint: POST /chart/OHLCChart/gap
 func (g *VietCapGateway) FetchStockData(
 	ctx context.Context,
-	q market.MarketDataQuery,
-) ([]market.MarketData, error) {
+	q marketvo.MarketDataQuery,
+) ([]marketvo.MarketData, error) {
 	// Wait for rate limit token
 	select {
 	case <-g.rateLimiter:
@@ -115,8 +115,8 @@ func (g *VietCapGateway) FetchStockData(
 
 	// Build request body
 	reqBody := vietcapOHLCRequest{
-		TimeFrame: mapIntervalToTimeFrame(q.Interval),
-		Symbols:   []string{q.Symbol},
+		TimeFrame: mapIntervalToTimeFrame(string(q.Interval)),
+		Symbols:   []string{string(q.Symbol)},
 		From:      startTime.Unix(),
 		To:        endTime.Add(24 * time.Hour).Unix(), // Include end date
 	}
@@ -169,7 +169,7 @@ func (g *VietCapGateway) FetchStockData(
 func (g *VietCapGateway) ListAllStocks(
 	ctx context.Context,
 	exchange string,
-) ([]market.StockInfo, error) {
+) ([]marketvo.StockInfo, error) {
 	// Wait for rate limit token
 	select {
 	case <-g.rateLimiter:
@@ -208,11 +208,13 @@ func (g *VietCapGateway) ListAllStocks(
 		return nil, fmt.Errorf("failed to parse stock list response: %w", err)
 	}
 
-	stocks := make([]market.StockInfo, 0, len(stockItems))
+	stocks := make([]marketvo.StockInfo, 0, len(stockItems))
 	for _, s := range stockItems {
-		stocks = append(stocks, market.StockInfo{
-			Symbol:   s.Symbol,
-			Exchange: exchange,
+		sym, _ := marketvo.NewSymbol(s.Symbol)
+		exch, _ := marketvo.NewExchange(exchange)
+		stocks = append(stocks, marketvo.StockInfo{
+			Symbol:   sym,
+			Exchange: exch,
 		})
 	}
 
@@ -231,7 +233,7 @@ func (g *VietCapGateway) setDefaultHeaders(req *http.Request) {
 // transformOHLCV converts VietCap OHLC item to domain MarketData slice.
 // Handles string timestamps and float64 prices.
 // Index is initialized here (0-based position in the array).
-func (g *VietCapGateway) transformOHLCV(item vietcapOHLCItem) []market.MarketData {
+func (g *VietCapGateway) transformOHLCV(item vietcapOHLCItem) []marketvo.MarketData {
 	n := len(item.T)
 	if n == 0 {
 		return nil
@@ -242,7 +244,7 @@ func (g *VietCapGateway) transformOHLCV(item vietcapOHLCItem) []market.MarketDat
 		return nil
 	}
 
-	priceData := make([]market.MarketData, 0, n)
+	priceData := make([]marketvo.MarketData, 0, n)
 	for i := 0; i < n; i++ {
 		// Parse string timestamp to int64
 		timestamp, err := strconv.ParseInt(item.T[i], 10, 64)
@@ -256,15 +258,14 @@ func (g *VietCapGateway) transformOHLCV(item vietcapOHLCItem) []market.MarketDat
 			volume = item.V[i]
 		}
 
-		priceData = append(priceData, market.MarketData{
-			Index:  i,  // Initialize Index here!
+		priceData = append(priceData, marketvo.MarketData{
+			Index:  i,
 			Date:   t.Format("2006-01-02"),
 			Open:   item.O[i],
 			High:   item.H[i],
 			Low:    item.L[i],
 			Close:  item.C[i],
 			Volume: volume,
-			RSI:    0,  // Will be calculated later
 		})
 	}
 

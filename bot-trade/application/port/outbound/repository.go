@@ -7,21 +7,21 @@ import (
 	"context"
 	"time"
 
-	"bot-trade/domain/aggregate/config"
-	"bot-trade/domain/aggregate/stockmetrics"
+	configagg "bot-trade/domain/config/aggregate"
+	metricsagg "bot-trade/domain/metrics/aggregate"
 )
 
 // ConfigRepository defines the interface for TradingConfig persistence.
 type ConfigRepository interface {
-	Create(ctx context.Context, cfg *config.TradingConfig) error
-	GetByID(ctx context.Context, id string) (*config.TradingConfig, error)
-	GetAll(ctx context.Context) ([]*config.TradingConfig, error)
-	Update(ctx context.Context, cfg *config.TradingConfig) error
+	Create(ctx context.Context, cfg *configagg.TradingConfig) error
+	GetByID(ctx context.Context, id string) (*configagg.TradingConfig, error)
+	GetAll(ctx context.Context) ([]*configagg.TradingConfig, error)
+	Update(ctx context.Context, cfg *configagg.TradingConfig) error
 	Delete(ctx context.Context, id string) error
 }
 
 // StockMetricsRepository defines the interface for stock metrics persistence.
 type StockMetricsRepository interface {
-	Save(ctx context.Context, metrics []*stockmetrics.StockMetrics, calculatedAt time.Time) error
-	LoadLatest(ctx context.Context) ([]*stockmetrics.StockMetrics, time.Time, error)
+	Save(ctx context.Context, metrics []*metricsagg.StockMetrics, calculatedAt time.Time) error
+	LoadLatest(ctx context.Context) ([]*metricsagg.StockMetrics, time.Time, error)
 }

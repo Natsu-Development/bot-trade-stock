@@ -20,6 +20,8 @@ type TradingConfig struct {
 	LookbackDay market.LookbackDay     `json:"lookback_day" bson:"lookback_day"`
 	Divergence  valueobject.Divergence `json:"divergence" bson:"divergence"`
 	Trendline   valueobject.Trendline  `json:"trendline" bson:"trendline"`
+	// IndicesRecent specifies the number of recent indices to track.
+	IndicesRecent valueobject.IndicesRecent `json:"indices_recent" bson:"indices_recent"`
 	// BearishEarly enables early/unconfirmed bearish divergence detection.
 	// Only applies to bearish divergence analysis; nil = disabled.
 	BearishEarly   *bool                `json:"bearish_early,omitempty" bson:"bearish_early,omitempty"`
@@ -42,6 +44,7 @@ func NewTradingConfig(
 	lookbackDay market.LookbackDay,
 	divergence valueobject.Divergence,
 	trendline valueobject.Trendline,
+	indicesRecent valueobject.IndicesRecent,
 ) (*TradingConfig, error) {
 	cfg := &TradingConfig{
 		ID:             id,
@@ -50,6 +53,7 @@ func NewTradingConfig(
 		LookbackDay:    lookbackDay,
 		Divergence:     divergence,
 		Trendline:      trendline,
+		IndicesRecent:  indicesRecent,
 		BearishSymbols: []market.Symbol{},
 		BullishSymbols: []market.Symbol{},
 		Telegram:       valueobject.Telegram{Enabled: false},
@@ -74,6 +78,7 @@ func (c *TradingConfig) Merge(update *TradingConfig) (*TradingConfig, error) {
 	var emptyRSI valueobject.RSIPeriod
 	var emptyPivot valueobject.PivotPeriod
 	var emptyOffset market.LookbackDay
+	var emptyIndices valueobject.IndicesRecent
 
 	if update.RSIPeriod != emptyRSI {
 		merged.RSIPeriod = update.RSIPeriod
@@ -83,6 +88,9 @@ func (c *TradingConfig) Merge(update *TradingConfig) (*TradingConfig, error) {
 	}
 	if update.LookbackDay != emptyOffset {
 		merged.LookbackDay = update.LookbackDay
+	}
+	if update.IndicesRecent != emptyIndices {
+		merged.IndicesRecent = update.IndicesRecent
 	}
 	if update.BearishEarly != nil {
 		merged.BearishEarly = update.BearishEarly
@@ -217,6 +225,12 @@ func (c *TradingConfig) Validate() error {
 	var emptyOffset market.LookbackDay
 	if c.LookbackDay == emptyOffset {
 		return shared.NewValidationError("lookback_day is required")
+	}
+
+	// IndicesRecent is optional, but if set must be valid
+	var emptyIndices valueobject.IndicesRecent
+	if c.IndicesRecent != emptyIndices && c.IndicesRecent < 1 {
+		errs = append(errs, "indices_recent must be a positive integer")
 	}
 
 	// Accumulate errors for nested object validations (may have multiple issues)

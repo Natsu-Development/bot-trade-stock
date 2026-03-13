@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"bot-trade/application/port/outbound"
-	"bot-trade/domain/aggregate/analysis"
-	"bot-trade/domain/aggregate/config"
+	analysisvo "bot-trade/domain/analysis/valueobject"
+	configvo "bot-trade/domain/config/valueobject"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 const (
@@ -67,9 +69,9 @@ func (n *Notifier) SendNotification(req outbound.NotificationRequest) error {
 
 	switch req.Type {
 	case outbound.NotificationTypeDivergence:
-		return n.sendDivergenceNotification(req.DivergenceType, req.Interval, req.Symbol, req.Result, req.TelegramCfg)
+		return n.sendDivergenceNotification(req.DivergenceType, req.Interval, req.Symbol, req.Description, req.TelegramCfg)
 	case outbound.NotificationTypeEarlySignal:
-		return n.sendEarlySignalNotification(req.Interval, req.Symbol, req.Result, req.TelegramCfg)
+		return n.sendEarlySignalNotification(req.Interval, req.Symbol, req.Description, req.TelegramCfg)
 	default:
 		return fmt.Errorf("unknown notification type: %s", req.Type)
 	}
@@ -77,19 +79,14 @@ func (n *Notifier) SendNotification(req outbound.NotificationRequest) error {
 
 // sendDivergenceNotification sends a divergence notification.
 func (n *Notifier) sendDivergenceNotification(
-	divergenceType analysis.DivergenceType,
-	interval, symbol string,
-	result *analysis.AnalysisResult,
-	telegramCfg config.TelegramConfig,
+	divergenceType analysisvo.DivergenceType,
+	interval, symbol, description string,
+	telegramCfg configvo.Telegram,
 ) error {
-	if result == nil || !result.DivergenceFound {
-		return nil
-	}
-
-	message := FormatDivergenceAlert(divergenceType.String(), interval, symbol, result.Description)
+	message := FormatDivergenceAlert(divergenceType, interval, symbol, description)
 	if err := n.SendMessage(telegramCfg.BotToken, telegramCfg.ChatID, message); err != nil {
 		return fmt.Errorf("failed to send %s notification for %s [%s]: %w",
-			divergenceType.String(), symbol, interval, err)
+			divergenceType, symbol, interval, err)
 	}
 
 	return nil
@@ -97,19 +94,20 @@ func (n *Notifier) sendDivergenceNotification(
 
 // sendEarlySignalNotification sends an early signal notification.
 func (n *Notifier) sendEarlySignalNotification(
-	interval, symbol string,
-	result *analysis.AnalysisResult,
-	telegramCfg config.TelegramConfig,
+	interval, symbol, description string,
+	telegramCfg configvo.Telegram,
 ) error {
-	if result == nil || !result.EarlySignalDetected {
-		return nil
-	}
-
-	message := FormatEarlySignalAlert(interval, symbol, result.EarlyDescription)
+	message := FormatEarlySignalAlert(interval, symbol, description)
 	if err := n.SendMessage(telegramCfg.BotToken, telegramCfg.ChatID, message); err != nil {
 		return fmt.Errorf("failed to send early signal notification for %s [%s]: %w",
 			symbol, interval, err)
 	}
 
 	return nil
+}
+
+// ObjectId returns the MongoDB ObjectID from a string ID.
+func ObjectId(id string) primitive.ObjectID {
+	oid, _ := primitive.ObjectIDFromHex(id)
+	return oid
 }

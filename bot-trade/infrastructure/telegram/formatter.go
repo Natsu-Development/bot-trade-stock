@@ -2,13 +2,14 @@ package telegram
 
 import (
 	"fmt"
-	"strings"
+
+	analysisvo "bot-trade/domain/analysis/valueobject"
 )
 
 // FormatDivergenceAlert formats a divergence alert as HTML for Telegram.
-func FormatDivergenceAlert(divergenceType, interval, symbol, description string) string {
+func FormatDivergenceAlert(divergenceType analysisvo.DivergenceType, interval, symbol, description string) string {
 	icon := "🔴"
-	if strings.EqualFold(divergenceType, "bullish") {
+	if divergenceType.IsBullish() {
 		icon = "🟢"
 	}
 

@@ -2,6 +2,8 @@
 package service
 
 import (
+	"sort"
+
 	analysisvo "bot-trade/domain/analysis/valueobject"
 	marketvo "bot-trade/domain/shared/valueobject/market"
 )
@@ -19,6 +21,9 @@ func FindBullishDivergences(
 	pivots []marketvo.MarketData,
 	rangeMin, rangeMax int,
 ) []analysisvo.Divergence {
+	// Sort pivots descending (newer first) for proper iteration
+	pivots = sortDescending(pivots)
+
 	var results []analysisvo.Divergence
 
 	if len(pivots) < 2 {
@@ -36,7 +41,7 @@ func FindBullishDivergences(
 		}
 
 		// Bullish: Price makes Lower Low, RSI makes Higher Low
-		if current.Close < previous.Close && current.RSI > previous.RSI {
+		if current.Low < previous.Low && current.RSI > previous.RSI {
 			results = append(results, analysisvo.Divergence{
 				Type:        analysisvo.BullishDivergence,
 				FirstPivot:  previous,
@@ -62,6 +67,9 @@ func FindBearishDivergences(
 	pivots []marketvo.MarketData,
 	rangeMin, rangeMax int,
 ) []analysisvo.Divergence {
+	// Sort pivots descending (newer first) for proper iteration
+	pivots = sortDescending(pivots)
+
 	var results []analysisvo.Divergence
 
 	if len(pivots) < 2 {
@@ -79,7 +87,7 @@ func FindBearishDivergences(
 		}
 
 		// Bearish: Price makes Higher High, RSI makes Lower High
-		if current.Close > previous.Close && current.RSI < previous.RSI {
+		if current.High > previous.High && current.RSI < previous.RSI {
 			results = append(results, analysisvo.Divergence{
 				Type:        analysisvo.BearishDivergence,
 				FirstPivot:  previous,
@@ -111,7 +119,7 @@ func FindEarlyBearishDivergence(
 	lastPivot := pivots[0]
 
 	// Bearish: Price makes Higher High, RSI makes Lower High
-	if currentData.Close > lastPivot.Close && currentData.RSI < lastPivot.RSI {
+	if currentData.High > lastPivot.High && currentData.RSI < lastPivot.RSI {
 		return analysisvo.Divergence{
 			Type:        analysisvo.BearishDivergence,
 			FirstPivot:  lastPivot,
@@ -121,4 +129,13 @@ func FindEarlyBearishDivergence(
 	}
 
 	return analysisvo.Divergence{}, false
+}
+
+// sortDescending sorts pivots by index in descending order (newer pivots first).
+// Required for divergence detection which processes most recent pivots first.
+func sortDescending(pivots []marketvo.MarketData) []marketvo.MarketData {
+	sort.Slice(pivots, func(i, j int) bool {
+		return pivots[i].Index > pivots[j].Index
+	})
+	return pivots
 }

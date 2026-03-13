@@ -7,11 +7,13 @@ import (
 	"sync"
 	"time"
 
+	"bot-trade/application/dto"
 	"bot-trade/application/port/inbound"
 	"bot-trade/application/port/outbound"
-	"bot-trade/domain/aggregate/market"
-	"bot-trade/domain/aggregate/stockmetrics"
-	metricsService "bot-trade/domain/service/stockmetrics"
+	metricsagg "bot-trade/domain/metrics/aggregate"
+	metricsservice "bot-trade/domain/metrics/service"
+	filtervo "bot-trade/domain/shared/valueobject/filter"
+	marketvo "bot-trade/domain/shared/valueobject/market"
 
 	"go.uber.org/zap"
 )
@@ -24,6 +26,9 @@ import (
 var supportedExchanges = []string{"HOSE", "HNX", "UPCOM"}
 
 const (
+	// Stock metrics requires ~400 days (1.5 trading years) for RS Rating calculations.
+	// This is intentionally separate from TradingConfig.LookbackDay which is for
+	// divergence/trendline analysis (typically 30-90 days).
 	stockMetricsDateRangeDays = 400 // Days of price history fetched per stock (covers ~1.5 trading years)
 	maxConcurrentStockFetches = 10  // Semaphore size limiting parallel VietCap requests
 	maxFailedLogSamples       = 20  // Maximum failed-stock entries shown in the refresh summary log
@@ -35,11 +40,11 @@ var _ inbound.StockMetricsManager = (*StockMetricsUseCase)(nil)
 type StockMetricsUseCase struct {
 	marketDataGateway outbound.MarketDataGateway
 	repository        outbound.StockMetricsRepository
-	calculator        *metricsService.Calculator
+	calculator        *metricsservice.Calculator
 	logger            *zap.Logger
 
 	// RAM cache
-	cachedMetrics []*stockmetrics.StockMetrics
+	cachedMetrics []*metricsagg.StockMetrics
 	cachedAt      time.Time
 	cacheMu       sync.RWMutex
 }
@@ -53,13 +58,13 @@ func NewStockMetricsUseCase(
 	return &StockMetricsUseCase{
 		marketDataGateway: marketDataGateway,
 		repository:        repository,
-		calculator:        metricsService.NewCalculator(),
+		calculator:        metricsservice.NewCalculator(),
 		logger:            logger,
 	}
 }
 
 // Refresh fetches ALL stocks from HOSE, HNX, UPCOM, calculates metrics, and caches in RAM.
-func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*stockmetrics.StockMetricsResult, error) {
+func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*dto.StockMetricsResult, error) {
 	startTime := time.Now()
 	uc.logger.Info("Starting stock metrics refresh for all exchanges",
 		zap.Strings("exchanges", supportedExchanges),
@@ -78,13 +83,9 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*stockmetrics.Stock
 		zap.Any("exchange_stats", exchangeStats),
 	)
 
-	// Calculate date range for 252 trading days
-	endDate := time.Now().Format("2006-01-02")
-	startDate := time.Now().AddDate(0, 0, -stockMetricsDateRangeDays).Format("2006-01-02")
-
 	// Step 2: Fetch price history for each stock concurrently with retry and failure tracking
 	var (
-		allMetrics    = make([]*stockmetrics.StockMetrics, 0, len(allStocks))
+		allMetrics    = make([]*metricsagg.StockMetrics, 0, len(allStocks))
 		failedSymbols = make(map[string]string) // symbol -> error reason
 		mu            sync.Mutex
 		wg            sync.WaitGroup
@@ -100,7 +101,7 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*stockmetrics.Stock
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			metrics, fetchErr := uc.fetchAndCalculate(ctx, sym, exchange, startDate, endDate)
+			metrics, fetchErr := uc.fetchAndCalculate(ctx, sym, exchange, marketvo.LookbackDay(stockMetricsDateRangeDays))
 
 			mu.Lock()
 			if fetchErr != nil {
@@ -109,7 +110,7 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*stockmetrics.Stock
 				allMetrics = append(allMetrics, metrics)
 			}
 			mu.Unlock()
-		}(stock.Symbol, stock.Exchange)
+		}(string(stock.Symbol), string(stock.Exchange))
 	}
 
 	wg.Wait()
@@ -147,7 +148,7 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*stockmetrics.Stock
 	uc.logRefreshSummary(totalStocks, len(rankedMetrics), failedSymbols, totalDuration)
 
 	// Return full result
-	return &stockmetrics.StockMetricsResult{
+	return &dto.StockMetricsResult{
 		TotalStocksAnalyzed: totalStocks,
 		StocksMatching:      len(rankedMetrics),
 		CalculatedAt:        uc.cachedAt,
@@ -159,7 +160,8 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*stockmetrics.Stock
 // Supports AND/OR logic for combining multiple filter conditions.
 // Available fields: rs_1m, rs_3m, rs_6m, rs_9m, rs_52w, volume_vs_sma, current_volume, volume_sma20
 // Available operators: >=, <=, >, <, =
-func (uc *StockMetricsUseCase) Filter(ctx context.Context, filterReq *stockmetrics.FilterRequest) (*stockmetrics.StockMetricsResult, error) {
+// Validation is performed during JSON unmarshaling at the handler layer.
+func (uc *StockMetricsUseCase) Filter(ctx context.Context, filter *filtervo.StockFilter) (*dto.StockMetricsResult, error) {
 	uc.cacheMu.RLock()
 	defer uc.cacheMu.RUnlock()
 
@@ -168,8 +170,8 @@ func (uc *StockMetricsUseCase) Filter(ctx context.Context, filterReq *stockmetri
 	}
 
 	// If no filters, return all
-	if filterReq == nil || len(filterReq.Conditions) == 0 {
-		return &stockmetrics.StockMetricsResult{
+	if filter == nil || len(filter.Conditions) == 0 {
+		return &dto.StockMetricsResult{
 			TotalStocksAnalyzed: len(uc.cachedMetrics),
 			StocksMatching:      len(uc.cachedMetrics),
 			CalculatedAt:        uc.cachedAt,
@@ -177,15 +179,15 @@ func (uc *StockMetricsUseCase) Filter(ctx context.Context, filterReq *stockmetri
 		}, nil
 	}
 
-	// Filter cached metrics using advanced filter
-	filtered := make([]*stockmetrics.StockMetrics, 0)
-	for _, s := range uc.cachedMetrics {
-		if s.MatchesFilter(filterReq) {
-			filtered = append(filtered, s)
+	// Filter using the domain service
+	filtered := make([]*metricsagg.StockMetrics, 0)
+	for _, stock := range uc.cachedMetrics {
+		if metricsservice.Matches(stock, filter) {
+			filtered = append(filtered, stock)
 		}
 	}
 
-	return &stockmetrics.StockMetricsResult{
+	return &dto.StockMetricsResult{
 		TotalStocksAnalyzed: len(uc.cachedMetrics),
 		StocksMatching:      len(filtered),
 		CalculatedAt:        uc.cachedAt,
@@ -232,8 +234,8 @@ func (uc *StockMetricsUseCase) LoadFromDB(ctx context.Context) (bool, error) {
 }
 
 // fetchAndCalculate fetches price history and calculates metrics for a single stock.
-func (uc *StockMetricsUseCase) fetchAndCalculate(ctx context.Context, symbol, exchange, startDate, endDate string) (*stockmetrics.StockMetrics, error) {
-	query, err := market.NewMarketDataQueryFromStrings(symbol, startDate, endDate, "1D")
+func (uc *StockMetricsUseCase) fetchAndCalculate(ctx context.Context, symbol, exchange string, lookbackDay marketvo.LookbackDay) (*metricsagg.StockMetrics, error) {
+	query, err := marketvo.NewMarketDataQueryFromStrings(symbol, "", "1D", lookbackDay)
 	if err != nil {
 		return nil, fmt.Errorf("invalid query: %w", err)
 	}
@@ -297,10 +299,10 @@ func (uc *StockMetricsUseCase) logRefreshSummary(totalStocks, successCount int, 
 
 // fetchAllExchangeStocks fetches stocks from all supported exchanges concurrently.
 // Returns combined stock list and per-exchange statistics.
-func (uc *StockMetricsUseCase) fetchAllExchangeStocks(ctx context.Context) ([]market.StockInfo, map[string]int, error) {
+func (uc *StockMetricsUseCase) fetchAllExchangeStocks(ctx context.Context) ([]marketvo.StockInfo, map[string]int, error) {
 	type exchangeResult struct {
 		exchange string
-		stocks   []market.StockInfo
+		stocks   []marketvo.StockInfo
 		err      error
 	}
 
@@ -318,7 +320,7 @@ func (uc *StockMetricsUseCase) fetchAllExchangeStocks(ctx context.Context) ([]ma
 	}
 
 	// Collect results
-	var allStocks []market.StockInfo
+	var allStocks []marketvo.StockInfo
 	exchangeStats := make(map[string]int)
 	var errors []string
 

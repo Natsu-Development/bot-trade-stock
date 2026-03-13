@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"bot-trade/application/port/inbound"
-	appAnalyze "bot-trade/application/usecase/analyze"
 	appService "bot-trade/application/service"
 	"bot-trade/application/usecase"
+	appAnalyze "bot-trade/application/usecase/analyze"
 	"bot-trade/config"
-	"bot-trade/domain/aggregate/analysis"
+	analysisvo "bot-trade/domain/analysis/valueobject"
 	"bot-trade/infrastructure/adapter"
 	infraCron "bot-trade/infrastructure/cron"
 	infraHTTP "bot-trade/infrastructure/http"
@@ -73,9 +73,10 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	configUseCase := usecase.NewConfigUseCase(configRepository)
 	stockMetricsUseCase := usecase.NewStockMetricsUseCase(marketDataGateway, stockMetricsRepository, appLogger)
 
-	// Create the unified analyzer (internal sub-analyzers are created inside)
+	// Create the unified analyzer
+	// Pass configUseCase (implements ConfigManager) instead of raw repository
 	analyzer := appAnalyze.NewAnalyzer(
-		configRepository,
+		configUseCase,
 		marketDataGateway,
 		appLogger,
 	)
@@ -89,12 +90,12 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	bullishScheduler := appService.NewDivergenceScheduler(
 		infraCron.NewJobScheduler(),
 		appLogger, notifier, configRepository, analyzer,
-		analysis.BullishDivergence, cfg.BullishIntervals(),
+		analysisvo.BullishDivergence, cfg.BullishIntervals(),
 	)
 	bearishScheduler := appService.NewDivergenceScheduler(
 		infraCron.NewJobScheduler(),
 		appLogger, notifier, configRepository, analyzer,
-		analysis.BearishDivergence, cfg.BearishIntervals(),
+		analysisvo.BearishDivergence, cfg.BearishIntervals(),
 	)
 
 	configHandler := presHandler.NewConfigHandler(configUseCase)

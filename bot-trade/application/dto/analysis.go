@@ -5,114 +5,152 @@ package dto
 import (
 	"time"
 
-	"bot-trade/domain/aggregate/analysis"
-	"bot-trade/domain/aggregate/market"
+	analysisvo "bot-trade/domain/analysis/valueobject"
+	marketvo "bot-trade/domain/shared/valueobject/market"
 )
 
 // AnalysisResult is the unified application DTO for analysis responses.
-// This belongs in the application layer because it orchestrates multiple domain results.
-// It is NOT a domain aggregate - it's a coordination object for the use case.
+// Plain data structure - no behavior, just data.
+// Contains all analysis outputs from domain services.
+// JSON tags are included for direct API marshaling.
 type AnalysisResult struct {
-	Symbol           string
-	ProcessingTimeMs int64
-	Timestamp        time.Time
-	StartDate        string
-	EndDate          string
-	Interval         string
-	CurrentPrice     float64
-	CurrentRSI       float64
+	Symbol           string        `json:"symbol"`
+	ProcessingTimeMs int64         `json:"processing_time_ms"`
+	Timestamp        time.Time     `json:"timestamp"`
 
-	// Composed domain results
-	BullishDivergence *analysis.AnalysisResult
-	BearishDivergence *analysis.AnalysisResult
-	Signals           []market.TradingSignal
-	PriceHistory      []market.MarketData
-	Trendlines        []market.TrendlineDisplay
+	// Combined divergences (both bullish and bearish) with type field
+	Divergences []DivergenceDTO `json:"divergences"`
+
+	// Trendlines with computed data points
+	Trendlines []TrendlineDTO `json:"trendlines"`
+
+	// Trading signals (DTO with JSON tags)
+	Signals []SignalDTO `json:"signals"`
+
+	// Price history for chart rendering (DTO with JSON tags)
+	PriceHistory []MarketDataDTO `json:"price_history"`
 }
 
-// NewAnalysisResult creates a new AnalysisResult DTO.
-func NewAnalysisResult(symbol, startDate, endDate, interval string, currentPrice float64) *AnalysisResult {
-	return &AnalysisResult{
-		Symbol:       symbol,
-		StartDate:    startDate,
-		EndDate:      endDate,
-		Interval:     interval,
-		CurrentPrice: currentPrice,
-		Timestamp:    time.Now(),
-	}
+// DivergenceDTO represents a detected divergence pattern for JSON marshaling.
+// Combines both bullish and bearish divergences with a type field.
+type DivergenceDTO struct {
+	Type    string      `json:"type"`
+	IsEarly bool        `json:"is_early"`
+	Points  []PivotPoint `json:"divergence_points"`
 }
 
-// HasConfirmedSignals returns true if there are any confirmed signals.
-func (r *AnalysisResult) HasConfirmedSignals() bool {
-	for _, s := range r.Signals {
-		if s.IsConfirmed() {
-			return true
+// PivotPoint represents a pivot point used in divergence detection.
+type PivotPoint struct {
+	Price float64 `json:"price"`
+	Date  string  `json:"date"`
+}
+
+// TrendlineDTO represents a detected trendline with computed data points.
+type TrendlineDTO struct {
+	Type       string     `json:"type"`
+	DataPoints []DataPoint `json:"data_points"`
+	StartPrice float64    `json:"start_price"`
+	EndPrice   float64    `json:"end_price"`
+	StartDate  string     `json:"start_date"`
+	EndDate    string     `json:"end_date"`
+	Slope      float64    `json:"slope"`
+}
+
+// DataPoint represents a single point on a trendline.
+type DataPoint struct {
+	Date  string  `json:"date"`
+	Price float64 `json:"price"`
+}
+
+// SignalDTO represents a trading signal for JSON marshaling.
+type SignalDTO struct {
+	Type   string  `json:"type"`
+	Price  float64 `json:"price"`
+	Time   string  `json:"time"`
+	PriceLine float64 `json:"price_line"`
+}
+
+// MarketDataDTO represents OHLCV data for JSON marshaling.
+type MarketDataDTO struct {
+	Index  int     `json:"index"`
+	Date   string  `json:"date"`
+	Open   float64 `json:"open"`
+	High   float64 `json:"high"`
+	Low    float64 `json:"low"`
+	Close  float64 `json:"close"`
+	Volume int64   `json:"volume"`
+	RSI    float64 `json:"rsi"`
+}
+
+// ToDivergenceDTOs converts a slice of domain Divergences to DivergenceDTOs.
+func ToDivergenceDTOs(divs []analysisvo.Divergence) []DivergenceDTO {
+	result := make([]DivergenceDTO, len(divs))
+	for i, div := range divs {
+		result[i] = DivergenceDTO{
+			Type:    string(div.Type),
+			IsEarly: div.IsEarly,
+			Points: []PivotPoint{
+				{Price: div.FirstPivot.Close, Date: div.FirstPivot.Date},
+				{Price: div.SecondPivot.Close, Date: div.SecondPivot.Date},
+			},
 		}
 	}
-	return false
+	return result
 }
 
-// HasWatchingSignals returns true if there are any watching or potential signals.
-func (r *AnalysisResult) HasWatchingSignals() bool {
-	for _, s := range r.Signals {
-		if s.IsWatching() || s.IsPotential() {
-			return true
+// ToTrendlineDTOs converts a slice of domain Trendlines to TrendlineDTOs.
+func ToTrendlineDTOs(priceHistory []marketvo.MarketData, tls []analysisvo.Trendline) []TrendlineDTO {
+	result := make([]TrendlineDTO, len(tls))
+	for i, tl := range tls {
+		domainPoints := tl.DataPoints(priceHistory)
+		dataPoints := make([]DataPoint, len(domainPoints))		
+		for i, p := range domainPoints {
+			dataPoints[i] = DataPoint{
+				Date:  p.Date,
+				Price: p.Price,
+			}
+		}
+		result[i] = TrendlineDTO{
+			Type:       string(tl.Type),
+			DataPoints: dataPoints,
+			StartPrice: tl.StartPrice(),
+			EndPrice:   tl.EndPrice(),
+			StartDate:  tl.StartPivot.Date,
+			EndDate:    tl.EndPivot.Date,
+			Slope:      tl.Slope,
 		}
 	}
-	return false
+	return result
 }
 
-// HasAnyDivergence returns true if either bullish or bearish divergence was found.
-func (r *AnalysisResult) HasAnyDivergence() bool {
-	if r.BullishDivergence != nil && r.BullishDivergence.HasDivergence() {
-		return true
+// ToSignalDTOs converts a slice of domain Signals to SignalDTOs.
+func ToSignalDTOs(signals []analysisvo.Signal) []SignalDTO {
+	result := make([]SignalDTO, len(signals))
+	for i, s := range signals {
+		result[i] = SignalDTO{
+			Type:   string(s.Type),
+			Price:  s.Price,
+			Time:   s.Time,
+			PriceLine: s.PriceLine,
+		}
 	}
-	if r.BearishDivergence != nil && r.BearishDivergence.HasDivergence() {
-		return true
+	return result
+}
+
+// ToMarketDataDTOs converts a slice of domain MarketData to MarketDataDTOs.
+func ToMarketDataDTOs(data []marketvo.MarketData) []MarketDataDTO {
+	result := make([]MarketDataDTO, len(data))
+	for i, d := range data {
+		result[i] = MarketDataDTO{
+			Index:  d.Index,
+			Date:   d.Date,
+			Open:   d.Open,
+			High:   d.High,
+			Low:    d.Low,
+			Close:  d.Close,
+			Volume: d.Volume,
+			RSI:    d.RSI,
+		}
 	}
-	return false
-}
-
-// Builder pattern for fluent construction
-
-// WithBullishDivergence sets the bullish divergence result.
-func (r *AnalysisResult) WithBullishDivergence(result *analysis.AnalysisResult) *AnalysisResult {
-	r.BullishDivergence = result
-	return r
-}
-
-// WithBearishDivergence sets the bearish divergence result.
-func (r *AnalysisResult) WithBearishDivergence(result *analysis.AnalysisResult) *AnalysisResult {
-	r.BearishDivergence = result
-	return r
-}
-
-// WithSignals sets the trading signals.
-func (r *AnalysisResult) WithSignals(signals []market.TradingSignal) *AnalysisResult {
-	r.Signals = signals
-	return r
-}
-
-// WithPriceHistory sets the price history data.
-func (r *AnalysisResult) WithPriceHistory(history []market.MarketData) *AnalysisResult {
-	r.PriceHistory = history
-	return r
-}
-
-// WithTrendlines sets the trendlines for display.
-func (r *AnalysisResult) WithTrendlines(trendlines []market.TrendlineDisplay) *AnalysisResult {
-	r.Trendlines = trendlines
-	return r
-}
-
-// WithProcessingTime sets the processing time in milliseconds.
-func (r *AnalysisResult) WithProcessingTime(ms int64) *AnalysisResult {
-	r.ProcessingTimeMs = ms
-	return r
-}
-
-// WithCurrentRSI sets the current RSI value.
-func (r *AnalysisResult) WithCurrentRSI(rsi float64) *AnalysisResult {
-	r.CurrentRSI = rsi
-	return r
+	return result
 }

@@ -83,3 +83,27 @@ func (t *Trendline) StartPrice() float64 {
 func (t *Trendline) EndPrice() float64 {
 	return priceFor(t.Type, t.EndPivot)
 }
+
+// DataPoint represents a point along the trendline with date and price.
+type DataPoint struct {
+	Date  string
+	Price float64
+}
+
+// DataPoints returns all data points along this trendline within the given price history.
+func (t *Trendline) DataPoints(priceHistory []marketvo.MarketData) []DataPoint {
+	points := make([]DataPoint, 0)
+	for _, p := range priceHistory {
+		if p.Date < t.StartPivot.Date {
+			continue
+		}
+		if p.Date > t.EndPivot.Date {
+			break
+		}
+		points = append(points, DataPoint{
+			Date:  p.Date,
+			Price: t.PriceAt(p.Index),
+		})
+	}
+	return points
+}

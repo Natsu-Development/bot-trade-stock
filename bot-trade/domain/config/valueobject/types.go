@@ -8,10 +8,11 @@ import (
 )
 
 var (
-	ErrInvalidConfigID      = errors.New("config ID must be between 2 and 50 alphanumeric characters, hyphens, or underscores")
-	ErrInvalidRSIPeriod     = errors.New("RSI period must be between 2 and 100")
-	ErrInvalidPivotPeriod   = errors.New("pivot period must be between 2 and 100")
-	ErrInvalidWatchlistType = errors.New("watchlist type must be 'bullish' or 'bearish'")
+	ErrInvalidConfigID       = errors.New("config ID must be between 2 and 50 alphanumeric characters, hyphens, or underscores")
+	ErrInvalidRSIPeriod      = errors.New("RSI period must be between 2 and 100")
+	ErrInvalidPivotPeriod    = errors.New("pivot period must be between 2 and 100")
+	ErrInvalidIndicesRecent  = errors.New("indices recent must be a positive integer (1+)")
+	ErrInvalidWatchlistType  = errors.New("watchlist type must be 'bullish' or 'bearish'")
 )
 
 // ConfigID is a unique identifier for trading configurations.
@@ -59,6 +60,17 @@ func NewPivotPeriod(value int) (PivotPeriod, error) {
 		return 0, ErrInvalidPivotPeriod
 	}
 	return PivotPeriod(value), nil
+}
+
+// IndicesRecent represents the number of recent indices to track.
+type IndicesRecent int
+
+// NewIndicesRecent creates a validated IndicesRecent value.
+func NewIndicesRecent(value int) (IndicesRecent, error) {
+	if value < 1 {
+		return 0, ErrInvalidIndicesRecent
+	}
+	return IndicesRecent(value), nil
 }
 
 // WatchlistType represents which watchlist a symbol belongs to.

@@ -5,8 +5,9 @@ import (
 	"net/http"
 
 	"bot-trade/application/port/inbound"
-	"bot-trade/domain/aggregate"
-	"bot-trade/domain/aggregate/stockmetrics"
+	filtervo "bot-trade/domain/shared/valueobject/filter"
+	marketvo "bot-trade/domain/shared/valueobject/market"
+	"bot-trade/presentation/http/response"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,14 +27,11 @@ func NewStockHandler(stockMetrics inbound.StockMetricsManager) *StockHandler {
 func (h *StockHandler) RefreshStocks(c *gin.Context) {
 	result, err := h.stockMetrics.Refresh(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to refresh stock metrics",
-			"details": err.Error(),
-		})
+		response.Error(c, http.StatusInternalServerError, "Failed to refresh stock metrics", err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response.Success(c, http.StatusOK, gin.H{
 		"message":       "Stock metrics refreshed successfully",
 		"total_stocks":  result.TotalStocksAnalyzed,
 		"stocks_ranked": result.StocksMatching,
@@ -46,14 +44,14 @@ func (h *StockHandler) RefreshStocks(c *gin.Context) {
 func (h *StockHandler) GetCacheInfo(c *gin.Context) {
 	cachedAt, totalStocks, ok := h.stockMetrics.GetCacheInfo()
 	if !ok {
-		c.JSON(http.StatusOK, gin.H{
+		response.Success(c, http.StatusOK, gin.H{
 			"cached":  false,
 			"message": "Cache is empty. Call POST /stocks/refresh to populate.",
 		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response.Success(c, http.StatusOK, gin.H{
 		"cached":       true,
 		"cached_at":    cachedAt,
 		"total_stocks": totalStocks,
@@ -68,8 +66,8 @@ func (h *StockHandler) GetCacheInfo(c *gin.Context) {
 // Logic: "and" (all conditions must match) or "or" (any condition must match)
 // Exchanges: optional filter by exchanges (HOSE, HNX, UPCOM)
 func (h *StockHandler) FilterStocks(c *gin.Context) {
-	var filterReq stockmetrics.FilterRequest
-	if err := c.ShouldBindJSON(&filterReq); err != nil {
+	var filter filtervo.StockFilter
+	if err := c.ShouldBindJSON(&filter); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Invalid request body",
 			"details": err.Error(),
@@ -85,20 +83,8 @@ func (h *StockHandler) FilterStocks(c *gin.Context) {
 		return
 	}
 
-	if err := filterReq.Validate(); err != nil {
-		resp := gin.H{"error": err.Error()}
-		// Add helpful hints for validation errors
-		if _, ok := err.(*aggregate.ValidationError); ok {
-			resp["valid_fields"] = stockmetrics.ValidFields()
-			resp["valid_operators"] = stockmetrics.ValidOperators()
-			resp["valid_exchanges"] = stockmetrics.ValidExchangesList()
-		}
-		c.JSON(http.StatusBadRequest, resp)
-		return
-	}
-
-	// Execute filter
-	result, err := h.stockMetrics.Filter(c.Request.Context(), &filterReq)
+	// Execute filter (validation already performed during JSON unmarshaling)
+	result, err := h.stockMetrics.Filter(c.Request.Context(), &filter)
 	if err != nil {
 		if errors.Is(err, inbound.ErrCacheNotReady) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
@@ -107,12 +93,27 @@ func (h *StockHandler) FilterStocks(c *gin.Context) {
 			})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to filter stocks",
-			"details": err.Error(),
-		})
+		// Include helpful hints for validation errors from domain layer
+		resp := gin.H{
+			"error":           "Failed to filter stocks",
+			"details":         err.Error(),
+			"valid_fields":    filtervo.ValidFilterFields(),
+			"valid_operators": filtervo.ValidFilterOperators(),
+			"valid_exchanges": exchangesList(),
+		}
+		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
 
-	c.JSON(http.StatusOK, result)
+	response.Success(c, http.StatusOK, result)
+}
+
+// exchangesList returns the list of valid exchange names.
+func exchangesList() []string {
+	exchanges := marketvo.AllExchanges()
+	result := make([]string, len(exchanges))
+	for i, e := range exchanges {
+		result[i] = string(e)
+	}
+	return result
 }

@@ -9,9 +9,10 @@ import (
 	"bot-trade/application/dto"
 	"bot-trade/application/port/inbound"
 	"bot-trade/application/port/outbound"
-	"bot-trade/domain/aggregate/analysis"
-	tradingConfig "bot-trade/domain/aggregate/config"
-	"bot-trade/domain/aggregate/market"
+	analysisvo "bot-trade/domain/analysis/valueobject"
+	configagg "bot-trade/domain/config/aggregate"
+	marketvo "bot-trade/domain/shared/valueobject/market"
+	"bot-trade/infrastructure/formatter"
 
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -23,15 +24,16 @@ const (
 )
 
 // DivergenceScheduler handles automated divergence analysis for a single divergence type.
-// Uses the unified Analyzer interface and extracts relevant results from CombinedAnalysisResult.
+// Uses the unified Analyzer interface and extracts relevant results from AnalysisSession.
 type DivergenceScheduler struct {
 	scheduler        outbound.JobScheduler
 	logger           *zap.Logger
 	notifier         outbound.Notifier
 	configRepository outbound.ConfigRepository
-	analyzer         inbound.Analyzer // Changed from DivergenceAnalyzer to Analyzer
-	divergenceType   analysis.DivergenceType
+	analyzer         inbound.Analyzer
+	divergenceType   analysisvo.DivergenceType
 	intervals        map[string]outbound.IntervalConfig
+	divFormatter     *formatter.DivergenceFormatter
 
 	isRunning bool
 	mu        sync.RWMutex
@@ -43,8 +45,8 @@ func NewDivergenceScheduler(
 	logger *zap.Logger,
 	notifier outbound.Notifier,
 	configRepository outbound.ConfigRepository,
-	analyzer inbound.Analyzer, // Changed from DivergenceAnalyzer to Analyzer
-	divergenceType analysis.DivergenceType,
+	analyzer inbound.Analyzer,
+	divergenceType analysisvo.DivergenceType,
 	intervals map[string]outbound.IntervalConfig,
 ) *DivergenceScheduler {
 	return &DivergenceScheduler{
@@ -55,6 +57,7 @@ func NewDivergenceScheduler(
 		analyzer:         analyzer,
 		divergenceType:   divergenceType,
 		intervals:        intervals,
+		divFormatter:     formatter.NewDivergenceFormatter(),
 	}
 }
 
@@ -81,7 +84,7 @@ func (s *DivergenceScheduler) Start() error {
 		}
 
 		s.logger.Info("Scheduled analysis",
-			zap.String("type", s.divergenceType.String()),
+			zap.String("type", string(s.divergenceType)),
 			zap.String("interval", interval),
 			zap.String("schedule", cfg.Schedule),
 		)
@@ -95,7 +98,7 @@ func (s *DivergenceScheduler) Start() error {
 	s.scheduler.Start()
 	s.isRunning = true
 	s.logger.Info("Scheduler started",
-		zap.String("type", s.divergenceType.String()),
+		zap.String("type", string(s.divergenceType)),
 		zap.Int("intervals", jobCount),
 	)
 	return nil
@@ -109,7 +112,7 @@ func (s *DivergenceScheduler) Stop() {
 	if s.isRunning {
 		s.scheduler.Stop()
 		s.isRunning = false
-		s.logger.Info("Cron scheduler stopped", zap.String("type", s.divergenceType.String()))
+		s.logger.Info("Cron scheduler stopped", zap.String("type", string(s.divergenceType)))
 	}
 }
 
@@ -132,65 +135,72 @@ func (s *DivergenceScheduler) runAnalysis(interval string) {
 
 	if len(configs) == 0 {
 		s.logger.Warn("No trading configs found, skipping scheduled job",
-			zap.String("type", s.divergenceType.String()),
+			zap.String("type", string(s.divergenceType)),
 		)
 		return
 	}
 
 	s.logger.Info("Starting analysis for all configs",
-		zap.String("type", s.divergenceType.String()),
+		zap.String("type", string(s.divergenceType)),
 		zap.String("interval", interval),
 		zap.Int("configCount", len(configs)),
 	)
 
 	for _, cfg := range configs {
-		endDate := time.Now().Format("2006-01-02")
-		startDate := time.Now().AddDate(0, 0, -cfg.StartDateOffset).Format("2006-01-02")
-		s.processConfig(ctx, interval, startDate, endDate, cfg)
+		s.processConfig(ctx, interval, cfg)
 	}
 }
 
-func (s *DivergenceScheduler) selectSymbols(cfg *tradingConfig.TradingConfig) []string {
-	if s.divergenceType == analysis.BullishDivergence {
-		return cfg.BullishSymbols
+func (s *DivergenceScheduler) selectSymbols(cfg *configagg.TradingConfig) []string {
+	var symbols []marketvo.Symbol
+	if s.divergenceType.IsBullish() {
+		symbols = cfg.BullishSymbols
+	} else {
+		symbols = cfg.BearishSymbols
 	}
-	return cfg.BearishSymbols
+
+	// Convert []sharedvo.Symbol to []strings
+	result := make([]string, len(symbols))
+	for i, sym := range symbols {
+		result[i] = string(sym)
+	}
+	return result
 }
 
-type symbolResult struct {
+type symbolSession struct {
 	symbol string
 	result *dto.AnalysisResult
 }
 
-func (s *DivergenceScheduler) processConfig(ctx context.Context, interval, startDate, endDate string, cfg *tradingConfig.TradingConfig) {
+func (s *DivergenceScheduler) processConfig(ctx context.Context, interval string, cfg *configagg.TradingConfig) {
 	symbols := s.selectSymbols(cfg)
 	if len(symbols) == 0 {
 		s.logger.Debug("Skipping config with no symbols",
-			zap.String("type", s.divergenceType.String()),
-			zap.String("configID", cfg.ID),
+			zap.String("type", string(s.divergenceType)),
+			zap.String("configID", string(cfg.ID)),
 		)
 		return
 	}
 
 	s.logger.Info("Processing config",
-		zap.String("type", s.divergenceType.String()),
-		zap.String("configID", cfg.ID),
+		zap.String("type", string(s.divergenceType)),
+		zap.String("configID", string(cfg.ID)),
 		zap.String("interval", interval),
 		zap.Strings("symbols", symbols),
 	)
 
 	var (
-		mu      sync.Mutex
-		results []symbolResult
+		mu       sync.Mutex
+		sessions []symbolSession
 	)
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(maxConcurrentAnalysis)
 
-	for _, sym := range symbols {
-		symbol := sym
+	for _, symbol := range symbols {
+		symbol := symbol
 		g.Go(func() error {
-			query, err := market.NewMarketDataQueryFromStrings(symbol, startDate, endDate, interval)
+			query, err := marketvo.NewMarketDataQueryFromStrings(symbol, "", interval, cfg.LookbackDay)
 			if err != nil {
 				s.logger.Error("Failed to create query",
 					zap.String("symbol", symbol),
@@ -199,7 +209,7 @@ func (s *DivergenceScheduler) processConfig(ctx context.Context, interval, start
 				return nil
 			}
 
-			result, err := s.analyzer.Execute(gctx, query, cfg.ID)
+			result, err := s.analyzer.Execute(gctx, query, string(cfg.ID))
 			if err != nil {
 				s.logger.Error("Analysis failed",
 					zap.String("symbol", symbol),
@@ -209,70 +219,72 @@ func (s *DivergenceScheduler) processConfig(ctx context.Context, interval, start
 			}
 
 			mu.Lock()
-			results = append(results, symbolResult{symbol: symbol, result: result})
+			sessions = append(sessions, symbolSession{symbol: symbol, result: result})
 			mu.Unlock()
 			return nil
 		})
 	}
 
 	_ = g.Wait()
-	s.handleResults(interval, results, cfg)
+	s.handleResults(interval, sessions, cfg)
 }
 
-func (s *DivergenceScheduler) handleResults(interval string, results []symbolResult, cfg *tradingConfig.TradingConfig) {
+func (s *DivergenceScheduler) handleResults(interval string, sessions []symbolSession, cfg *configagg.TradingConfig) {
 	var signalCount, earlySignalCount int
 	var signalSymbols, earlySymbols []string
 
-	isBearish := s.divergenceType == analysis.BearishDivergence
-	earlyEnabled := isBearish && cfg.EarlyDetectionEnabled != nil && *cfg.EarlyDetectionEnabled
+	isBearish := s.divergenceType.IsBearish()
+	earlyEnabled := isBearish && cfg.BearishEarly != nil && *cfg.BearishEarly
 
-	for _, sr := range results {
-		symbol, combinedResult := sr.symbol, sr.result
+	for _, ss := range sessions {
+		symbol, result := ss.symbol, ss.result
 
-		// Extract the relevant divergence result from CombinedAnalysisResult
-		var divergenceResult *analysis.AnalysisResult
-		if s.divergenceType == analysis.BullishDivergence {
-			divergenceResult = combinedResult.BullishDivergence
-		} else {
-			divergenceResult = combinedResult.BearishDivergence
+		// Check for divergence of the scheduler's type
+		hasDivergence := hasDivergenceOfType(result.Divergences, s.divergenceType)
+
+		// Check for early signal (bearish only)
+		hasEarlySignal := false
+		var earlyDesc string
+		if earlyEnabled && len(result.PriceHistory) > 0 {
+			// currentData := result.PriceHistory[len(result.PriceHistory)-1]
+			// earlyDiv, detected := analysisservice.FindEarlyBearishDivergence(result.RSIPivots, currentData)
+			// if detected && !hasDivergence {
+			// 	hasEarlySignal = true
+			// 	earlyDesc = formatter.NewDivergenceFormatter().FormatDetection(earlyDiv)
+			// }
 		}
 
-		if divergenceResult == nil {
-			continue
-		}
-
-		if divergenceResult.HasDivergence() && divergenceResult.DivergenceType == s.divergenceType {
+		if hasDivergence {
 			signalCount++
 			signalSymbols = append(signalSymbols, symbol)
 			s.logger.Info("Divergence detected",
-				zap.String("type", s.divergenceType.String()),
-				zap.String("configID", cfg.ID),
+				zap.String("type", string(s.divergenceType)),
+				zap.String("configID", string(cfg.ID)),
 				zap.String("interval", interval),
 				zap.String("symbol", symbol),
-				zap.String("description", divergenceResult.Description),
 			)
-			s.sendNotification(interval, symbol, divergenceResult, cfg)
+			s.sendNotification(interval, symbol, result, cfg)
 		}
 
-		if earlyEnabled && divergenceResult.HasEarlySignal() && !divergenceResult.HasDivergence() {
+		if hasEarlySignal {
 			earlySignalCount++
 			earlySymbols = append(earlySymbols, symbol)
 			s.logger.Info("Early signal detected",
-				zap.String("type", s.divergenceType.String()),
-				zap.String("configID", cfg.ID),
+				zap.String("type", string(s.divergenceType)),
+				zap.String("configID", string(cfg.ID)),
 				zap.String("interval", interval),
 				zap.String("symbol", symbol),
-				zap.String("description", divergenceResult.EarlyDescription),
+				zap.String("description", earlyDesc),
 			)
-			s.sendEarlySignalNotification(interval, symbol, divergenceResult, cfg)
+			s.sendEarlySignalNotification(interval, symbol, earlyDesc, cfg)
 		}
 	}
 
 	logFields := []zap.Field{
-		zap.String("type", s.divergenceType.String()),
-		zap.String("configID", cfg.ID),
+		zap.String("type", string(s.divergenceType)),
+		zap.String("configID", string(cfg.ID)),
 		zap.String("interval", interval),
-		zap.Int("analyzed", len(results)),
+		zap.Int("analyzed", len(sessions)),
 		zap.Int("signals", signalCount),
 		zap.Strings("signal_symbols", signalSymbols),
 	}
@@ -285,18 +297,30 @@ func (s *DivergenceScheduler) handleResults(interval string, results []symbolRes
 	s.logger.Info("Analysis complete for config", logFields...)
 }
 
-func (s *DivergenceScheduler) sendNotification(interval, symbol string, result *analysis.AnalysisResult, cfg *tradingConfig.TradingConfig) {
+// sendNotification sends a notification for detected divergence.
+func (s *DivergenceScheduler) sendNotification(interval, symbol string, result *dto.AnalysisResult, cfg *configagg.TradingConfig) {
+	// Find divergences of the scheduler's type
+	divergences := filterDivergencesByType(result.Divergences, s.divergenceType)
+	if len(divergences) == 0 {
+		return
+	}
+
+	div := divergences[0] // Use first (most recent)
+	description := formatDivergenceDescription(div)
+
 	req := outbound.NotificationRequest{
 		Type:           outbound.NotificationTypeDivergence,
 		DivergenceType: s.divergenceType,
 		Interval:       interval,
 		Symbol:         symbol,
 		Result:         result,
+		Description:    description,
+		IsEarlySignal:  false,
 		TelegramCfg:    cfg.Telegram,
 	}
 	if err := s.notifier.SendNotification(req); err != nil {
 		s.logger.Error("Failed to send notification",
-			zap.String("type", s.divergenceType.String()),
+			zap.String("type", string(s.divergenceType)),
 			zap.String("symbol", symbol),
 			zap.String("interval", interval),
 			zap.Error(err),
@@ -304,13 +328,43 @@ func (s *DivergenceScheduler) sendNotification(interval, symbol string, result *
 	}
 }
 
-func (s *DivergenceScheduler) sendEarlySignalNotification(interval, symbol string, result *analysis.AnalysisResult, cfg *tradingConfig.TradingConfig) {
+// hasDivergenceOfType checks if there are divergences of the specified type.
+func hasDivergenceOfType(divergences []dto.DivergenceDTO, divType analysisvo.DivergenceType) bool {
+	for _, div := range divergences {
+		if div.Type == string(divType) {
+			return true
+		}
+	}
+	return false
+}
+
+// filterDivergencesByType returns divergences matching the specified type.
+func filterDivergencesByType(divergences []dto.DivergenceDTO, divType analysisvo.DivergenceType) []dto.DivergenceDTO {
+	result := make([]dto.DivergenceDTO, 0)
+	for _, div := range divergences {
+		if div.Type == string(divType) {
+			result = append(result, div)
+		}
+	}
+	return result
+}
+
+// formatDivergenceDescription formats a divergence DTO for notifications.
+func formatDivergenceDescription(div dto.DivergenceDTO) string {
+	return fmt.Sprintf("%s divergence detected between %s and %s",
+		div.Type, div.Points[0].Date, div.Points[1].Date)
+}
+
+// sendEarlySignalNotification sends a notification for early divergence signal.
+func (s *DivergenceScheduler) sendEarlySignalNotification(interval, symbol, description string, cfg *configagg.TradingConfig) {
 	req := outbound.NotificationRequest{
 		Type:           outbound.NotificationTypeEarlySignal,
 		DivergenceType: s.divergenceType,
 		Interval:       interval,
 		Symbol:         symbol,
-		Result:         result,
+		Result:         nil, // No analysis result for early signals
+		Description:    description,
+		IsEarlySignal:  true,
 		TelegramCfg:    cfg.Telegram,
 	}
 	if err := s.notifier.SendNotification(req); err != nil {

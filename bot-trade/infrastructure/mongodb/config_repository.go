@@ -5,7 +5,8 @@ import (
 	"errors"
 
 	"bot-trade/application/port/outbound"
-	"bot-trade/domain/aggregate/config"
+	"bot-trade/domain/config"
+	configagg "bot-trade/domain/config/aggregate"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -26,14 +27,14 @@ func NewConfigRepository(client *mongo.Client, databaseName, collectionName stri
 }
 
 // Create inserts a new configuration document.
-func (r *ConfigRepository) Create(ctx context.Context, cfg *config.TradingConfig) error {
+func (r *ConfigRepository) Create(ctx context.Context, cfg *configagg.TradingConfig) error {
 	_, err := r.collection.InsertOne(ctx, cfg)
 	return err
 }
 
 // GetByID retrieves configuration by its unique ID.
-func (r *ConfigRepository) GetByID(ctx context.Context, id string) (*config.TradingConfig, error) {
-	var cfg config.TradingConfig
+func (r *ConfigRepository) GetByID(ctx context.Context, id string) (*configagg.TradingConfig, error) {
+	var cfg configagg.TradingConfig
 	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&cfg)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
@@ -45,16 +46,16 @@ func (r *ConfigRepository) GetByID(ctx context.Context, id string) (*config.Trad
 }
 
 // GetAll retrieves all configuration documents.
-func (r *ConfigRepository) GetAll(ctx context.Context) ([]*config.TradingConfig, error) {
+func (r *ConfigRepository) GetAll(ctx context.Context) ([]*configagg.TradingConfig, error) {
 	cursor, err := r.collection.Find(ctx, bson.M{})
 	if err != nil {
 		return nil, err
 	}
 	defer cursor.Close(ctx)
 
-	var configs []*config.TradingConfig
+	var configs []*configagg.TradingConfig
 	for cursor.Next(ctx) {
-		var cfg config.TradingConfig
+		var cfg configagg.TradingConfig
 		if err := cursor.Decode(&cfg); err != nil {
 			return nil, err
 		}
@@ -69,7 +70,7 @@ func (r *ConfigRepository) GetAll(ctx context.Context) ([]*config.TradingConfig,
 }
 
 // Update replaces an existing configuration document.
-func (r *ConfigRepository) Update(ctx context.Context, cfg *config.TradingConfig) error {
+func (r *ConfigRepository) Update(ctx context.Context, cfg *configagg.TradingConfig) error {
 	result, err := r.collection.ReplaceOne(ctx, bson.M{"_id": cfg.ID}, cfg)
 	if err != nil {
 		return err
