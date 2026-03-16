@@ -111,9 +111,9 @@ func FindBearishDivergences(
 func FindEarlyBearishDivergence(
 	pivots []marketvo.MarketData,
 	currentData marketvo.MarketData,
-) (analysisvo.Divergence, bool) {
+) analysisvo.Divergence {
 	if len(pivots) == 0 || !currentData.HasRSI() {
-		return analysisvo.Divergence{}, false
+		return analysisvo.Divergence{}
 	}
 
 	lastPivot := pivots[0]
@@ -125,10 +125,10 @@ func FindEarlyBearishDivergence(
 			FirstPivot:  lastPivot,
 			SecondPivot: currentData,
 			IsEarly:     true,
-		}, true
+		}
 	}
 
-	return analysisvo.Divergence{}, false
+	return analysisvo.Divergence{}
 }
 
 // sortDescending sorts pivots by index in descending order (newer pivots first).

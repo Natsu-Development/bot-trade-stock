@@ -2,16 +2,15 @@ package analyze
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"bot-trade/application/dto"
 	"bot-trade/application/port/inbound"
 	"bot-trade/application/port/outbound"
-	analysisservice "bot-trade/domain/analysis/service"
-	analysisvo "bot-trade/domain/analysis/valueobject"
+	appPrep "bot-trade/application/usecase/analyze/prep"
+	appRsi "bot-trade/application/usecase/analyze/rsi"
+	appTrendline "bot-trade/application/usecase/analyze/trendline"
 	configagg "bot-trade/domain/config/aggregate"
-	sharedservice "bot-trade/domain/shared/service"
 	marketvo "bot-trade/domain/shared/valueobject/market"
 
 	"go.uber.org/zap"
@@ -19,24 +18,36 @@ import (
 
 var _ inbound.Analyzer = (*AnalyzeUseCase)(nil)
 
-// AnalyzeUseCase orchestrates analysis by calling domain services directly.
+// AnalyzeUseCase orchestrates analysis by composing specialized use cases.
 // Returns a plain DTO - no aggregate wrapper needed.
+// Used by the HTTP API for full analysis results.
 type AnalyzeUseCase struct {
-	configManager     inbound.ConfigManager
-	marketDataGateway outbound.MarketDataGateway
-	logger            *zap.Logger
+	preparer         *appPrep.Preparer
+	bullishUsecase   *appRsi.BullishRSIUseCase
+	bearishUsecase   *appRsi.BearishRSIUseCase
+	breakdownUsecase *appTrendline.BreakdownUseCase
+	breakoutUsecase  *appTrendline.BreakoutUseCase
+	configManager    inbound.ConfigManager
+	logger           *zap.Logger
 }
 
 // NewAnalyzer creates a new unified analysis use case.
+// It composes specialized use cases while maintaining backward compatibility.
 func NewAnalyzer(
 	configManager inbound.ConfigManager,
 	marketDataGateway outbound.MarketDataGateway,
 	logger *zap.Logger,
 ) *AnalyzeUseCase {
+	preparer := appPrep.NewPreparer(configManager, marketDataGateway, logger)
+
 	return &AnalyzeUseCase{
-		configManager:     configManager,
-		marketDataGateway: marketDataGateway,
-		logger:            logger,
+		preparer:         preparer,
+		bullishUsecase:   appRsi.NewBullishRSIUseCase(logger),
+		bearishUsecase:   appRsi.NewBearishRSIUseCase(logger),
+		breakdownUsecase: appTrendline.NewBreakdownUseCase(logger),
+		breakoutUsecase:  appTrendline.NewBreakoutUseCase(logger),
+		configManager:    configManager,
+		logger:           logger,
 	}
 }
 
@@ -48,7 +59,7 @@ func (uc *AnalyzeUseCase) GetConfig(ctx context.Context, configID string) (*conf
 }
 
 // Execute performs all analysis for a symbol.
-// Calls domain services directly - no aggregate wrapper needed.
+// Composes results from specialized use cases into a unified result.
 // Returns a plain DTO with combined divergences and computed trendline data points.
 func (uc *AnalyzeUseCase) Execute(
 	ctx context.Context,
@@ -62,118 +73,58 @@ func (uc *AnalyzeUseCase) Execute(
 		zap.String("configID", configID),
 	)
 
-	// 1. Fetch config
-	tradingConfig, err := uc.configManager.GetConfig(ctx, configID)
+	// Prepare data ONCE - all use cases share the same prepared data
+	data, err := uc.preparer.Prepare(ctx, q, configID)
 	if err != nil {
-		uc.logger.Error("Failed to load trading configuration",
-			zap.String("configID", configID),
-			zap.Error(err),
-		)
-		return nil, fmt.Errorf("failed to load trading configuration: %w", err)
+		return nil, err
 	}
 
-	// 2. Fetch market data
-	priceHistory, err := uc.marketDataGateway.FetchStockData(ctx, q)
+	// Run specialized use cases with prepared data (no I/O in use cases)
+	bullishResult, err := uc.bullishUsecase.Execute(data)
 	if err != nil {
-		uc.logger.Error("Failed to fetch stock data",
-			zap.String("symbol", string(q.Symbol)),
-			zap.Error(err),
-		)
-		return nil, fmt.Errorf("failed to fetch stock data: %w", err)
-	}
-	if len(priceHistory) == 0 {
-		return nil, fmt.Errorf("no price data available for %s", symbol)
+		return nil, err
 	}
 
-	// 3. Calculate RSI on FULL price history
-	rsiPeriod := int(tradingConfig.RSIPeriod)
-	dataWithRSI := sharedservice.CalculateRSI(priceHistory, rsiPeriod)
-	if len(dataWithRSI) == 0 {
-		return nil, fmt.Errorf("insufficient data for RSI calculation: need at least %d data points", rsiPeriod+1)
+	bearishResult, err := uc.bearishUsecase.Execute(data)
+	if err != nil {
+		return nil, err
 	}
 
-	// 4. Slice recent data AFTER RSI calculation
-	indicesRecent := int(tradingConfig.IndicesRecent)
-	if len(dataWithRSI) < indicesRecent {
-		uc.logger.Warn("Insufficient RSI data",
-			zap.String("symbol", symbol),
-			zap.Int("required", indicesRecent),
-			zap.Int("actual", len(dataWithRSI)),
-		)
-		return nil, fmt.Errorf("insufficient RSI data: required %d, got %d", indicesRecent, len(dataWithRSI))
+	breakdownTrendlines, breakdownSignals, err := uc.breakdownUsecase.Execute(data)
+	if err != nil {
+		return nil, err
 	}
-	startIndex := len(dataWithRSI) - indicesRecent
-	dataRecent := dataWithRSI[startIndex:]
 
-	// 5. Call domain services directly
-	pivotPeriod := int(tradingConfig.PivotPeriod)
+	breakoutTrendlines, breakoutSignals, err := uc.breakoutUsecase.Execute(data)
+	if err != nil {
+		return nil, err
+	}
 
-	// 5a. Find pivots
-	rsiHighPivots := analysisservice.FindHighPivots(dataRecent, analysisvo.FieldRSI, pivotPeriod)
-	rsiLowPivots := analysisservice.FindLowPivots(dataRecent, analysisvo.FieldRSI, pivotPeriod)
-	priceHighPivots := analysisservice.FindHighPivots(dataRecent, analysisvo.FieldHigh, pivotPeriod)
-	priceLowPivots := analysisservice.FindLowPivots(dataRecent, analysisvo.FieldLow, pivotPeriod)
+	// Combine results
+	divergences := append(bullishResult, bearishResult...)
+	trendlines := append(breakdownTrendlines, breakoutTrendlines...)
+	signals := append(breakdownSignals, breakoutSignals...)
+	priceHistoryDTOs := dto.ToMarketDataDTOs(data.DataFull)
 
-	// 5b. Detect divergences
-	bearishDivergences := analysisservice.FindBearishDivergences(
-		rsiHighPivots,
-		tradingConfig.Divergence.RangeMin,
-		tradingConfig.Divergence.RangeMax,
-	)
-	bullishDivergences := analysisservice.FindBullishDivergences(
-		rsiLowPivots,
-		tradingConfig.Divergence.RangeMin,
-		tradingConfig.Divergence.RangeMax,
-	)
-
-	// 5c. Build trendlines
-	supportTrendlines := analysisservice.BuildSupportTrendlines(
-		priceLowPivots,
-		tradingConfig.Trendline.MaxLines,
-	)
-	resistanceTrendlines := analysisservice.BuildResistanceTrendlines(
-		priceHighPivots,
-		tradingConfig.Trendline.MaxLines,
-	)
-
-	// 5d. Generate signals
-	supportSignals := analysisservice.GenerateSupportSignals(
-		supportTrendlines,
-		dataRecent,
-		tradingConfig.Trendline.ProximityPercent,
-	)
-	resistanceSignals := analysisservice.GenerateResistanceSignals(
-		resistanceTrendlines,
-		dataRecent,
-		tradingConfig.Trendline.ProximityPercent,
-	)
-
-	// 6. Convert domain results to DTOs
-	divergences := dto.ToDivergenceDTOs(append(bullishDivergences, bearishDivergences...))
-	trendlinesDTOs := dto.ToTrendlineDTOs(dataRecent, append(supportTrendlines, resistanceTrendlines...))
-	signalDTOs := dto.ToSignalDTOs(append(supportSignals, resistanceSignals...))
-	priceHistoryDTOs := dto.ToMarketDataDTOs(dataWithRSI)
-
-	// 7. Build result DTO
+	// Build result
 	result := &dto.AnalysisResult{
 		Symbol:       symbol,
 		Divergences:  divergences,
-		Trendlines:   trendlinesDTOs,
-		Signals:      signalDTOs,
+		Trendlines:   trendlines,
+		Signals:      signals,
 		PriceHistory: priceHistoryDTOs,
 		Timestamp:    time.Now(),
 	}
 
-	// 11. Log completion
 	processingTime := time.Since(startTime)
 	result.ProcessingTimeMs = processingTime.Milliseconds()
 
 	uc.logger.Info("Analysis completed",
 		zap.String("symbol", symbol),
 		zap.Duration("duration", processingTime),
-		zap.Bool("bullish_divergence", len(bullishDivergences) > 0),
-		zap.Bool("bearish_divergence", len(bearishDivergences) > 0),
-		zap.Int("signals_count", len(signalDTOs)),
+		zap.Bool("bullish_divergence", len(bullishResult) > 0),
+		zap.Bool("bearish_divergence", len(bearishResult) > 0),
+		zap.Int("signals_count", len(signals)),
 	)
 
 	return result, nil

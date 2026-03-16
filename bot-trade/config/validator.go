@@ -16,31 +16,6 @@ func getStringEnv(key string, errors *[]string) string {
 	return value
 }
 
-func getOptionalStringEnv(key string) string {
-	return os.Getenv(key)
-}
-
-func getOptionalBoolEnv(key string) bool {
-	value := os.Getenv(key)
-	if value == "" {
-		return false
-	}
-	boolValue, _ := strconv.ParseBool(value)
-	return boolValue
-}
-
-func getOptionalNumberEnv(key string, defaultValue int) int {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
-	}
-	intValue, err := strconv.Atoi(value)
-	if err != nil || intValue <= 0 {
-		return defaultValue
-	}
-	return intValue
-}
-
 func getNumberEnv(key string, errors *[]string) int {
 	value := os.Getenv(key)
 	if value == "" {
@@ -92,10 +67,26 @@ func getLogLevelEnv(key string, errors *[]string) string {
 	return value
 }
 
-func getEnvironmentEnv(key string) string {
+func getEnvironmentEnv(key string, errors *[]string) string {
+	validEnvs := []string{"development", "production"}
 	value := strings.ToLower(os.Getenv(key))
-	if value == "production" || value == "prod" {
-		return "production"
+
+	if value == "" {
+		*errors = append(*errors, fmt.Sprintf("- %s is required", key))
+		return ""
 	}
-	return "development"
+
+	// Normalize "prod" to "production"
+	if value == "prod" {
+		value = "production"
+	}
+
+	for _, env := range validEnvs {
+		if value == env {
+			return value
+		}
+	}
+
+	*errors = append(*errors, fmt.Sprintf("- %s must be one of: %s", key, strings.Join(validEnvs, ", ")))
+	return value
 }

@@ -1,33 +1,26 @@
 package outbound
 
 import (
-	"bot-trade/application/dto"
-	"bot-trade/domain/analysis/valueobject"
+	"context"
+
 	configvo "bot-trade/domain/config/valueobject"
 )
 
-// NotificationType represents the type of notification to send.
-type NotificationType string
+// Message represents a notification message to send.
+// Jobs build the content; infrastructure handles presentation (HTML formatting).
+type Message struct {
+	Title  string  // e.g., "Bullish Divergence Alert"
+	Fields []Field // Structured content
+}
 
-const (
-	NotificationTypeDivergence  NotificationType = "divergence"
-	NotificationTypeEarlySignal NotificationType = "early_signal"
-)
-
-// NotificationRequest represents a single notification request.
-type NotificationRequest struct {
-	Type           NotificationType
-	DivergenceType valueobject.DivergenceType
-	Interval       string
-	Symbol         string
-	Result         *dto.AnalysisResult
-	Description    string
-	IsEarlySignal  bool
-	TelegramCfg    configvo.Telegram
+// Field represents a key-value pair in a message.
+type Field struct {
+	Label string // e.g., "Symbol"
+	Value string // e.g., "VCB"
 }
 
 // Notifier defines the interface for sending notifications.
-// The infrastructure adapter decides whether to send based on the Telegram state.
+// The infrastructure adapter decides whether to send based on the Telegram config.
 type Notifier interface {
-	SendNotification(req NotificationRequest) error
+	Send(ctx context.Context, cfg configvo.Telegram, msg Message) error
 }

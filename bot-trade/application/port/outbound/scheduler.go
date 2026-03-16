@@ -1,15 +1,12 @@
+// Package outbound defines secondary (driven) port interfaces.
+// These represent what the application needs from the outside world.
 package outbound
 
-// JobScheduler abstracts cron-style job registration and lifecycle.
-// Implemented by infrastructure/cron, consumed by application services.
-type JobScheduler interface {
-	AddJob(schedule string, job func()) error
+// CronAdapter abstracts the cron implementation.
+// This interface allows the application layer to schedule jobs without
+// depending on a specific cron library.
+type CronAdapter interface {
+	AddFunc(spec string, cmd func()) error
 	Start()
 	Stop()
-}
-
-// IntervalConfig holds configuration for a single cron interval.
-type IntervalConfig struct {
-	Enabled  bool
-	Schedule string
 }

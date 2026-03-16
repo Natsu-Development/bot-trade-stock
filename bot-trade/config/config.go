@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"bot-trade/application/port/outbound"
-
 	"github.com/joho/godotenv"
 )
 
@@ -22,7 +20,7 @@ type InfraConfig struct {
 	HTTPShutdownTimeout int
 
 	// VietCap API Configuration
-	VietCapRateLimit int // Requests per minute (default: 15)
+	VietCapRateLimit int // Requests per minute
 
 	// MongoDB Configuration
 	MongoDBURI      string
@@ -54,9 +52,23 @@ type InfraConfig struct {
 	Bullish1WEnabled   bool
 	Bullish1WSchedule  string
 
+	// Bullish Job Configuration
+	BullishTimeoutMinutes int // Bullish job timeout in minutes
+	BullishConcurrency    int // Max concurrent bullish analyses
+
+	// Bearish Job Configuration
+	BearishTimeoutMinutes int // Bearish job timeout in minutes
+	BearishConcurrency    int // Max concurrent bearish analyses
+
 	// Logging Configuration
 	LogLevel    string
 	Environment string // development, production
+}
+
+// IntervalConfig holds configuration for a single cron interval.
+type IntervalConfig struct {
+	Enabled  bool
+	Schedule string
 }
 
 // LoadInfraFromEnv loads and validates infrastructure configuration from .env file.
@@ -80,7 +92,7 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	config.HTTPShutdownTimeout = getNumberEnv("HTTP_SHUTDOWN_TIMEOUT", &errors)
 
 	// VietCap API Configuration
-	config.VietCapRateLimit = getOptionalNumberEnv("VIETCAP_RATE_LIMIT", 120) // Default: 120 req/min
+	config.VietCapRateLimit = getNumberEnv("VIETCAP_RATE_LIMIT", &errors)
 
 	// MongoDB Configuration
 	config.MongoDBURI = getStringEnv("MONGODB_URI", &errors)
@@ -89,32 +101,40 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	// Bearish Divergence Configuration
 	config.BearishCronAutoStart = getBoolEnv("BEARISH_CRON_AUTO_START", &errors)
 
-	// Bearish Intervals (at least one should be enabled)
-	config.Bearish30mEnabled = getOptionalBoolEnv("BEARISH_30M_ENABLED")
-	config.Bearish30mSchedule = getOptionalStringEnv("BEARISH_30M_SCHEDULE")
-	config.Bearish1HEnabled = getOptionalBoolEnv("BEARISH_1H_ENABLED")
-	config.Bearish1HSchedule = getOptionalStringEnv("BEARISH_1H_SCHEDULE")
-	config.Bearish1DEnabled = getOptionalBoolEnv("BEARISH_1D_ENABLED")
-	config.Bearish1DSchedule = getOptionalStringEnv("BEARISH_1D_SCHEDULE")
-	config.Bearish1WEnabled = getOptionalBoolEnv("BEARISH_1W_ENABLED")
-	config.Bearish1WSchedule = getOptionalStringEnv("BEARISH_1W_SCHEDULE")
+	// Bearish Intervals
+	config.Bearish30mEnabled = getBoolEnv("BEARISH_30M_ENABLED", &errors)
+	config.Bearish30mSchedule = getStringEnv("BEARISH_30M_SCHEDULE", &errors)
+	config.Bearish1HEnabled = getBoolEnv("BEARISH_1H_ENABLED", &errors)
+	config.Bearish1HSchedule = getStringEnv("BEARISH_1H_SCHEDULE", &errors)
+	config.Bearish1DEnabled = getBoolEnv("BEARISH_1D_ENABLED", &errors)
+	config.Bearish1DSchedule = getStringEnv("BEARISH_1D_SCHEDULE", &errors)
+	config.Bearish1WEnabled = getBoolEnv("BEARISH_1W_ENABLED", &errors)
+	config.Bearish1WSchedule = getStringEnv("BEARISH_1W_SCHEDULE", &errors)
 
 	// Bullish Divergence Configuration
 	config.BullishCronAutoStart = getBoolEnv("BULLISH_CRON_AUTO_START", &errors)
 
-	// Bullish Intervals (at least one should be enabled)
-	config.Bullish30mEnabled = getOptionalBoolEnv("BULLISH_30M_ENABLED")
-	config.Bullish30mSchedule = getOptionalStringEnv("BULLISH_30M_SCHEDULE")
-	config.Bullish1HEnabled = getOptionalBoolEnv("BULLISH_1H_ENABLED")
-	config.Bullish1HSchedule = getOptionalStringEnv("BULLISH_1H_SCHEDULE")
-	config.Bullish1DEnabled = getOptionalBoolEnv("BULLISH_1D_ENABLED")
-	config.Bullish1DSchedule = getOptionalStringEnv("BULLISH_1D_SCHEDULE")
-	config.Bullish1WEnabled = getOptionalBoolEnv("BULLISH_1W_ENABLED")
-	config.Bullish1WSchedule = getOptionalStringEnv("BULLISH_1W_SCHEDULE")
+	// Bullish Intervals
+	config.Bullish30mEnabled = getBoolEnv("BULLISH_30M_ENABLED", &errors)
+	config.Bullish30mSchedule = getStringEnv("BULLISH_30M_SCHEDULE", &errors)
+	config.Bullish1HEnabled = getBoolEnv("BULLISH_1H_ENABLED", &errors)
+	config.Bullish1HSchedule = getStringEnv("BULLISH_1H_SCHEDULE", &errors)
+	config.Bullish1DEnabled = getBoolEnv("BULLISH_1D_ENABLED", &errors)
+	config.Bullish1DSchedule = getStringEnv("BULLISH_1D_SCHEDULE", &errors)
+	config.Bullish1WEnabled = getBoolEnv("BULLISH_1W_ENABLED", &errors)
+	config.Bullish1WSchedule = getStringEnv("BULLISH_1W_SCHEDULE", &errors)
+
+	// Bullish Job Configuration
+	config.BullishTimeoutMinutes = getNumberEnv("BULLISH_TIMEOUT_MINUTES", &errors)
+	config.BullishConcurrency = getNumberEnv("BULLISH_CONCURRENCY", &errors)
+
+	// Bearish Job Configuration
+	config.BearishTimeoutMinutes = getNumberEnv("BEARISH_TIMEOUT_MINUTES", &errors)
+	config.BearishConcurrency = getNumberEnv("BEARISH_CONCURRENCY", &errors)
 
 	// Logging Configuration
 	config.LogLevel = getLogLevelEnv("LOG_LEVEL", &errors)
-	config.Environment = getEnvironmentEnv("ENVIRONMENT")
+	config.Environment = getEnvironmentEnv("ENVIRONMENT", &errors)
 
 	if len(errors) > 0 {
 		return nil, fmt.Errorf("configuration validation failed:\n%s", strings.Join(errors, "\n"))
@@ -124,8 +144,8 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 }
 
 // BullishIntervals returns the interval configuration map for bullish analysis.
-func (c *InfraConfig) BullishIntervals() map[string]outbound.IntervalConfig {
-	return map[string]outbound.IntervalConfig{
+func (c *InfraConfig) BullishIntervals() map[string]IntervalConfig {
+	return map[string]IntervalConfig{
 		"30m": {Enabled: c.Bullish30mEnabled, Schedule: c.Bullish30mSchedule},
 		"1H":  {Enabled: c.Bullish1HEnabled, Schedule: c.Bullish1HSchedule},
 		"1D":  {Enabled: c.Bullish1DEnabled, Schedule: c.Bullish1DSchedule},
@@ -134,8 +154,8 @@ func (c *InfraConfig) BullishIntervals() map[string]outbound.IntervalConfig {
 }
 
 // BearishIntervals returns the interval configuration map for bearish analysis.
-func (c *InfraConfig) BearishIntervals() map[string]outbound.IntervalConfig {
-	return map[string]outbound.IntervalConfig{
+func (c *InfraConfig) BearishIntervals() map[string]IntervalConfig {
+	return map[string]IntervalConfig{
 		"30m": {Enabled: c.Bearish30mEnabled, Schedule: c.Bearish30mSchedule},
 		"1H":  {Enabled: c.Bearish1HEnabled, Schedule: c.Bearish1HSchedule},
 		"1D":  {Enabled: c.Bearish1DEnabled, Schedule: c.Bearish1DSchedule},

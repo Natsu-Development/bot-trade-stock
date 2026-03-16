@@ -7,12 +7,12 @@ import (
 	"net/http"
 	"time"
 
-	"bot-trade/application/port/inbound"
 	appService "bot-trade/application/service"
 	"bot-trade/application/usecase"
 	appAnalyze "bot-trade/application/usecase/analyze"
+	appPrep "bot-trade/application/usecase/analyze/prep"
+	appRsi "bot-trade/application/usecase/analyze/rsi"
 	"bot-trade/config"
-	analysisvo "bot-trade/domain/analysis/valueobject"
 	"bot-trade/infrastructure/adapter"
 	infraCron "bot-trade/infrastructure/cron"
 	infraHTTP "bot-trade/infrastructure/http"
@@ -28,13 +28,12 @@ import (
 
 // App holds all initialized dependencies and manages application lifecycle.
 type App struct {
-	cfg    *config.InfraConfig
-	logger *zap.Logger
+	cfg       *config.InfraConfig
+	logger    *zap.Logger
+	scheduler *appService.JobScheduler
 
-	mongoClient      *mongo.Client
-	bearishScheduler inbound.CronScheduler
-	bullishScheduler inbound.CronScheduler
-	router           http.Handler
+	mongoClient *mongo.Client
+	router      http.Handler
 }
 
 // New creates and wires all application dependencies.
@@ -73,8 +72,14 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	configUseCase := usecase.NewConfigUseCase(configRepository)
 	stockMetricsUseCase := usecase.NewStockMetricsUseCase(marketDataGateway, stockMetricsRepository, appLogger)
 
-	// Create the unified analyzer
-	// Pass configUseCase (implements ConfigManager) instead of raw repository
+	// Create shared DataPreparer (DRY - used by orchestrator and jobs)
+	dataPreparer := appPrep.NewPreparer(configUseCase, marketDataGateway, appLogger)
+
+	// Create specialized use cases for jobs (pure analysis, no I/O)
+	bullishRSIUC := appRsi.NewBullishRSIUseCase(appLogger)
+	bearishRSIUC := appRsi.NewBearishRSIUseCase(appLogger)
+
+	// Create the unified analyzer for API (composes specialized use cases)
 	analyzer := appAnalyze.NewAnalyzer(
 		configUseCase,
 		marketDataGateway,
@@ -87,16 +92,32 @@ func New(cfg *config.InfraConfig) (*App, error) {
 		appLogger.Warn("Failed to load stock metrics from database on startup", zap.Error(err))
 	}
 
-	bullishScheduler := appService.NewDivergenceScheduler(
-		infraCron.NewJobScheduler(),
-		appLogger, notifier, configRepository, analyzer,
-		analysisvo.BullishDivergence, cfg.BullishIntervals(),
-	)
-	bearishScheduler := appService.NewDivergenceScheduler(
-		infraCron.NewJobScheduler(),
-		appLogger, notifier, configRepository, analyzer,
-		analysisvo.BearishDivergence, cfg.BearishIntervals(),
-	)
+	// Create scheduler with cron adapter (Clean Architecture)
+	cronAdapter := infraCron.NewAdapter(nil)
+	scheduler := appService.NewJobScheduler(cronAdapter, appLogger)
+
+	// Build job dependencies
+	jobDeps := appService.JobDependencies{
+		Analyzer:     analyzer,
+		Preparer:     dataPreparer,
+		BullishRSIUC: bullishRSIUC,
+		BearishRSIUC: bearishRSIUC,
+		Notifier:     notifier,
+		ConfigRepo:   configRepository,
+		Logger:       appLogger,
+		Config:       cfg,
+	}
+
+	// Instantiate all registered jobs via factories
+	for name, factory := range appService.GlobalRegistry().AllFactories() {
+		jobs, err := factory(jobDeps)
+		if err != nil {
+			return nil, fmt.Errorf("create jobs from factory %s: %w", name, err)
+		}
+		if err := scheduler.RegisterAll(jobs); err != nil {
+			return nil, fmt.Errorf("register jobs from factory %s: %w", name, err)
+		}
+	}
 
 	configHandler := presHandler.NewConfigHandler(configUseCase)
 	stockHandler := presHandler.NewStockHandler(stockMetricsUseCase)
@@ -111,12 +132,11 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	appLogger.Info("Application initialized successfully")
 
 	return &App{
-		cfg:              cfg,
-		logger:           appLogger,
-		mongoClient:      mongoClient,
-		bearishScheduler: bearishScheduler,
-		bullishScheduler: bullishScheduler,
-		router:           router,
+		cfg:         cfg,
+		logger:      appLogger,
+		scheduler:   scheduler,
+		mongoClient: mongoClient,
+		router:      router,
 	}, nil
 }
 
@@ -132,33 +152,16 @@ func (a *App) Router() http.Handler {
 
 // StartSchedulers starts the cron schedulers based on configuration.
 func (a *App) StartSchedulers() {
-	if a.cfg.BullishCronAutoStart {
-		if err := a.bullishScheduler.Start(); err != nil {
-			a.logger.Error("Failed to start bullish scheduler", zap.Error(err))
-		} else {
-			a.logger.Info("Bullish scheduler started")
-		}
-	}
-
-	if a.cfg.BearishCronAutoStart {
-		if err := a.bearishScheduler.Start(); err != nil {
-			a.logger.Error("Failed to start bearish scheduler", zap.Error(err))
-		} else {
-			a.logger.Info("Bearish scheduler started")
-		}
+	if a.cfg.BullishCronAutoStart || a.cfg.BearishCronAutoStart {
+		a.scheduler.Start()
+		a.logger.Info("Job scheduler started")
 	}
 }
 
 // StopSchedulers stops running schedulers.
 func (a *App) StopSchedulers() {
-	if a.bullishScheduler.IsRunning() {
-		a.bullishScheduler.Stop()
-		a.logger.Info("Bullish scheduler stopped")
-	}
-	if a.bearishScheduler.IsRunning() {
-		a.bearishScheduler.Stop()
-		a.logger.Info("Bearish scheduler stopped")
-	}
+	a.scheduler.Stop()
+	a.logger.Info("Job scheduler stopped")
 }
 
 // Close releases all application resources.
