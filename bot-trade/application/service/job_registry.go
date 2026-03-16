@@ -5,6 +5,7 @@ import (
 	"bot-trade/application/port/outbound"
 	appPrep "bot-trade/application/usecase/analyze/prep"
 	appRsi "bot-trade/application/usecase/analyze/rsi"
+	appTrendline "bot-trade/application/usecase/analyze/trendline"
 	"bot-trade/config"
 
 	"go.uber.org/zap"
@@ -24,6 +25,13 @@ type JobDependencies struct {
 	// Specialized use cases for jobs (pure analysis, no I/O)
 	BullishRSIUC *appRsi.BullishRSIUseCase
 	BearishRSIUC *appRsi.BearishRSIUseCase
+
+	// Trendline use cases
+	BreakoutUC  *appTrendline.BreakoutUseCase
+	BreakdownUC *appTrendline.BreakdownUseCase
+
+	// Stock metrics manager
+	StockMetricsManager inbound.StockMetricsManager
 
 	// Shared dependencies
 	Notifier   outbound.Notifier

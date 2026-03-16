@@ -21,22 +21,18 @@ func init() {
 	RegisterFactory("bearish", NewBearishRSIJobsFromDeps)
 }
 
-// BearishRSIJob detects bearish divergences and sends notifications.
-// It has a single responsibility: analyze bearish symbols for bearish divergence.
-// Uses specialized BearishRSIUseCase for targeted analysis.
 type BearishRSIJob struct {
 	interval    string
 	schedule    string
 	timeout     time.Duration
 	concurrency int
-	preparer    *appPrep.Preparer     // Prepares data before use case
-	usecase     *appRsi.BearishRSIUseCase // Pure analysis use case
+	uc          *appRsi.BearishRSIUseCase
+	preparer    *appPrep.Preparer
 	notifier    outbound.Notifier
 	configRepo  outbound.ConfigRepository
 	logger      *zap.Logger
 }
 
-// Metadata returns the job configuration.
 func (j *BearishRSIJob) Metadata() inbound.JobMetadata {
 	return inbound.JobMetadata{
 		Name:        "bearish-rsi-" + j.interval,
@@ -47,7 +43,6 @@ func (j *BearishRSIJob) Metadata() inbound.JobMetadata {
 	}
 }
 
-// Execute runs the bearish RSI analysis job.
 func (j *BearishRSIJob) Execute(ctx context.Context) error {
 	configs, err := j.configRepo.GetAll(ctx)
 	if err != nil {
@@ -67,14 +62,14 @@ func (j *BearishRSIJob) processConfig(ctx context.Context, cfg *configagg.Tradin
 	for _, symbol := range cfg.BearishSymbols {
 		symbol := symbol
 		g.Go(func() error {
-			j.analyze(gctx, string(symbol), cfg)
+			j.analyzeSymbol(gctx, string(symbol), cfg)
 			return nil
 		})
 	}
 	g.Wait()
 }
 
-func (j *BearishRSIJob) analyze(ctx context.Context, symbol string, cfg *configagg.TradingConfig) {
+func (j *BearishRSIJob) analyzeSymbol(ctx context.Context, symbol string, cfg *configagg.TradingConfig) {
 	query, err := marketvo.NewMarketDataQueryFromStrings(symbol, "", j.interval, cfg.LookbackDay)
 	if err != nil {
 		j.logger.Error("Failed to create query", zap.String("symbol", symbol), zap.Error(err))
@@ -87,20 +82,24 @@ func (j *BearishRSIJob) analyze(ctx context.Context, symbol string, cfg *configa
 		return
 	}
 
-	divergences, err := j.usecase.Execute(data)
+	divergences, err := j.uc.Execute(data)
 	if err != nil {
 		j.logger.Error("Analysis failed", zap.String("symbol", symbol), zap.Error(err))
 		return
 	}
 
 	if len(divergences) > 0 {
-		j.notify(symbol, divergences, cfg)
+		j.notify(ctx, divergences[0], symbol, cfg)
 	}
 }
 
-func (j *BearishRSIJob) notify(symbol string, divergences []dto.DivergenceDTO, cfg *configagg.TradingConfig) {
-	div := divergences[0]
-	description := formatDivergenceDescription(div)
+func (j *BearishRSIJob) notify(ctx context.Context, div dto.DivergenceDTO, symbol string, cfg *configagg.TradingConfig) {
+	description := fmt.Sprintf("bearish divergence detected between %s and %s",
+		div.Points[0].Date, div.Points[1].Date)
+	if div.IsEarly {
+		description = fmt.Sprintf("bearish early divergence detected between %s and %s",
+			div.Points[0].Date, div.Points[1].Date)
+	}
 
 	msg := outbound.Message{
 		Title: "Bearish Divergence Alert",
@@ -110,44 +109,30 @@ func (j *BearishRSIJob) notify(symbol string, divergences []dto.DivergenceDTO, c
 			{Label: "Description", Value: description},
 		},
 	}
-	if err := j.notifier.Send(context.Background(), cfg.Telegram, msg); err != nil {
-		j.logger.Error("Failed to send notification",
-			zap.String("symbol", symbol),
-			zap.String("interval", j.interval),
-			zap.Error(err),
-		)
+
+	if err := j.notifier.Send(ctx, cfg.Telegram, msg); err != nil {
+		j.logger.Error("Failed to send notification", zap.String("symbol", symbol), zap.Error(err))
 	}
 }
 
-// formatDivergenceDescription formats a divergence DTO for notifications.
-func formatDivergenceDescription(div dto.DivergenceDTO) string {
-	if div.IsEarly {
-		return fmt.Sprintf("%s early divergence detected between %s and %s",
-			div.Type, div.Points[0].Date, div.Points[1].Date)
-	}
-	return fmt.Sprintf("%s divergence detected between %s and %s",
-		div.Type, div.Points[0].Date, div.Points[1].Date)
-}
-
-// NewBearishRSIJobsFromDeps creates bearish RSI jobs for all enabled intervals.
 func NewBearishRSIJobsFromDeps(deps JobDependencies) ([]inbound.Job, error) {
 	var jobs []inbound.Job
+	jobCfg := deps.Config.BearishJob
 
-	for interval, ic := range deps.Config.BearishIntervals() {
+	for interval, ic := range jobCfg.Intervals {
 		if ic.Enabled && ic.Schedule != "" {
 			jobs = append(jobs, &BearishRSIJob{
 				interval:    interval,
 				schedule:    ic.Schedule,
-				timeout:     time.Duration(deps.Config.BearishTimeoutMinutes) * time.Minute,
-				concurrency: deps.Config.BearishConcurrency,
+				timeout:     jobCfg.Timeout,
+				concurrency: jobCfg.Concurrency,
+				uc:          deps.BearishRSIUC,
 				preparer:    deps.Preparer,
-				usecase:     deps.BearishRSIUC,
 				notifier:    deps.Notifier,
 				configRepo:  deps.ConfigRepo,
 				logger:      deps.Logger,
 			})
 		}
 	}
-
 	return jobs, nil
 }

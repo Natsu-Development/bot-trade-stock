@@ -9,7 +9,7 @@ import (
 	"bot-trade/application/port/inbound"
 	"bot-trade/application/port/outbound"
 	appPrep "bot-trade/application/usecase/analyze/prep"
-	appRsi "bot-trade/application/usecase/analyze/rsi"
+	appTrendline "bot-trade/application/usecase/analyze/trendline"
 	configagg "bot-trade/domain/config/aggregate"
 	marketvo "bot-trade/domain/shared/valueobject/market"
 
@@ -18,24 +18,24 @@ import (
 )
 
 func init() {
-	RegisterFactory("bullish", NewBullishRSIJobsFromDeps)
+	RegisterFactory("breakout", NewBreakoutJobsFromDeps)
 }
 
-type BullishRSIJob struct {
+type BreakoutJob struct {
 	interval    string
 	schedule    string
 	timeout     time.Duration
 	concurrency int
-	uc          *appRsi.BullishRSIUseCase
+	uc          *appTrendline.BreakoutUseCase
 	preparer    *appPrep.Preparer
 	notifier    outbound.Notifier
 	configRepo  outbound.ConfigRepository
 	logger      *zap.Logger
 }
 
-func (j *BullishRSIJob) Metadata() inbound.JobMetadata {
+func (j *BreakoutJob) Metadata() inbound.JobMetadata {
 	return inbound.JobMetadata{
-		Name:        "bullish-rsi-" + j.interval,
+		Name:        "breakout-" + j.interval,
 		Schedule:    j.schedule,
 		Enabled:     true,
 		Timeout:     j.timeout,
@@ -43,7 +43,7 @@ func (j *BullishRSIJob) Metadata() inbound.JobMetadata {
 	}
 }
 
-func (j *BullishRSIJob) Execute(ctx context.Context) error {
+func (j *BreakoutJob) Execute(ctx context.Context) error {
 	configs, err := j.configRepo.GetAll(ctx)
 	if err != nil {
 		return fmt.Errorf("load configs: %w", err)
@@ -55,7 +55,7 @@ func (j *BullishRSIJob) Execute(ctx context.Context) error {
 	return nil
 }
 
-func (j *BullishRSIJob) processConfig(ctx context.Context, cfg *configagg.TradingConfig) {
+func (j *BreakoutJob) processConfig(ctx context.Context, cfg *configagg.TradingConfig) {
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(j.concurrency)
 
@@ -69,7 +69,7 @@ func (j *BullishRSIJob) processConfig(ctx context.Context, cfg *configagg.Tradin
 	g.Wait()
 }
 
-func (j *BullishRSIJob) analyzeSymbol(ctx context.Context, symbol string, cfg *configagg.TradingConfig) {
+func (j *BreakoutJob) analyzeSymbol(ctx context.Context, symbol string, cfg *configagg.TradingConfig) {
 	query, err := marketvo.NewMarketDataQueryFromStrings(symbol, "", j.interval, cfg.LookbackDay)
 	if err != nil {
 		j.logger.Error("Failed to create query", zap.String("symbol", symbol), zap.Error(err))
@@ -82,27 +82,37 @@ func (j *BullishRSIJob) analyzeSymbol(ctx context.Context, symbol string, cfg *c
 		return
 	}
 
-	divergences, err := j.uc.Execute(data)
+	_, signals, err := j.uc.Execute(data)
 	if err != nil {
 		j.logger.Error("Analysis failed", zap.String("symbol", symbol), zap.Error(err))
 		return
 	}
 
-	if len(divergences) > 0 {
-		j.notify(ctx, divergences[0], symbol, cfg)
+	filtered := j.filterSignals(signals)
+	if len(filtered) > 0 {
+		j.notify(ctx, filtered[0], symbol, cfg)
 	}
 }
 
-func (j *BullishRSIJob) notify(ctx context.Context, div dto.DivergenceDTO, symbol string, cfg *configagg.TradingConfig) {
-	description := fmt.Sprintf("bullish divergence detected between %s and %s",
-		div.Points[0].Date, div.Points[1].Date)
+func (j *BreakoutJob) filterSignals(signals []dto.SignalDTO) []dto.SignalDTO {
+	var filtered []dto.SignalDTO
+	for _, s := range signals {
+		if s.Type == "breakout_confirmed" || s.Type == "breakout_potential" {
+			filtered = append(filtered, s)
+		}
+	}
+	return filtered
+}
 
+func (j *BreakoutJob) notify(ctx context.Context, s dto.SignalDTO, symbol string, cfg *configagg.TradingConfig) {
 	msg := outbound.Message{
-		Title: "Bullish Divergence Alert",
+		Title: "Trendline Breakout Alert",
 		Fields: []outbound.Field{
 			{Label: "Symbol", Value: symbol},
 			{Label: "Interval", Value: j.interval},
-			{Label: "Description", Value: description},
+			{Label: "Signal", Value: s.Type},
+			{Label: "Price", Value: fmt.Sprintf("%.2f", s.Price)},
+			{Label: "Trendline", Value: fmt.Sprintf("%.2f", s.PriceLine)},
 		},
 	}
 
@@ -111,18 +121,18 @@ func (j *BullishRSIJob) notify(ctx context.Context, div dto.DivergenceDTO, symbo
 	}
 }
 
-func NewBullishRSIJobsFromDeps(deps JobDependencies) ([]inbound.Job, error) {
+func NewBreakoutJobsFromDeps(deps JobDependencies) ([]inbound.Job, error) {
 	var jobs []inbound.Job
-	jobCfg := deps.Config.BullishJob
+	jobCfg := deps.Config.BreakoutJob
 
 	for interval, ic := range jobCfg.Intervals {
 		if ic.Enabled && ic.Schedule != "" {
-			jobs = append(jobs, &BullishRSIJob{
+			jobs = append(jobs, &BreakoutJob{
 				interval:    interval,
 				schedule:    ic.Schedule,
 				timeout:     jobCfg.Timeout,
 				concurrency: jobCfg.Concurrency,
-				uc:          deps.BullishRSIUC,
+				uc:          deps.BreakoutUC,
 				preparer:    deps.Preparer,
 				notifier:    deps.Notifier,
 				configRepo:  deps.ConfigRepo,

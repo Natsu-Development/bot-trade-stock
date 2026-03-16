@@ -12,6 +12,7 @@ import (
 	appAnalyze "bot-trade/application/usecase/analyze"
 	appPrep "bot-trade/application/usecase/analyze/prep"
 	appRsi "bot-trade/application/usecase/analyze/rsi"
+	appTrendline "bot-trade/application/usecase/analyze/trendline"
 	"bot-trade/config"
 	"bot-trade/infrastructure/adapter"
 	infraCron "bot-trade/infrastructure/cron"
@@ -79,6 +80,10 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	bullishRSIUC := appRsi.NewBullishRSIUseCase(appLogger)
 	bearishRSIUC := appRsi.NewBearishRSIUseCase(appLogger)
 
+	// Create trendline use cases for jobs
+	breakoutUC := appTrendline.NewBreakoutUseCase(appLogger)
+	breakdownUC := appTrendline.NewBreakdownUseCase(appLogger)
+
 	// Create the unified analyzer for API (composes specialized use cases)
 	analyzer := appAnalyze.NewAnalyzer(
 		configUseCase,
@@ -98,14 +103,17 @@ func New(cfg *config.InfraConfig) (*App, error) {
 
 	// Build job dependencies
 	jobDeps := appService.JobDependencies{
-		Analyzer:     analyzer,
-		Preparer:     dataPreparer,
-		BullishRSIUC: bullishRSIUC,
-		BearishRSIUC: bearishRSIUC,
-		Notifier:     notifier,
-		ConfigRepo:   configRepository,
-		Logger:       appLogger,
-		Config:       cfg,
+		Analyzer:            analyzer,
+		Preparer:            dataPreparer,
+		BullishRSIUC:        bullishRSIUC,
+		BearishRSIUC:        bearishRSIUC,
+		BreakoutUC:          breakoutUC,
+		BreakdownUC:         breakdownUC,
+		StockMetricsManager: stockMetricsUseCase,
+		Notifier:            notifier,
+		ConfigRepo:          configRepository,
+		Logger:              appLogger,
+		Config:              cfg,
 	}
 
 	// Instantiate all registered jobs via factories
@@ -152,7 +160,7 @@ func (a *App) Router() http.Handler {
 
 // StartSchedulers starts the cron schedulers based on configuration.
 func (a *App) StartSchedulers() {
-	if a.cfg.BullishCronAutoStart || a.cfg.BearishCronAutoStart {
+	if a.cfg.HasAnyAutoStart() {
 		a.scheduler.Start()
 		a.logger.Info("Job scheduler started")
 	}
