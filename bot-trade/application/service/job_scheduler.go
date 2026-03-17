@@ -26,16 +26,8 @@ func NewJobScheduler(adapter outbound.CronAdapter, logger *zap.Logger) *JobSched
 }
 
 // Register registers a job with the scheduler.
-// If the job is disabled (via Metadata.Enabled), it will be skipped.
 func (s *JobScheduler) Register(job inbound.Job) error {
 	meta := job.Metadata()
-
-	if !meta.Enabled {
-		s.logger.Info("Job disabled, skipping",
-			zap.String("name", meta.Name),
-		)
-		return nil
-	}
 
 	if err := s.adapter.AddFunc(meta.Schedule, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), meta.Timeout)

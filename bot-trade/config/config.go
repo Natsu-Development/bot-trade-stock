@@ -14,9 +14,8 @@ type IntervalConfig struct {
 	Schedule string
 }
 
-// JobTypeConfig groups all settings for a job type.
-type JobTypeConfig struct {
-	AutoStart   bool
+// JobConfig groups all settings for a job type.
+type JobConfig struct {
 	Timeout     time.Duration
 	Concurrency int
 	Intervals   map[string]IntervalConfig
@@ -41,11 +40,11 @@ type InfraConfig struct {
 	MongoDBDatabase string
 
 	// Job Configurations (grouped)
-	BullishJob   JobTypeConfig
-	BearishJob   JobTypeConfig
-	BreakoutJob  JobTypeConfig
-	BreakdownJob JobTypeConfig
-	StockRefresh JobTypeConfig
+	BullishJob   JobConfig
+	BearishJob   JobConfig
+	BreakoutJob  JobConfig
+	BreakdownJob JobConfig
+	StockRefresh JobConfig
 
 	// Logging Configuration
 	LogLevel    string
@@ -96,9 +95,8 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 }
 
 // loadJobTypeConfig loads a job type configuration from environment.
-func loadJobTypeConfig(prefix string, errors *[]string) JobTypeConfig {
-	return JobTypeConfig{
-		AutoStart:   getBoolEnv(prefix+"_AUTO_START", errors),
+func loadJobTypeConfig(prefix string, errors *[]string) JobConfig {
+	return JobConfig{
 		Timeout:     time.Duration(getNumberEnv(prefix+"_TIMEOUT_MINUTES", errors)) * time.Minute,
 		Concurrency: getNumberEnv(prefix+"_CONCURRENCY", errors),
 		Intervals: map[string]IntervalConfig{
@@ -118,10 +116,9 @@ func loadIntervalConfig(prefix, interval string, errors *[]string) IntervalConfi
 }
 
 // loadStockRefreshConfig loads stock refresh job configuration.
-func loadStockRefreshConfig(errors *[]string) JobTypeConfig {
-	return JobTypeConfig{
-		AutoStart: getBoolEnv("STOCK_REFRESH_ENABLED", errors),
-		Timeout:   time.Duration(getNumberEnv("STOCK_REFRESH_TIMEOUT_MINUTES", errors)) * time.Minute,
+func loadStockRefreshConfig(errors *[]string) JobConfig {
+	return JobConfig{
+		Timeout: time.Duration(getNumberEnv("STOCK_REFRESH_TIMEOUT_MINUTES", errors)) * time.Minute,
 		Intervals: map[string]IntervalConfig{
 			"default": {
 				Enabled:  getBoolEnv("STOCK_REFRESH_ENABLED", errors),
@@ -145,8 +142,3 @@ func (c *InfraConfig) Logger() LoggerConfig {
 	}
 }
 
-// HasAnyAutoStart returns true if any job is configured to auto-start.
-func (c *InfraConfig) HasAnyAutoStart() bool {
-	return c.BullishJob.AutoStart || c.BearishJob.AutoStart ||
-		c.BreakoutJob.AutoStart || c.BreakdownJob.AutoStart || c.StockRefresh.AutoStart
-}

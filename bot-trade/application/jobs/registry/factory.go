@@ -1,4 +1,4 @@
-package service
+package registry
 
 import (
 	"bot-trade/application/port/inbound"

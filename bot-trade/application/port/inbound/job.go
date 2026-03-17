@@ -12,7 +12,6 @@ import (
 type JobMetadata struct {
 	Name        string
 	Schedule    string
-	Enabled     bool
 	Timeout     time.Duration
 	Concurrency int
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"bot-trade/application/jobs/registry"
 	appService "bot-trade/application/service"
 	"bot-trade/application/usecase"
 	appAnalyze "bot-trade/application/usecase/analyze"
@@ -25,6 +26,8 @@ import (
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
+
+	_ "bot-trade/application/jobs" // Trigger job registration via blank import
 )
 
 // App holds all initialized dependencies and manages application lifecycle.
@@ -102,7 +105,7 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	scheduler := appService.NewJobScheduler(cronAdapter, appLogger)
 
 	// Build job dependencies
-	jobDeps := appService.JobDependencies{
+	jobDeps := registry.JobDependencies{
 		Analyzer:            analyzer,
 		Preparer:            dataPreparer,
 		BullishRSIUC:        bullishRSIUC,
@@ -116,8 +119,9 @@ func New(cfg *config.InfraConfig) (*App, error) {
 		Config:              cfg,
 	}
 
+	// Trigger job registration via blank import (already done at package init)
 	// Instantiate all registered jobs via factories
-	for name, factory := range appService.GlobalRegistry().AllFactories() {
+	for name, factory := range registry.GlobalRegistry().AllFactories() {
 		jobs, err := factory(jobDeps)
 		if err != nil {
 			return nil, fmt.Errorf("create jobs from factory %s: %w", name, err)
@@ -160,10 +164,8 @@ func (a *App) Router() http.Handler {
 
 // StartSchedulers starts the cron schedulers based on configuration.
 func (a *App) StartSchedulers() {
-	if a.cfg.HasAnyAutoStart() {
-		a.scheduler.Start()
-		a.logger.Info("Job scheduler started")
-	}
+	a.scheduler.Start()
+	a.logger.Info("Job scheduler started")
 }
 
 // StopSchedulers stops running schedulers.

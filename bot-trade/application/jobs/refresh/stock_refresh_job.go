@@ -1,16 +1,17 @@
-package service
+package refresh
 
 import (
 	"context"
 	"time"
 
 	"bot-trade/application/port/inbound"
+	"bot-trade/application/jobs/registry"
 
 	"go.uber.org/zap"
 )
 
 func init() {
-	RegisterFactory("stock_refresh", NewStockRefreshJobFromDeps)
+	registry.RegisterFactory("stock_refresh", NewStockRefreshJobFromDeps)
 }
 
 // StockRefreshJob refreshes the stock metrics cache (RS Rating data).
@@ -22,15 +23,12 @@ type StockRefreshJob struct {
 }
 
 // NewStockRefreshJobFromDeps creates a stock refresh job if enabled.
-func NewStockRefreshJobFromDeps(deps JobDependencies) ([]inbound.Job, error) {
+func NewStockRefreshJobFromDeps(deps registry.JobDependencies) ([]inbound.Job, error) {
 	cfg := deps.Config.StockRefresh
-	if !cfg.AutoStart {
-		return nil, nil
-	}
 
 	// Get schedule from the default interval
 	ic, ok := cfg.Intervals["default"]
-	if !ok || ic.Schedule == "" {
+	if !ok || !ic.Enabled || ic.Schedule == "" {
 		return nil, nil
 	}
 
@@ -46,7 +44,6 @@ func (j *StockRefreshJob) Metadata() inbound.JobMetadata {
 	return inbound.JobMetadata{
 		Name:     "stock-refresh",
 		Schedule: j.schedule,
-		Enabled:  true,
 		Timeout:  j.timeout,
 	}
 }
