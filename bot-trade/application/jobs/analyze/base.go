@@ -32,7 +32,6 @@ type AnalysisJob struct {
 	namePrefix    string
 	preparer      *appPrep.Preparer
 	configRepo    outbound.ConfigRepository
-	logger        *zap.Logger
 	notifier      outbound.Notifier
 	selectSymbols SymbolSelector
 	analyze       AnalyzeFunc
@@ -76,19 +75,19 @@ func (j *AnalysisJob) processConfig(ctx context.Context, cfg *configagg.TradingC
 func (j *AnalysisJob) analyzeSymbol(ctx context.Context, symbol string, cfg *configagg.TradingConfig) {
 	query, err := marketvo.NewMarketDataQueryFromStrings(symbol, "", j.interval, cfg.LookbackDay)
 	if err != nil {
-		j.logger.Error("Failed to create query", zap.String("symbol", symbol), zap.Error(err))
+		zap.L().Error("Failed to create query", zap.String("symbol", symbol), zap.Error(err))
 		return
 	}
 
 	data, err := j.preparer.Prepare(ctx, query, string(cfg.ID))
 	if err != nil {
-		j.logger.Error("Failed to prepare data", zap.String("symbol", symbol), zap.Error(err))
+		zap.L().Error("Failed to prepare data", zap.String("symbol", symbol), zap.Error(err))
 		return
 	}
 
 	msg, err := j.analyze(ctx, data, j.interval)
 	if err != nil {
-		j.logger.Error("Analysis failed", zap.String("symbol", symbol), zap.Error(err))
+		zap.L().Error("Analysis failed", zap.String("symbol", symbol), zap.Error(err))
 		return
 	}
 
@@ -97,7 +96,7 @@ func (j *AnalysisJob) analyzeSymbol(ctx context.Context, symbol string, cfg *con
 	}
 
 	if err := j.notifier.Send(ctx, cfg.Telegram, msg); err != nil {
-		j.logger.Error("Failed to send notification", zap.String("symbol", symbol), zap.Error(err))
+		zap.L().Error("Failed to send notification", zap.String("symbol", symbol), zap.Error(err))
 	}
 }
 

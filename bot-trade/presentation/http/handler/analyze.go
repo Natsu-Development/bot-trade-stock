@@ -16,14 +16,12 @@ import (
 // AnalyzeHandler handles unified analysis HTTP requests.
 type AnalyzeHandler struct {
 	analyzer inbound.Analyzer
-	logger   *zap.Logger
 }
 
 // NewAnalyzeHandler creates a new unified analyze handler.
-func NewAnalyzeHandler(analyzer inbound.Analyzer, logger *zap.Logger) *AnalyzeHandler {
+func NewAnalyzeHandler(analyzer inbound.Analyzer) *AnalyzeHandler {
 	return &AnalyzeHandler{
 		analyzer: analyzer,
-		logger:   logger,
 	}
 }
 
@@ -70,7 +68,7 @@ func (h *AnalyzeHandler) Analyze(c *gin.Context) {
 			response.NotFound(c, "configuration")
 			return
 		}
-		h.logger.Error("Analysis failed",
+		zap.L().Error("Analysis failed",
 			zap.String("symbol", string(query.Symbol)),
 			zap.String("configID", configID),
 			zap.Error(err),

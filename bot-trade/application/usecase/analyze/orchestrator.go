@@ -28,26 +28,23 @@ type AnalyzeUseCase struct {
 	breakdownUsecase *appTrendline.BreakdownUseCase
 	breakoutUsecase  *appTrendline.BreakoutUseCase
 	configManager    inbound.ConfigManager
-	logger           *zap.Logger
 }
 
 // NewAnalyzer creates a new unified analysis use case.
 // It composes specialized use cases while maintaining backward compatibility.
 func NewAnalyzer(
 	configManager inbound.ConfigManager,
-	marketDataGateway outbound.MarketDataGateway,
-	logger *zap.Logger,
+	marketDataGateway outbound.MarketGateway,
 ) *AnalyzeUseCase {
-	preparer := appPrep.NewPreparer(configManager, marketDataGateway, logger)
+	preparer := appPrep.NewPreparer(configManager, marketDataGateway)
 
 	return &AnalyzeUseCase{
 		preparer:         preparer,
-		bullishUsecase:   appRsi.NewBullishRSIUseCase(logger),
-		bearishUsecase:   appRsi.NewBearishRSIUseCase(logger),
-		breakdownUsecase: appTrendline.NewBreakdownUseCase(logger),
-		breakoutUsecase:  appTrendline.NewBreakoutUseCase(logger),
+		bullishUsecase:   appRsi.NewBullishRSIUseCase(),
+		bearishUsecase:   appRsi.NewBearishRSIUseCase(),
+		breakdownUsecase: appTrendline.NewBreakdownUseCase(),
+		breakoutUsecase:  appTrendline.NewBreakoutUseCase(),
 		configManager:    configManager,
-		logger:           logger,
 	}
 }
 
@@ -68,7 +65,7 @@ func (uc *AnalyzeUseCase) Execute(
 ) (*dto.AnalysisResult, error) {
 	symbol := string(q.Symbol)
 	startTime := time.Now()
-	uc.logger.Info("Starting analysis",
+	zap.L().Info("Starting analysis",
 		zap.String("symbol", symbol),
 		zap.String("configID", configID),
 	)
@@ -119,7 +116,7 @@ func (uc *AnalyzeUseCase) Execute(
 	processingTime := time.Since(startTime)
 	result.ProcessingTimeMs = processingTime.Milliseconds()
 
-	uc.logger.Info("Analysis completed",
+	zap.L().Info("Analysis completed",
 		zap.String("symbol", symbol),
 		zap.Duration("duration", processingTime),
 		zap.Bool("bullish_divergence", len(bullishResult) > 0),

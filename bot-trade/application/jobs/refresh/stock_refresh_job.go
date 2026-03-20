@@ -19,7 +19,6 @@ type StockRefreshJob struct {
 	schedule string
 	timeout  time.Duration
 	usecase  inbound.StockMetricsManager
-	logger   *zap.Logger
 }
 
 // NewStockRefreshJobFromDeps creates a stock refresh job if enabled.
@@ -36,7 +35,6 @@ func NewStockRefreshJobFromDeps(deps registry.JobDependencies) ([]inbound.Job, e
 		schedule: ic.Schedule,
 		timeout:  cfg.Timeout,
 		usecase:  deps.StockMetricsManager,
-		logger:   deps.Logger,
 	}}, nil
 }
 
@@ -51,11 +49,11 @@ func (j *StockRefreshJob) Metadata() inbound.JobMetadata {
 func (j *StockRefreshJob) Execute(ctx context.Context) error {
 	result, err := j.usecase.Refresh(ctx)
 	if err != nil {
-		j.logger.Error("Failed to refresh stock metrics", zap.Error(err))
+		zap.L().Error("Failed to refresh stock metrics", zap.Error(err))
 		return err
 	}
 
-	j.logger.Info("Stock metrics refresh completed",
+	zap.L().Info("Stock metrics refresh completed",
 		zap.Int("total_stocks", result.TotalStocksAnalyzed),
 		zap.Time("calculated_at", result.CalculatedAt),
 	)

@@ -5,22 +5,16 @@ import (
 	analysisservice "bot-trade/domain/analysis/service"
 	analysisvo "bot-trade/domain/analysis/valueobject"
 	appPrep "bot-trade/application/usecase/analyze/prep"
-
-	"go.uber.org/zap"
 )
 
 // BearishRSIUseCase detects bearish RSI divergences.
 // Pure analysis use case - receives prepared data, no I/O dependencies.
 // Used by BearishRSIJob for targeted bearish divergence detection.
-type BearishRSIUseCase struct {
-	logger *zap.Logger
-}
+type BearishRSIUseCase struct{}
 
 // NewBearishRSIUseCase creates a new bearish RSI use case.
-func NewBearishRSIUseCase(logger *zap.Logger) *BearishRSIUseCase {
-	return &BearishRSIUseCase{
-		logger: logger,
-	}
+func NewBearishRSIUseCase() *BearishRSIUseCase {
+	return &BearishRSIUseCase{}
 }
 
 // Execute performs bearish divergence analysis on prepared data.

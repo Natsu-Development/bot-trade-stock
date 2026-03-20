@@ -9,8 +9,6 @@ import (
 	configagg "bot-trade/domain/config/aggregate"
 	sharedservice "bot-trade/domain/shared/service"
 	marketvo "bot-trade/domain/shared/valueobject/market"
-
-	"go.uber.org/zap"
 )
 
 // DataPrepare contains all data needed for analysis.
@@ -26,20 +24,17 @@ type DataPrepare struct {
 // DRY - avoids duplicating data fetching logic across specialized use cases.
 type Preparer struct {
 	configManager     inbound.ConfigManager
-	marketDataGateway outbound.MarketDataGateway
-	logger            *zap.Logger
+	marketDataGateway outbound.MarketGateway
 }
 
 // NewPreparer creates a new DataPreparer.
 func NewPreparer(
 	configManager inbound.ConfigManager,
-	marketDataGateway outbound.MarketDataGateway,
-	logger *zap.Logger,
+	marketDataGateway outbound.MarketGateway,
 ) *Preparer {
 	return &Preparer{
 		configManager:     configManager,
 		marketDataGateway: marketDataGateway,
-		logger:            logger,
 	}
 }
 
@@ -59,7 +54,7 @@ func (p *Preparer) Prepare(
 	}
 
 	// 2. Fetch market data
-	priceHistory, err := p.marketDataGateway.FetchStockData(ctx, q)
+	priceHistory, err := p.marketDataGateway.FetchData(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch stock data: %w", err)
 	}

@@ -6,8 +6,14 @@ import (
 	marketvo "bot-trade/domain/shared/valueobject/market"
 )
 
-// MarketDataGateway defines the interface for fetching market data from external sources.
-type MarketDataGateway interface {
-	FetchStockData(ctx context.Context, q marketvo.MarketDataQuery) ([]marketvo.MarketData, error)
-	ListAllStocks(ctx context.Context, exchange string) ([]marketvo.StockInfo, error)
+// MarketGateway defines the core interface for fetching market data.
+type MarketGateway interface {
+	// FetchData fetches OHLCV data for a single symbol.
+	FetchData(ctx context.Context, q marketvo.MarketDataQuery) ([]marketvo.MarketData, error)
+}
+
+// StockLister is an optional interface for providers that can list all stocks.
+// Providers that don't support this should not implement this interface.
+type StockLister interface {
+	ListAllStocks(ctx context.Context) ([]marketvo.StockInfo, error)
 }

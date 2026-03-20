@@ -5,22 +5,16 @@ import (
 	analysisservice "bot-trade/domain/analysis/service"
 	analysisvo "bot-trade/domain/analysis/valueobject"
 	appPrep "bot-trade/application/usecase/analyze/prep"
-
-	"go.uber.org/zap"
 )
 
 // BreakoutUseCase detects resistance trendline signals.
 // Pure analysis use case - receives prepared data, no I/O dependencies.
 // Used for detecting potential breakout signals from resistance trendlines.
-type BreakoutUseCase struct {
-	logger *zap.Logger
-}
+type BreakoutUseCase struct{}
 
 // NewBreakoutUseCase creates a new breakout use case.
-func NewBreakoutUseCase(logger *zap.Logger) *BreakoutUseCase {
-	return &BreakoutUseCase{
-		logger: logger,
-	}
+func NewBreakoutUseCase() *BreakoutUseCase {
+	return &BreakoutUseCase{}
 }
 
 // Execute performs resistance trendline analysis on prepared data.

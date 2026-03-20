@@ -5,22 +5,16 @@ import (
 	analysisservice "bot-trade/domain/analysis/service"
 	analysisvo "bot-trade/domain/analysis/valueobject"
 	appPrep "bot-trade/application/usecase/analyze/prep"
-
-	"go.uber.org/zap"
 )
 
 // BreakdownUseCase detects support trendline signals (Bounce).
 // Pure analysis use case - receives prepared data, no I/O dependencies.
 // Used for detecting potential bounce signals from support trendlines.
-type BreakdownUseCase struct {
-	logger *zap.Logger
-}
+type BreakdownUseCase struct{}
 
 // NewBreakdownUseCase creates a new breakdown use case.
-func NewBreakdownUseCase(logger *zap.Logger) *BreakdownUseCase {
-	return &BreakdownUseCase{
-		logger: logger,
-	}
+func NewBreakdownUseCase() *BreakdownUseCase {
+	return &BreakdownUseCase{}
 }
 
 // Execute performs support trendline analysis on prepared data.

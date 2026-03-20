@@ -14,14 +14,12 @@ import (
 // It uses a CronAdapter to abstract the cron implementation details.
 type JobScheduler struct {
 	adapter outbound.CronAdapter
-	logger  *zap.Logger
 }
 
 // NewJobScheduler creates a new JobScheduler with the given cron adapter.
-func NewJobScheduler(adapter outbound.CronAdapter, logger *zap.Logger) *JobScheduler {
+func NewJobScheduler(adapter outbound.CronAdapter) *JobScheduler {
 	return &JobScheduler{
 		adapter: adapter,
-		logger:  logger,
 	}
 }
 
@@ -33,9 +31,9 @@ func (s *JobScheduler) Register(job inbound.Job) error {
 		ctx, cancel := context.WithTimeout(context.Background(), meta.Timeout)
 		defer cancel()
 
-		s.logger.Info("Job started", zap.String("name", meta.Name))
+		zap.L().Info("Job started", zap.String("name", meta.Name))
 		if err := job.Execute(ctx); err != nil {
-			s.logger.Error("Job failed",
+			zap.L().Error("Job failed",
 				zap.String("name", meta.Name),
 				zap.Error(err),
 			)
@@ -44,7 +42,7 @@ func (s *JobScheduler) Register(job inbound.Job) error {
 		return fmt.Errorf("schedule job %s: %w", meta.Name, err)
 	}
 
-	s.logger.Info("Job registered",
+	zap.L().Info("Job registered",
 		zap.String("name", meta.Name),
 		zap.String("schedule", meta.Schedule),
 	)
@@ -64,11 +62,11 @@ func (s *JobScheduler) RegisterAll(jobs []inbound.Job) error {
 // Start starts the scheduler.
 func (s *JobScheduler) Start() {
 	s.adapter.Start()
-	s.logger.Info("Scheduler started")
+	zap.L().Info("Scheduler started")
 }
 
 // Stop stops the scheduler.
 func (s *JobScheduler) Stop() {
 	s.adapter.Stop()
-	s.logger.Info("Scheduler stopped")
+	zap.L().Info("Scheduler stopped")
 }

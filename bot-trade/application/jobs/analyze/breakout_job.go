@@ -57,7 +57,6 @@ func NewBreakoutJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, erro
 			namePrefix:    "breakout",
 			preparer:      deps.Preparer,
 			configRepo:    deps.ConfigRepo,
-			logger:        deps.Logger,
 			notifier:      deps.Notifier,
 			selectSymbols: SelectBullishSymbols,
 			analyze: func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, error) {

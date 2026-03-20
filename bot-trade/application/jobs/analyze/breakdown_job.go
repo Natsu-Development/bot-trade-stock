@@ -57,7 +57,6 @@ func NewBreakdownJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, err
 			namePrefix:    "breakdown",
 			preparer:      deps.Preparer,
 			configRepo:    deps.ConfigRepo,
-			logger:        deps.Logger,
 			notifier:      deps.Notifier,
 			selectSymbols: SelectBearishSymbols,
 			analyze: func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, error) {

@@ -3,7 +3,6 @@ package usecase
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -22,15 +21,11 @@ import (
 // via infrastructure/http.RetryTransport. This keeps the usecase clean and focused on
 // business logic while making retry behavior reusable across all HTTP-based gateways.
 
-// supportedExchanges defines the Vietnamese stock exchanges to analyze.
-var supportedExchanges = []string{"HOSE", "HNX", "UPCOM"}
-
 const (
 	// Stock metrics requires ~400 days (1.5 trading years) for RS Rating calculations.
 	// This is intentionally separate from TradingConfig.LookbackDay which is for
 	// divergence/trendline analysis (typically 30-90 days).
 	stockMetricsDateRangeDays = 400 // Days of price history fetched per stock (covers ~1.5 trading years)
-	maxConcurrentStockFetches = 10  // Semaphore size limiting parallel VietCap requests
 	maxFailedLogSamples       = 20  // Maximum failed-stock entries shown in the refresh summary log
 )
 
@@ -38,10 +33,9 @@ var _ inbound.StockMetricsManager = (*StockMetricsUseCase)(nil)
 
 // StockMetricsUseCase orchestrates the stock metrics calculation for all stocks.
 type StockMetricsUseCase struct {
-	marketDataGateway outbound.MarketDataGateway
-	repository        outbound.StockMetricsRepository
-	calculator        *metricsservice.Calculator
-	logger            *zap.Logger
+	gateway    outbound.MarketGateway
+	repository outbound.StockMetricsRepository
+	calculator *metricsservice.Calculator
 
 	// RAM cache
 	cachedMetrics []*metricsagg.StockMetrics
@@ -51,92 +45,87 @@ type StockMetricsUseCase struct {
 
 // NewStockMetricsUseCase creates a new stock metrics use case.
 func NewStockMetricsUseCase(
-	marketDataGateway outbound.MarketDataGateway,
+	gateway outbound.MarketGateway,
 	repository outbound.StockMetricsRepository,
-	logger *zap.Logger,
 ) *StockMetricsUseCase {
 	return &StockMetricsUseCase{
-		marketDataGateway: marketDataGateway,
-		repository:        repository,
-		calculator:        metricsservice.NewCalculator(),
-		logger:            logger,
+		gateway:    gateway,
+		repository: repository,
+		calculator: metricsservice.NewCalculator(),
 	}
 }
 
 // Refresh fetches ALL stocks from HOSE, HNX, UPCOM, calculates metrics, and caches in RAM.
 func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*dto.StockMetricsResult, error) {
 	startTime := time.Now()
-	uc.logger.Info("Starting stock metrics refresh for all exchanges",
-		zap.Strings("exchanges", supportedExchanges),
-	)
+	zap.L().Info("Starting stock metrics refresh for all exchanges")
 
-	// Step 1: Fetch stocks from all exchanges concurrently
-	allStocks, exchangeStats, err := uc.fetchAllExchangeStocks(ctx)
+	// Step 1: List all stocks (check for optional capability)
+	stockLister, ok := uc.gateway.(outbound.StockLister)
+	if !ok {
+		return nil, fmt.Errorf("gateway does not support listing stocks")
+	}
+	allStocks, err := stockLister.ListAllStocks(ctx)
 	if err != nil {
-		uc.logger.Error("Failed to list stocks from exchanges", zap.Error(err))
+		zap.L().Error("Failed to list stocks", zap.Error(err))
 		return nil, fmt.Errorf("failed to list stocks: %w", err)
 	}
 
 	totalStocks := len(allStocks)
-	uc.logger.Info("Listed all stocks from all exchanges",
-		zap.Int("total_stocks", totalStocks),
-		zap.Any("exchange_stats", exchangeStats),
-	)
+	zap.L().Info("Listed all stocks from all exchanges", zap.Int("total_stocks", totalStocks))
 
-	// Step 2: Fetch price history for each stock concurrently with retry and failure tracking
-	var (
-		allMetrics    = make([]*metricsagg.StockMetrics, 0, len(allStocks))
-		failedSymbols = make(map[string]string) // symbol -> error reason
-		mu            sync.Mutex
-		wg            sync.WaitGroup
-		semaphore     = make(chan struct{}, maxConcurrentStockFetches)
-	)
-
+	// Step 2: Build queries (usecase logic - no exchange field needed)
+	queries := make([]marketvo.MarketDataQuery, 0, len(allStocks))
 	for _, stock := range allStocks {
-		wg.Add(1)
-		go func(sym, exchange string) {
-			defer wg.Done()
-
-			// Acquire semaphore
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-
-			metrics, fetchErr := uc.fetchAndCalculate(ctx, sym, exchange, marketvo.LookbackDay(stockMetricsDateRangeDays))
-
-			mu.Lock()
-			if fetchErr != nil {
-				failedSymbols[sym] = fetchErr.Error()
-			} else if metrics != nil {
-				allMetrics = append(allMetrics, metrics)
-			}
-			mu.Unlock()
-		}(string(stock.Symbol), string(stock.Exchange))
+		query, err := marketvo.NewMarketDataQueryFromStrings(string(stock.Symbol), "", "1D", marketvo.LookbackDay(stockMetricsDateRangeDays))
+		if err != nil {
+			zap.L().Warn("Invalid query", zap.String("symbol", string(stock.Symbol)), zap.Error(err))
+			continue
+		}
+		queries = append(queries, query)
 	}
 
-	wg.Wait()
+	// Step 3: Fetch batch (concurrency handled by usecase)
+	successData, failedData := uc.fetchBatch(ctx, queries)
 
 	fetchDuration := time.Since(startTime)
-	uc.logger.Info("Fetched price data for all stocks",
-		zap.Int("successful", len(allMetrics)),
-		zap.Int("failed", len(failedSymbols)),
+	zap.L().Info("Fetched price data for all stocks",
+		zap.Int("successful", len(successData)),
+		zap.Int("failed", len(failedData)),
 		zap.Duration("fetch_duration", fetchDuration),
 	)
 
-	// Step 3: Rank all stocks using relative position
+	// Step 4: Calculate metrics (usecase logic)
+	// Build a lookup map for exchange info
+	exchangeLookup := make(map[string]string, len(allStocks))
+	for _, stock := range allStocks {
+		exchangeLookup[string(stock.Symbol)] = string(stock.Exchange)
+	}
+
+	allMetrics := make([]*metricsagg.StockMetrics, 0, len(successData))
+	for symbol, data := range successData {
+		exchange := exchangeLookup[symbol]
+		metrics := uc.calculator.CalculateForStock(symbol, exchange, data)
+		if metrics != nil {
+			allMetrics = append(allMetrics, metrics)
+		}
+	}
+
+	// Step 5: Rank all stocks using relative position
 	rankedMetrics := uc.calculator.RankAll(allMetrics)
 	calculatedAt := time.Now()
 
-	// Step 4: Persist to MongoDB
+	// Step 6: Persist to MongoDB
 	if err := uc.repository.Save(ctx, rankedMetrics, calculatedAt); err != nil {
-		uc.logger.Error("Failed to persist stock metrics to database", zap.Error(err))
+		zap.L().Error("Failed to persist stock metrics to database", zap.Error(err))
 		// Continue anyway - we still have the data in memory
 	} else {
-		uc.logger.Info("Stock metrics persisted to database",
+		zap.L().Info("Stock metrics persisted to database",
 			zap.Int("metrics_count", len(rankedMetrics)),
 		)
 	}
 
-	// Step 5: Cache in RAM
+	// Step 7: Cache in RAM
 	uc.cacheMu.Lock()
 	uc.cachedMetrics = rankedMetrics
 	uc.cachedAt = calculatedAt
@@ -144,8 +133,8 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*dto.StockMetricsRe
 
 	totalDuration := time.Since(startTime)
 
-	// Step 6: Log detailed summary
-	uc.logRefreshSummary(totalStocks, len(rankedMetrics), failedSymbols, totalDuration)
+	// Step 8: Log detailed summary
+	uc.logRefreshSummary(totalStocks, len(rankedMetrics), failedData, totalDuration)
 
 	// Return full result
 	return &dto.StockMetricsResult{
@@ -216,7 +205,7 @@ func (uc *StockMetricsUseCase) LoadFromDB(ctx context.Context) (bool, error) {
 	}
 
 	if len(metrics) == 0 {
-		uc.logger.Info("No stock metrics found in database, cache remains empty")
+		zap.L().Info("No stock metrics found in database, cache remains empty")
 		return false, nil
 	}
 
@@ -225,41 +214,12 @@ func (uc *StockMetricsUseCase) LoadFromDB(ctx context.Context) (bool, error) {
 	uc.cachedAt = calculatedAt
 	uc.cacheMu.Unlock()
 
-	uc.logger.Info("Stock metrics loaded from database into cache",
+	zap.L().Info("Stock metrics loaded from database into cache",
 		zap.Int("metrics_count", len(metrics)),
 		zap.Time("calculated_at", calculatedAt),
 	)
 
 	return true, nil
-}
-
-// fetchAndCalculate fetches price history and calculates metrics for a single stock.
-func (uc *StockMetricsUseCase) fetchAndCalculate(ctx context.Context, symbol, exchange string, lookbackDay marketvo.LookbackDay) (*metricsagg.StockMetrics, error) {
-	query, err := marketvo.NewMarketDataQueryFromStrings(symbol, "", "1D", lookbackDay)
-	if err != nil {
-		return nil, fmt.Errorf("invalid query: %w", err)
-	}
-
-	priceHistory, err := uc.marketDataGateway.FetchStockData(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("fetch failed: %w", err)
-	}
-
-	if len(priceHistory) == 0 {
-		return nil, nil
-	}
-
-	metrics := uc.calculator.CalculateForStock(symbol, exchange, priceHistory)
-
-	if metrics != nil {
-		uc.logger.Debug("Calculated metrics for stock",
-			zap.String("symbol", symbol),
-			zap.String("exchange", exchange),
-			zap.Int("data_points", len(priceHistory)),
-		)
-	}
-
-	return metrics, nil
 }
 
 // logRefreshSummary logs a detailed summary of the refresh process.
@@ -273,8 +233,8 @@ func (uc *StockMetricsUseCase) logRefreshSummary(totalStocks, successCount int, 
 		}
 	}
 
-	uc.logger.Info("========== STOCK METRICS REFRESH SUMMARY ==========")
-	uc.logger.Info("Refresh completed",
+	zap.L().Info("========== STOCK METRICS REFRESH SUMMARY ==========")
+	zap.L().Info("Refresh completed",
 		zap.Int("total_stocks", totalStocks),
 		zap.Int("successfully_analyzed", successCount),
 		zap.Int("failed_count", failedCount),
@@ -282,72 +242,46 @@ func (uc *StockMetricsUseCase) logRefreshSummary(totalStocks, successCount int, 
 	)
 
 	if failedCount > 0 {
-		uc.logger.Warn("Failed stocks",
+		zap.L().Warn("Failed stocks",
 			zap.Int("total_failed", failedCount),
 			zap.Strings("failed_samples", failedList),
 		)
 
 		if failedCount > maxFailedLogSamples {
-			uc.logger.Warn("Additional failed stocks not shown",
+			zap.L().Warn("Additional failed stocks not shown",
 				zap.Int("hidden_count", failedCount-maxFailedLogSamples),
 			)
 		}
 	}
 
-	uc.logger.Info("====================================================")
+	zap.L().Info("====================================================")
 }
 
-// fetchAllExchangeStocks fetches stocks from all supported exchanges concurrently.
-// Returns combined stock list and per-exchange statistics.
-func (uc *StockMetricsUseCase) fetchAllExchangeStocks(ctx context.Context) ([]marketvo.StockInfo, map[string]int, error) {
-	type exchangeResult struct {
-		exchange string
-		stocks   []marketvo.StockInfo
-		err      error
-	}
+// fetchBatch concurrently fetches data for multiple queries using the provided gateway.
+func (uc *StockMetricsUseCase) fetchBatch(
+	ctx context.Context,
+	queries []marketvo.MarketDataQuery,
+) (map[string][]marketvo.MarketData, map[string]string) {
+	successData := make(map[string][]marketvo.MarketData)
+	failedData := make(map[string]string)
+	var mu sync.Mutex
 
-	resultCh := make(chan exchangeResult, len(supportedExchanges))
-
-	for _, exchange := range supportedExchanges {
-		go func(ex string) {
-			stocks, err := uc.marketDataGateway.ListAllStocks(ctx, ex)
+	var wg sync.WaitGroup
+	for _, query := range queries {
+		wg.Add(1)
+		go func(q marketvo.MarketDataQuery) {
+			defer wg.Done()
+			data, err := uc.gateway.FetchData(ctx, q)
+			mu.Lock()
+			defer mu.Unlock()
 			if err != nil {
-				resultCh <- exchangeResult{exchange: ex, err: err}
-				return
+				failedData[string(q.Symbol)] = err.Error()
+			} else if len(data) > 0 {
+				successData[string(q.Symbol)] = data
 			}
-			resultCh <- exchangeResult{exchange: ex, stocks: stocks}
-		}(exchange)
+		}(query)
 	}
 
-	// Collect results
-	var allStocks []marketvo.StockInfo
-	exchangeStats := make(map[string]int)
-	var errors []string
-
-	for i := 0; i < len(supportedExchanges); i++ {
-		result := <-resultCh
-		if result.err != nil {
-			errors = append(errors, fmt.Sprintf("%s: %v", result.exchange, result.err))
-			uc.logger.Error("Failed to fetch stocks from exchange",
-				zap.String("exchange", result.exchange),
-				zap.Error(result.err),
-			)
-			continue
-		}
-
-		allStocks = append(allStocks, result.stocks...)
-		exchangeStats[result.exchange] = len(result.stocks)
-
-		uc.logger.Info("Fetched stocks from exchange",
-			zap.String("exchange", result.exchange),
-			zap.Int("count", len(result.stocks)),
-		)
-	}
-
-	// If all exchanges failed, return error
-	if len(errors) == len(supportedExchanges) {
-		return nil, nil, fmt.Errorf("all exchanges failed: %s", strings.Join(errors, "; "))
-	}
-
-	return allStocks, exchangeStats, nil
+	wg.Wait()
+	return successData, failedData
 }

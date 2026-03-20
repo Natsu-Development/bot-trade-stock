@@ -7,8 +7,6 @@ import (
 	appRsi "bot-trade/application/usecase/analyze/rsi"
 	appTrendline "bot-trade/application/usecase/analyze/trendline"
 	"bot-trade/config"
-
-	"go.uber.org/zap"
 )
 
 // Global registry instance
@@ -36,7 +34,6 @@ type JobDependencies struct {
 	// Shared dependencies
 	Notifier   outbound.Notifier
 	ConfigRepo outbound.ConfigRepository
-	Logger     *zap.Logger
 	Config     *config.InfraConfig
 }
 

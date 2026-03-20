@@ -32,8 +32,9 @@ type InfraConfig struct {
 	HTTPIdleTimeout     int
 	HTTPShutdownTimeout int
 
-	// VietCap API Configuration
-	VietCapRateLimit int // Requests per minute
+	// Provider Configuration
+	DefaultProviderRPS int    // Default requests per second for adaptive rate limiters
+	PrimaryProvider    string // Primary provider name (e.g., "vietcap")
 
 	// MongoDB Configuration
 	MongoDBURI      string
@@ -69,8 +70,9 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	cfg.HTTPIdleTimeout = getNumberEnv("HTTP_IDLE_TIMEOUT", &errors)
 	cfg.HTTPShutdownTimeout = getNumberEnv("HTTP_SHUTDOWN_TIMEOUT", &errors)
 
-	// VietCap API Configuration
-	cfg.VietCapRateLimit = getNumberEnv("VIETCAP_RATE_LIMIT", &errors)
+	// Provider Configuration
+	cfg.DefaultProviderRPS = getNumberEnv("DEFAULT_PROVIDER_RPS", &errors)
+	cfg.PrimaryProvider = getStringEnv("PRIMARY_PROVIDER", &errors)
 
 	// MongoDB Configuration
 	cfg.MongoDBURI = getStringEnv("MONGODB_URI", &errors)

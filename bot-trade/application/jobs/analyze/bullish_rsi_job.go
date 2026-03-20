@@ -56,7 +56,6 @@ func NewBullishRSIJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, er
 			namePrefix:    "bullish-rsi",
 			preparer:      deps.Preparer,
 			configRepo:    deps.ConfigRepo,
-			logger:        deps.Logger,
 			notifier:      deps.Notifier,
 			selectSymbols: SelectBullishSymbols,
 			analyze: func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, error) {
