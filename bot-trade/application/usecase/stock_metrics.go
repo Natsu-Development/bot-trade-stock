@@ -108,6 +108,8 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*dto.StockMetricsRe
 		metrics := uc.calculator.CalculateForStock(symbol, exchange, data)
 		if metrics != nil {
 			allMetrics = append(allMetrics, metrics)
+		} else {
+			failedData[symbol] = fmt.Sprintf("insufficient data: got %d points, need at least 21", len(data))
 		}
 	}
 
@@ -278,6 +280,8 @@ func (uc *StockMetricsUseCase) fetchBatch(
 				failedData[string(q.Symbol)] = err.Error()
 			} else if len(data) > 0 {
 				successData[string(q.Symbol)] = data
+			} else {
+				failedData[string(q.Symbol)] = "empty data returned"
 			}
 		}(query)
 	}
