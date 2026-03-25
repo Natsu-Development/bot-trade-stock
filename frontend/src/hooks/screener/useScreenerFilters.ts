@@ -47,7 +47,7 @@ export function useScreenerFilters(activeExchange: string): UseScreenerFiltersRe
     try {
       const configId = getConfigId()
       const config = await api.getConfig(configId)
-      setSavedFilters(config.screener_filters || [])
+      setSavedFilters(config.metrics_filter || [])
     } catch (error) {
       console.error('Failed to load saved filters:', error)
     }
@@ -78,20 +78,20 @@ export function useScreenerFilters(activeExchange: string): UseScreenerFiltersRe
         created_at: new Date().toISOString(),
       }
 
-      const existingIndex = (config.screener_filters || []).findIndex(f => f.name === newFilterName)
+      const existingIndex = (config.metrics_filter || []).findIndex(f => f.name === newFilterName)
 
       let updatedFilters: ScreenerFilterPreset[]
       if (existingIndex >= 0) {
-        updatedFilters = [...(config.screener_filters || [])]
+        updatedFilters = [...(config.metrics_filter || [])]
         updatedFilters[existingIndex] = newPreset
         toast.success('Filter updated successfully')
       } else {
-        updatedFilters = [...(config.screener_filters || []), newPreset]
+        updatedFilters = [...(config.metrics_filter || []), newPreset]
         toast.success('Filter saved successfully')
       }
 
       await api.updateConfig(configId, {
-        screener_filters: updatedFilters,
+        metrics_filter: updatedFilters,
       })
 
       setSavedFilters(updatedFilters)
@@ -125,10 +125,10 @@ export function useScreenerFilters(activeExchange: string): UseScreenerFiltersRe
       const configId = getConfigId()
       const config = await api.getConfig(configId)
 
-      const updatedFilters = (config.screener_filters || []).filter(f => f.name !== presetName)
+      const updatedFilters = (config.metrics_filter || []).filter(f => f.name !== presetName)
 
       await api.updateConfig(configId, {
-        screener_filters: updatedFilters,
+        metrics_filter: updatedFilters,
       })
 
       setSavedFilters(updatedFilters)

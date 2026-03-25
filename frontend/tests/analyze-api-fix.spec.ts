@@ -28,7 +28,6 @@ test.describe('Analyze API - Crash Fix Verification', () => {
             lookback_right: 5,
             range_min: 30,
             range_max: 70,
-            indices_recent: 3,
           },
           early_detection_enabled: false,
           bearish_symbols: ['VCB'],

@@ -139,8 +139,7 @@ export interface ApiTrendlineDisplay {
 
 export interface ApiTradingSignal {
   id: string
-  type: string // "bounce_confirmed", "breakout_confirmed", etc.
-  signal_level: string // "confirmed", "potential", "watching"
+  type: string // "bounce_confirmed", "bounce_potential", "breakout_confirmed", "breakout_potential"
   price: number
   message: string
   source: string
@@ -149,6 +148,16 @@ export interface ApiTradingSignal {
   stop_loss?: number
   trendline?: ApiTrendlineInfo
   interval?: string
+}
+
+// Helper function to check if a signal is confirmed
+export function isSignalConfirmed(signal: ApiTradingSignal): boolean {
+  return signal.type.endsWith('_confirmed')
+}
+
+// Helper function to check if a signal is potential
+export function isSignalPotential(signal: ApiTradingSignal): boolean {
+  return signal.type.endsWith('_potential')
 }
 
 export interface ApiPriceData {
@@ -198,8 +207,6 @@ export interface ApiAnalysisResult {
   bearish_divergence: ApiDivergenceWrapper | null
   signals: ApiTradingSignal[]
   signals_count: number
-  has_confirmed: boolean
-  has_watching: boolean
   price_history: ApiPriceData[]
   trendlines: ApiTrendlineDisplay[]  // Active trendlines with pre-calculated data points
 }
@@ -214,12 +221,11 @@ export interface ApiTradingConfig {
     lookback_right: number
     range_min: number
     range_max: number
-    indices_recent: number
   }
   early_detection_enabled: boolean
   bearish_symbols: string[]
   bullish_symbols: string[]
-  screener_filters?: ScreenerFilterPreset[]
+  metrics_filter?: ScreenerFilterPreset[]
   telegram: {
     enabled: boolean
     bot_token?: string
@@ -245,8 +251,6 @@ export interface ApiSignalAnalysisResult {
   }
   signals: ApiTradingSignal[]
   signals_count: number
-  has_confirmed: boolean
-  has_watching: boolean
   price_history: ApiPriceData[]
 }
 
@@ -351,9 +355,9 @@ class ApiClient {
           case 'breakout':
             return signalType.includes('breakout')
           case 'confirmed':
-            return s.signal_level === 'confirmed'
+            return isSignalConfirmed(s)
           case 'watching':
-            return s.signal_level === 'watching' || s.signal_level === 'potential'
+            return isSignalPotential(s)
           default:
             return true
         }
@@ -367,8 +371,6 @@ class ApiClient {
       parameters: result.parameters,
       signals: filteredSignals,
       signals_count: filteredSignals.length,
-      has_confirmed: filteredSignals.some(s => s.signal_level === 'confirmed'),
-      has_watching: filteredSignals.some(s => s.signal_level === 'watching' || s.signal_level === 'potential'),
       price_history: result.price_history,
     }
   }
@@ -399,13 +401,12 @@ class ApiClient {
         lookback_right: 5,
         range_min: 30,
         range_max: 70,
-        indices_recent: 3,
       },
       early_detection_enabled: false,
       bearish_symbols: [],
       bullish_symbols: [],
       telegram: { enabled: false },
-      screener_filters: [],
+      metrics_filter: [],
     }
     return this.request('/config', {
       method: 'POST',

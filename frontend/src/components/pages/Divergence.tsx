@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Icons } from '../icons/Icons'
 import { SignalCard } from '../features/SignalCard'
 import { PriceChart } from '../features/PriceChart'
-import { api, setConfigId, getConfigId, type ApiAnalysisResult } from '../../lib/api'
+import { api, setConfigId, getConfigId, isSignalConfirmed, isSignalPotential, type ApiAnalysisResult } from '../../lib/api'
 
 const CONFIDENCE_HIGH = 85 // Confidence % assigned when a divergence is confirmed
 const CONFIDENCE_LOW = 10  // Confidence % assigned when no divergence is found
@@ -64,8 +64,8 @@ export function Divergence() {
       if (signalType === 'all') return true
       if (signalType === 'bounce') return s.type.includes('bounce')
       if (signalType === 'breakout') return s.type.includes('breakout')
-      if (signalType === 'confirmed') return s.signal_level === 'confirmed'
-      if (signalType === 'watching') return s.signal_level === 'watching' || s.signal_level === 'potential'
+      if (signalType === 'confirmed') return isSignalConfirmed(s)
+      if (signalType === 'watching') return isSignalPotential(s)
       return true
     })
   }, [analysisResult?.signals, signalType])

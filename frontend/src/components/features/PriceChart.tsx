@@ -8,7 +8,7 @@ import {
   HistogramData,
 } from 'lightweight-charts'
 import { cn } from '@/lib/utils'
-import type { ApiPriceData, ApiTrendlineDisplay, ApiTradingSignal } from '@/lib/api'
+import { isSignalConfirmed, type ApiPriceData, ApiTrendlineDisplay, ApiTradingSignal } from '@/lib/api'
 import { useChartConfig } from '@/hooks/chart/useChartConfig'
 import { useChartControls } from '@/hooks/chart/useChartControls'
 import { useChartKeyboard } from '@/hooks/chart/useChartKeyboard'
@@ -364,14 +364,15 @@ function PriceChartComponent({
       const isBullish = signal.type.includes('bounce')
       const color = isBullish ? '#10b981' : '#ef4444'
       const shape = isBullish ? 'arrowUp' : 'arrowDown'
+      const confirmed = isSignalConfirmed(signal)
 
       return {
         time: signal.time as ChartTime,
         position: isBullish ? ('belowBar' as const) : ('aboveBar' as const),
         color,
         shape: shape as 'arrowUp' | 'arrowDown',
-        text: signal.signal_level === 'confirmed' ? '✓' : signal.signal_level.charAt(0).toUpperCase(),
-        size: signal.signal_level === 'confirmed' ? 2 : 1.5,
+        text: confirmed ? '✓' : 'P',
+        size: confirmed ? 2 : 1.5,
       }
     })
 
