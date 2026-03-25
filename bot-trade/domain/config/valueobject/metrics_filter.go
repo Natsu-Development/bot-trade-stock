@@ -11,9 +11,9 @@ import (
 // MetricsFilter holds saved screener filter presets for metrics.
 // Uses shared kernel FilterCondition for filter conditions to avoid duplication.
 type MetricsFilter struct {
-	Name       string                     `json:"name" bson:"name"`
-	Conditions []filtervo.FilterCondition `json:"filters" bson:"filters"`
-	Logic      filtervo.FilterLogic       `json:"logic" bson:"logic"`
-	Exchanges  []marketvo.Exchange        `json:"exchanges,omitempty" bson:"exchanges,omitempty"`
-	CreatedAt  time.Time                  `json:"created_at" bson:"created_at"`
+	Name       string                     `bson:"name"`
+	Conditions []filtervo.FilterCondition `bson:"filters"`
+	Logic      filtervo.FilterLogic       `bson:"logic"`
+	Exchanges  []marketvo.Exchange        `bson:"exchanges,omitempty"`
+	CreatedAt  time.Time                  `bson:"created_at"`
 }

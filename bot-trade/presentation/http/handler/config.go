@@ -4,9 +4,9 @@ import (
 	"errors"
 	"net/http"
 
+	"bot-trade/application/dto"
 	"bot-trade/application/port/inbound"
 	"bot-trade/domain/config"
-	configagg "bot-trade/domain/config/aggregate"
 	shared "bot-trade/domain/shared"
 	"bot-trade/presentation/http/response"
 
@@ -25,13 +25,24 @@ func NewConfigHandler(configManager inbound.ConfigManager) *ConfigHandler {
 
 // CreateConfig handles POST /config - creates a new configuration.
 func (h *ConfigHandler) CreateConfig(c *gin.Context) {
-	var cfg configagg.TradingConfig
-	if err := c.ShouldBindJSON(&cfg); err != nil {
+	var req dto.TradingConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}
 
-	configID, err := h.configManager.CreateConfig(c.Request.Context(), &cfg)
+	cfg, err := dto.ToTradingConfigAggregate(req)
+	if err != nil {
+		var validationErr *shared.ValidationError
+		if errors.As(err, &validationErr) {
+			response.ValidationError(c, validationErr.Errors)
+			return
+		}
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	configID, err := h.configManager.CreateConfig(c.Request.Context(), cfg)
 	if err != nil {
 		var validationErr *shared.ValidationError
 		if errors.As(err, &validationErr) {
@@ -63,7 +74,7 @@ func (h *ConfigHandler) GetConfig(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, http.StatusOK, cfg)
+	response.Success(c, http.StatusOK, dto.ToTradingConfigResponse(cfg))
 }
 
 // UpdateConfig handles PUT /config/:id - updates an existing configuration.
@@ -74,13 +85,24 @@ func (h *ConfigHandler) UpdateConfig(c *gin.Context) {
 		return
 	}
 
-	var cfg configagg.TradingConfig
-	if err := c.ShouldBindJSON(&cfg); err != nil {
+	var req dto.TradingConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}
 
-	updated, err := h.configManager.UpdateConfig(c.Request.Context(), id, &cfg)
+	cfg, err := dto.ToTradingConfigAggregate(req)
+	if err != nil {
+		var validationErr *shared.ValidationError
+		if errors.As(err, &validationErr) {
+			response.ValidationError(c, validationErr.Errors)
+			return
+		}
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	updated, err := h.configManager.UpdateConfig(c.Request.Context(), id, cfg)
 	if err != nil {
 		if errors.Is(err, config.ErrConfigNotFound) {
 			response.NotFound(c, "configuration")
@@ -95,7 +117,7 @@ func (h *ConfigHandler) UpdateConfig(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, http.StatusOK, updated)
+	response.Success(c, http.StatusOK, dto.ToTradingConfigResponse(updated))
 }
 
 // DeleteConfig handles DELETE /config/:id - deletes a configuration by ID.

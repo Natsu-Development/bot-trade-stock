@@ -5,9 +5,9 @@ import "bot-trade/domain/shared"
 
 // Telegram holds Telegram notification settings.
 type Telegram struct {
-	Enabled  bool   `json:"enabled" bson:"enabled"`
-	BotToken string `json:"bot_token,omitempty" bson:"bot_token"`
-	ChatID   string `json:"chat_id,omitempty" bson:"chat_id"`
+	Enabled  bool   `bson:"enabled"`
+	BotToken string `bson:"bot_token"`
+	ChatID   string `bson:"chat_id"`
 }
 
 // Validate checks telegram invariants.

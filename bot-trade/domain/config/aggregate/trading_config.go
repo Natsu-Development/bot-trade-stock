@@ -12,27 +12,27 @@ import (
 // TradingConfig represents a user's trading configuration.
 // This is the aggregate root for the trading configuration bounded context.
 type TradingConfig struct {
-	ID          valueobject.ConfigID    `json:"id" bson:"_id"`
-	RSIPeriod   valueobject.RSIPeriod   `json:"rsi_period" bson:"rsi_period"`
-	PivotPeriod valueobject.PivotPeriod `json:"pivot_period" bson:"pivot_period"`
+	ID          valueobject.ConfigID    `bson:"_id"`
+	RSIPeriod   valueobject.RSIPeriod   `bson:"rsi_period"`
+	PivotPeriod valueobject.PivotPeriod `bson:"pivot_period"`
 	// LookbackDay specifies how many days of historical data to fetch for analysis.
 	// Used to calculate the start date: time.Now().AddDate(0, 0, -int(LookbackDay))
-	LookbackDay market.LookbackDay     `json:"lookback_day" bson:"lookback_day"`
-	Divergence  valueobject.Divergence `json:"divergence" bson:"divergence"`
-	Trendline   valueobject.Trendline  `json:"trendline" bson:"trendline"`
+	LookbackDay market.LookbackDay     `bson:"lookback_day"`
+	Divergence  valueobject.Divergence `bson:"divergence"`
+	Trendline   valueobject.Trendline  `bson:"trendline"`
 	// IndicesRecent specifies the number of recent indices to track.
-	IndicesRecent valueobject.IndicesRecent `json:"indices_recent" bson:"indices_recent"`
+	IndicesRecent valueobject.IndicesRecent `bson:"indices_recent"`
 	// BearishEarly enables early/unconfirmed bearish divergence detection.
 	// Only applies to bearish divergence analysis; nil = disabled.
-	BearishEarly   *bool                `json:"bearish_early,omitempty" bson:"bearish_early,omitempty"`
-	BearishSymbols []market.Symbol      `json:"bearish_symbols" bson:"bearish_symbols"`
-	BullishSymbols []market.Symbol      `json:"bullish_symbols" bson:"bullish_symbols"`
-	Telegram       valueobject.Telegram `json:"telegram" bson:"telegram"`
+	BearishEarly   *bool                `bson:"bearish_early,omitempty"`
+	BearishSymbols []market.Symbol      `bson:"bearish_symbols"`
+	BullishSymbols []market.Symbol      `bson:"bullish_symbols"`
+	Telegram       valueobject.Telegram `bson:"telegram"`
 	// MetricsFilter holds user-saved screener filter configurations.
 	// Nil = not set, empty array = user cleared their filters.
-	MetricsFilter []valueobject.MetricsFilter `json:"metrics_filter,omitempty" bson:"metrics_filter,omitempty"`
-	CreatedAt   time.Time                 `json:"created_at" bson:"created_at"`
-	UpdatedAt   time.Time                 `json:"updated_at" bson:"updated_at"`
+	MetricsFilter []valueobject.MetricsFilter `bson:"metrics_filter,omitempty"`
+	CreatedAt   time.Time                 `bson:"created_at"`
+	UpdatedAt   time.Time                 `bson:"updated_at"`
 }
 
 // NewTradingConfig creates a new TradingConfig with validation.

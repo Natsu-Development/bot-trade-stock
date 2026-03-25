@@ -5,8 +5,8 @@ import "bot-trade/domain/shared"
 
 // Divergence holds divergence detection parameters.
 type Divergence struct {
-	RangeMin int `json:"range_min" bson:"range_min"`
-	RangeMax int `json:"range_max" bson:"range_max"`
+	RangeMin int `bson:"range_min"`
+	RangeMax int `bson:"range_max"`
 }
 
 // Validate checks divergence invariants.
@@ -25,8 +25,8 @@ func (d *Divergence) Validate() error {
 
 // Trendline holds configuration for trendline building and signal generation.
 type Trendline struct {
-	MaxLines         int     `json:"max_lines" bson:"max_lines"`                 // Maximum number of lines to keep per direction
-	ProximityPercent float64 `json:"proximity_percent" bson:"proximity_percent"` // Percentage distance from price to trendline for signal generation
+	MaxLines         int     `bson:"max_lines"`                 // Maximum number of lines to keep per direction
+	ProximityPercent float64 `bson:"proximity_percent"` // Percentage distance from price to trendline for signal generation
 }
 
 // Validate checks trendline invariants.
