@@ -2,16 +2,17 @@ package usecase
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
-	"bot-trade/domain/aggregate/market"
-	"bot-trade/domain/aggregate/stockmetrics"
-	metricsService "bot-trade/domain/service/stockmetrics"
-	infraPort "bot-trade/infrastructure/port"
+	"bot-trade/application/dto"
+	"bot-trade/application/port/inbound"
+	"bot-trade/application/port/outbound"
+	metricsagg "bot-trade/domain/metrics/aggregate"
+	metricsservice "bot-trade/domain/metrics/service"
+	filtervo "bot-trade/domain/shared/valueobject/filter"
+	marketvo "bot-trade/domain/shared/valueobject/market"
 
 	"go.uber.org/zap"
 )
@@ -20,117 +21,113 @@ import (
 // via infrastructure/http.RetryTransport. This keeps the usecase clean and focused on
 // business logic while making retry behavior reusable across all HTTP-based gateways.
 
-// supportedExchanges defines the Vietnamese stock exchanges to analyze.
-var supportedExchanges = []string{"HOSE", "HNX", "UPCOM"}
+const (
+	// Stock metrics requires ~400 days (1.5 trading years) for RS Rating calculations.
+	// This is intentionally separate from TradingConfig.LookbackDay which is for
+	// divergence/trendline analysis (typically 30-90 days).
+	stockMetricsDateRangeDays = 400 // Days of price history fetched per stock (covers ~1.5 trading years)
+	maxFailedLogSamples       = 20  // Maximum failed-stock entries shown in the refresh summary log
+)
 
-// ErrCacheNotReady is returned when the cache has not been populated yet.
-var ErrCacheNotReady = errors.New("stock metrics cache not ready, call Refresh first")
+var _ inbound.StockMetricsManager = (*StockMetricsUseCase)(nil)
 
 // StockMetricsUseCase orchestrates the stock metrics calculation for all stocks.
 type StockMetricsUseCase struct {
-	marketDataGateway infraPort.MarketDataGateway
-	repository        infraPort.StockMetricsRepository
-	calculator        *metricsService.Calculator
-	logger            *zap.Logger
+	gateway    outbound.MarketGateway
+	repository outbound.StockMetricsRepository
+	calculator *metricsservice.Calculator
 
 	// RAM cache
-	cachedMetrics []*stockmetrics.StockMetrics
+	cachedMetrics []*metricsagg.StockMetrics
 	cachedAt      time.Time
 	cacheMu       sync.RWMutex
 }
 
 // NewStockMetricsUseCase creates a new stock metrics use case.
 func NewStockMetricsUseCase(
-	marketDataGateway infraPort.MarketDataGateway,
-	repository infraPort.StockMetricsRepository,
-	logger *zap.Logger,
+	gateway outbound.MarketGateway,
+	repository outbound.StockMetricsRepository,
 ) *StockMetricsUseCase {
 	return &StockMetricsUseCase{
-		marketDataGateway: marketDataGateway,
-		repository:        repository,
-		calculator:        metricsService.NewCalculator(),
-		logger:            logger,
+		gateway:    gateway,
+		repository: repository,
+		calculator: metricsservice.NewCalculator(),
 	}
 }
 
 // Refresh fetches ALL stocks from HOSE, HNX, UPCOM, calculates metrics, and caches in RAM.
-func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*stockmetrics.StockMetricsResult, error) {
+func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*dto.StockMetricsResult, error) {
 	startTime := time.Now()
-	uc.logger.Info("Starting stock metrics refresh for all exchanges",
-		zap.Strings("exchanges", supportedExchanges),
-	)
+	zap.L().Info("Starting stock metrics refresh for all exchanges")
 
-	// Step 1: Fetch stocks from all exchanges concurrently
-	allStocks, exchangeStats, err := uc.fetchAllExchangeStocks(ctx)
+	// Step 1: List all stocks (check for optional capability)
+	stockLister, ok := uc.gateway.(outbound.StockLister)
+	if !ok {
+		return nil, fmt.Errorf("gateway does not support listing stocks")
+	}
+	allStocks, err := stockLister.ListAllStocks(ctx)
 	if err != nil {
-		uc.logger.Error("Failed to list stocks from exchanges", zap.Error(err))
+		zap.L().Error("Failed to list stocks", zap.Error(err))
 		return nil, fmt.Errorf("failed to list stocks: %w", err)
 	}
 
 	totalStocks := len(allStocks)
-	uc.logger.Info("Listed all stocks from all exchanges",
-		zap.Int("total_stocks", totalStocks),
-		zap.Any("exchange_stats", exchangeStats),
-	)
+	zap.L().Info("Listed all stocks from all exchanges", zap.Int("total_stocks", totalStocks))
 
-	// Calculate date range for 252 trading days
-	endDate := time.Now().Format("2006-01-02")
-	startDate := time.Now().AddDate(0, 0, -400).Format("2006-01-02") // 400 days back
-
-	// Step 2: Fetch price history for each stock concurrently with retry and failure tracking
-	var (
-		allMetrics    = make([]*stockmetrics.StockMetrics, 0, len(allStocks))
-		failedSymbols = make(map[string]string) // symbol -> error reason
-		mu            sync.Mutex
-		wg            sync.WaitGroup
-		semaphore     = make(chan struct{}, 10) // Limit concurrent requests
-	)
-
+	// Step 2: Build queries (usecase logic - no exchange field needed)
+	queries := make([]marketvo.MarketDataQuery, 0, len(allStocks))
 	for _, stock := range allStocks {
-		wg.Add(1)
-		go func(sym, exchange string) {
-			defer wg.Done()
-
-			// Acquire semaphore
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-
-			metrics, fetchErr := uc.fetchAndCalculate(ctx, sym, exchange, startDate, endDate)
-
-			mu.Lock()
-			if fetchErr != nil {
-				failedSymbols[sym] = fetchErr.Error()
-			} else if metrics != nil {
-				allMetrics = append(allMetrics, metrics)
-			}
-			mu.Unlock()
-		}(stock.Symbol, stock.Exchange)
+		query, err := marketvo.NewMarketDataQueryFromStrings(string(stock.Symbol), "", "1D", marketvo.LookbackDay(stockMetricsDateRangeDays))
+		if err != nil {
+			zap.L().Warn("Invalid query", zap.String("symbol", string(stock.Symbol)), zap.Error(err))
+			continue
+		}
+		queries = append(queries, query)
 	}
 
-	wg.Wait()
+	// Step 3: Fetch batch (concurrency handled by usecase)
+	successData, failedData := uc.fetchBatch(ctx, queries)
 
 	fetchDuration := time.Since(startTime)
-	uc.logger.Info("Fetched price data for all stocks",
-		zap.Int("successful", len(allMetrics)),
-		zap.Int("failed", len(failedSymbols)),
+	zap.L().Info("Fetched price data for all stocks",
+		zap.Int("successful", len(successData)),
+		zap.Int("failed", len(failedData)),
 		zap.Duration("fetch_duration", fetchDuration),
 	)
 
-	// Step 3: Rank all stocks using relative position
+	// Step 4: Calculate metrics (usecase logic)
+	// Build a lookup map for exchange info
+	exchangeLookup := make(map[string]string, len(allStocks))
+	for _, stock := range allStocks {
+		exchangeLookup[string(stock.Symbol)] = string(stock.Exchange)
+	}
+
+	allMetrics := make([]*metricsagg.StockMetrics, 0, len(successData))
+	for symbol, data := range successData {
+		exchange := exchangeLookup[symbol]
+		metrics := uc.calculator.CalculateForStock(symbol, exchange, data)
+		if metrics != nil {
+			allMetrics = append(allMetrics, metrics)
+		} else {
+			failedData[symbol] = fmt.Sprintf("insufficient data: got %d points, need at least 21", len(data))
+		}
+	}
+
+	// Step 5: Rank all stocks using relative position
 	rankedMetrics := uc.calculator.RankAll(allMetrics)
 	calculatedAt := time.Now()
 
-	// Step 4: Persist to MongoDB
+	// Step 6: Persist to MongoDB
 	if err := uc.repository.Save(ctx, rankedMetrics, calculatedAt); err != nil {
-		uc.logger.Error("Failed to persist stock metrics to database", zap.Error(err))
+		zap.L().Error("Failed to persist stock metrics to database", zap.Error(err))
 		// Continue anyway - we still have the data in memory
 	} else {
-		uc.logger.Info("Stock metrics persisted to database",
+		zap.L().Info("Stock metrics persisted to database",
 			zap.Int("metrics_count", len(rankedMetrics)),
 		)
 	}
 
-	// Step 5: Cache in RAM
+	// Step 7: Cache in RAM
 	uc.cacheMu.Lock()
 	uc.cachedMetrics = rankedMetrics
 	uc.cachedAt = calculatedAt
@@ -138,11 +135,11 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*stockmetrics.Stock
 
 	totalDuration := time.Since(startTime)
 
-	// Step 6: Log detailed summary
-	uc.logRefreshSummary(totalStocks, len(rankedMetrics), failedSymbols, totalDuration)
+	// Step 8: Log detailed summary
+	uc.logRefreshSummary(totalStocks, len(rankedMetrics), failedData, totalDuration)
 
 	// Return full result
-	return &stockmetrics.StockMetricsResult{
+	return &dto.StockMetricsResult{
 		TotalStocksAnalyzed: totalStocks,
 		StocksMatching:      len(rankedMetrics),
 		CalculatedAt:        uc.cachedAt,
@@ -154,17 +151,18 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*stockmetrics.Stock
 // Supports AND/OR logic for combining multiple filter conditions.
 // Available fields: rs_1m, rs_3m, rs_6m, rs_9m, rs_52w, volume_vs_sma, current_volume, volume_sma20
 // Available operators: >=, <=, >, <, =
-func (uc *StockMetricsUseCase) Filter(ctx context.Context, filterReq *stockmetrics.FilterRequest) (*stockmetrics.StockMetricsResult, error) {
+// Validation is performed during JSON unmarshaling at the handler layer.
+func (uc *StockMetricsUseCase) Filter(ctx context.Context, filter *filtervo.StockFilter) (*dto.StockMetricsResult, error) {
 	uc.cacheMu.RLock()
 	defer uc.cacheMu.RUnlock()
 
 	if uc.cachedMetrics == nil {
-		return nil, ErrCacheNotReady
+		return nil, inbound.ErrCacheNotReady
 	}
 
 	// If no filters, return all
-	if filterReq == nil || len(filterReq.Conditions) == 0 {
-		return &stockmetrics.StockMetricsResult{
+	if filter == nil || len(filter.Conditions) == 0 {
+		return &dto.StockMetricsResult{
 			TotalStocksAnalyzed: len(uc.cachedMetrics),
 			StocksMatching:      len(uc.cachedMetrics),
 			CalculatedAt:        uc.cachedAt,
@@ -172,15 +170,15 @@ func (uc *StockMetricsUseCase) Filter(ctx context.Context, filterReq *stockmetri
 		}, nil
 	}
 
-	// Filter cached metrics using advanced filter
-	filtered := make([]*stockmetrics.StockMetrics, 0)
-	for _, s := range uc.cachedMetrics {
-		if s.MatchesFilter(filterReq) {
-			filtered = append(filtered, s)
+	// Filter using the domain service
+	filtered := make([]*metricsagg.StockMetrics, 0)
+	for _, stock := range uc.cachedMetrics {
+		if metricsservice.Matches(stock, filter) {
+			filtered = append(filtered, stock)
 		}
 	}
 
-	return &stockmetrics.StockMetricsResult{
+	return &dto.StockMetricsResult{
 		TotalStocksAnalyzed: len(uc.cachedMetrics),
 		StocksMatching:      len(filtered),
 		CalculatedAt:        uc.cachedAt,
@@ -209,7 +207,7 @@ func (uc *StockMetricsUseCase) LoadFromDB(ctx context.Context) (bool, error) {
 	}
 
 	if len(metrics) == 0 {
-		uc.logger.Info("No stock metrics found in database, cache remains empty")
+		zap.L().Info("No stock metrics found in database, cache remains empty")
 		return false, nil
 	}
 
@@ -218,7 +216,7 @@ func (uc *StockMetricsUseCase) LoadFromDB(ctx context.Context) (bool, error) {
 	uc.cachedAt = calculatedAt
 	uc.cacheMu.Unlock()
 
-	uc.logger.Info("Stock metrics loaded from database into cache",
+	zap.L().Info("Stock metrics loaded from database into cache",
 		zap.Int("metrics_count", len(metrics)),
 		zap.Time("calculated_at", calculatedAt),
 	)
@@ -226,50 +224,19 @@ func (uc *StockMetricsUseCase) LoadFromDB(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// fetchAndCalculate fetches price history and calculates metrics for a single stock.
-func (uc *StockMetricsUseCase) fetchAndCalculate(ctx context.Context, symbol, exchange, startDate, endDate string) (*stockmetrics.StockMetrics, error) {
-	query, err := market.NewMarketDataQueryFromStrings(symbol, startDate, endDate, "1D")
-	if err != nil {
-		return nil, fmt.Errorf("invalid query: %w", err)
-	}
-
-	response, err := uc.marketDataGateway.FetchStockData(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("fetch failed: %w", err)
-	}
-
-	if len(response.PriceHistory) == 0 {
-		return nil, nil // No price history available
-	}
-
-	// Calculate metrics for this stock (returns nil if insufficient data)
-	metrics := uc.calculator.CalculateForStock(symbol, exchange, response.PriceHistory)
-
-	if metrics != nil {
-		uc.logger.Debug("Calculated metrics for stock",
-			zap.String("symbol", symbol),
-			zap.String("exchange", exchange),
-			zap.Int("data_points", len(response.PriceHistory)),
-		)
-	}
-
-	return metrics, nil
-}
-
 // logRefreshSummary logs a detailed summary of the refresh process.
 func (uc *StockMetricsUseCase) logRefreshSummary(totalStocks, successCount int, failedSymbols map[string]string, duration time.Duration) {
 	failedCount := len(failedSymbols)
 
-	// Build failed stocks summary (limit to first 20 for readability)
 	failedList := make([]string, 0, len(failedSymbols))
 	for sym, reason := range failedSymbols {
-		if len(failedList) < 20 {
+		if len(failedList) < maxFailedLogSamples {
 			failedList = append(failedList, fmt.Sprintf("%s: %s", sym, reason))
 		}
 	}
 
-	uc.logger.Info("========== STOCK METRICS REFRESH SUMMARY ==========")
-	uc.logger.Info("Refresh completed",
+	zap.L().Info("========== STOCK METRICS REFRESH SUMMARY ==========")
+	zap.L().Info("Refresh completed",
 		zap.Int("total_stocks", totalStocks),
 		zap.Int("successfully_analyzed", successCount),
 		zap.Int("failed_count", failedCount),
@@ -277,73 +244,48 @@ func (uc *StockMetricsUseCase) logRefreshSummary(totalStocks, successCount int, 
 	)
 
 	if failedCount > 0 {
-		uc.logger.Warn("Failed stocks",
+		zap.L().Warn("Failed stocks",
 			zap.Int("total_failed", failedCount),
 			zap.Strings("failed_samples", failedList),
 		)
 
-		if failedCount > 20 {
-			uc.logger.Warn("Additional failed stocks not shown",
-				zap.Int("hidden_count", failedCount-20),
+		if failedCount > maxFailedLogSamples {
+			zap.L().Warn("Additional failed stocks not shown",
+				zap.Int("hidden_count", failedCount-maxFailedLogSamples),
 			)
 		}
 	}
 
-	uc.logger.Info("====================================================")
+	zap.L().Info("====================================================")
 }
 
-// fetchAllExchangeStocks fetches stocks from all supported exchanges concurrently.
-// Returns combined stock list and per-exchange statistics.
-func (uc *StockMetricsUseCase) fetchAllExchangeStocks(ctx context.Context) ([]market.StockInfo, map[string]int, error) {
-	type exchangeResult struct {
-		exchange string
-		stocks   []market.StockInfo
-		err      error
-	}
+// fetchBatch concurrently fetches data for multiple queries using the provided gateway.
+func (uc *StockMetricsUseCase) fetchBatch(
+	ctx context.Context,
+	queries []marketvo.MarketDataQuery,
+) (map[string][]marketvo.MarketData, map[string]string) {
+	successData := make(map[string][]marketvo.MarketData)
+	failedData := make(map[string]string)
+	var mu sync.Mutex
 
-	resultCh := make(chan exchangeResult, len(supportedExchanges))
-
-	// Fetch from all exchanges concurrently
-	for _, exchange := range supportedExchanges {
-		go func(ex string) {
-			resp, err := uc.marketDataGateway.ListAllStocks(ctx, ex)
+	var wg sync.WaitGroup
+	for _, query := range queries {
+		wg.Add(1)
+		go func(q marketvo.MarketDataQuery) {
+			defer wg.Done()
+			data, err := uc.gateway.FetchData(ctx, q)
+			mu.Lock()
+			defer mu.Unlock()
 			if err != nil {
-				resultCh <- exchangeResult{exchange: ex, err: err}
-				return
+				failedData[string(q.Symbol)] = err.Error()
+			} else if len(data) > 0 {
+				successData[string(q.Symbol)] = data
+			} else {
+				failedData[string(q.Symbol)] = "empty data returned"
 			}
-			resultCh <- exchangeResult{exchange: ex, stocks: resp.Stocks}
-		}(exchange)
+		}(query)
 	}
 
-	// Collect results
-	var allStocks []market.StockInfo
-	exchangeStats := make(map[string]int)
-	var errors []string
-
-	for i := 0; i < len(supportedExchanges); i++ {
-		result := <-resultCh
-		if result.err != nil {
-			errors = append(errors, fmt.Sprintf("%s: %v", result.exchange, result.err))
-			uc.logger.Error("Failed to fetch stocks from exchange",
-				zap.String("exchange", result.exchange),
-				zap.Error(result.err),
-			)
-			continue
-		}
-
-		allStocks = append(allStocks, result.stocks...)
-		exchangeStats[result.exchange] = len(result.stocks)
-
-		uc.logger.Info("Fetched stocks from exchange",
-			zap.String("exchange", result.exchange),
-			zap.Int("count", len(result.stocks)),
-		)
-	}
-
-	// If all exchanges failed, return error
-	if len(errors) == len(supportedExchanges) {
-		return nil, nil, fmt.Errorf("all exchanges failed: %s", strings.Join(errors, "; "))
-	}
-
-	return allStocks, exchangeStats, nil
+	wg.Wait()
+	return successData, failedData
 }

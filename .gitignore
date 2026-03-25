@@ -7,6 +7,7 @@
 frontend/dist/
 frontend/node_modules/
 trading-ui-preview.html
+node_modules/
 
 # Go Build Artifacts (only at root level of bot-trade)
 bot-trade/main

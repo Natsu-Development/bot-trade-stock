@@ -51,3 +51,15 @@ func NewProduction() (*zap.Logger, error) {
 		Environment: "production",
 	})
 }
+
+// SetGlobal creates a logger and sets it as the global zap logger.
+// After calling this, zap.L() returns the configured logger anywhere in the codebase.
+// This eliminates the need to pass logger as a parameter throughout the application.
+func SetGlobal(cfg Config) (*zap.Logger, error) {
+	logger, err := New(cfg)
+	if err != nil {
+		return nil, err
+	}
+	zap.ReplaceGlobals(logger)
+	return logger, nil
+}

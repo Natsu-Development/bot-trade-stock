@@ -38,7 +38,7 @@ func main() {
 	}, app.Router())
 
 	go func() {
-		app.Logger().Info("HTTP server starting", zap.String("addr", srv.Addr()))
+		zap.L().Info("HTTP server starting", zap.String("addr", srv.Addr()))
 		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
 			log.Fatal("HTTP server failed: ", err)
 		}
@@ -46,9 +46,9 @@ func main() {
 
 	waitForShutdown()
 
-	app.Logger().Info("Shutting down...")
+	zap.L().Info("Shutting down...")
 	if err := srv.Shutdown(); err != nil {
-		app.Logger().Error("Server shutdown error", zap.Error(err))
+		zap.L().Error("Server shutdown error", zap.Error(err))
 	}
 }
 

@@ -12,6 +12,10 @@ import { formatPrice, getBadgeVariantFromExchange } from '../../lib/utils'
 import { api, apiToStock } from '../../lib/api'
 import type { Stock } from '../../types'
 
+const RS_BULLISH_THRESHOLD = 80
+const RS_BEARISH_THRESHOLD = 30
+const TOP_STOCKS_COUNT = 10
+
 export function Dashboard() {
   const [stocks, setStocks] = useState<Stock[]>([])
   const [cacheInfo, setCacheInfo] = useState<{
@@ -44,11 +48,11 @@ export function Dashboard() {
   const fetchTopStocks = async () => {
     try {
       const response = await api.filterStocks({
-        filters: [{ field: 'rs_52w', op: '>=', value: 80 }],
+        filters: [{ field: 'rs_52w', op: '>=', value: RS_BULLISH_THRESHOLD }],
         logic: 'and',
       })
       const converted = response.stocks.map(apiToStock)
-      setStocks(converted.slice(0, 10))
+      setStocks(converted.slice(0, TOP_STOCKS_COUNT))
     } catch (error) {
       console.error('Failed to fetch stocks:', error)
     }
@@ -88,15 +92,15 @@ export function Dashboard() {
     },
     {
       label: 'Bullish Signals',
-      value: stocks.filter(s => s.rs52w >= 80).length.toString(),
-      change: 'RS 52W >= 80',
+      value: stocks.filter(s => s.rs52w >= RS_BULLISH_THRESHOLD).length.toString(),
+      change: `RS 52W >= ${RS_BULLISH_THRESHOLD}`,
       variant: 'bullish' as const,
       icon: Icons.TrendUp,
     },
     {
       label: 'Bearish Signals',
-      value: stocks.filter(s => s.rs52w <= 30).length.toString(),
-      change: 'RS 52W <= 30',
+      value: stocks.filter(s => s.rs52w <= RS_BEARISH_THRESHOLD).length.toString(),
+      change: `RS 52W <= ${RS_BEARISH_THRESHOLD}`,
       variant: 'bearish' as const,
       icon: Icons.TrendDown,
     },

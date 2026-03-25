@@ -23,7 +23,6 @@ type RetryTransport struct {
 	base       http.RoundTripper
 	maxRetries int
 	backoffs   []time.Duration
-	logger     *zap.Logger
 }
 
 // RetryTransportOption is a functional option for configuring RetryTransport.
@@ -43,13 +42,6 @@ func WithBackoffs(backoffs []time.Duration) RetryTransportOption {
 	}
 }
 
-// WithLogger sets a custom logger for the transport.
-func WithLogger(logger *zap.Logger) RetryTransportOption {
-	return func(t *RetryTransport) {
-		t.logger = logger
-	}
-}
-
 // NewRetryTransport creates a new RetryTransport wrapping the given base transport.
 // If base is nil, http.DefaultTransport is used.
 func NewRetryTransport(base http.RoundTripper, opts ...RetryTransportOption) *RetryTransport {
@@ -61,7 +53,6 @@ func NewRetryTransport(base http.RoundTripper, opts ...RetryTransportOption) *Re
 		base:       base,
 		maxRetries: defaultMaxRetries,
 		backoffs:   defaultRetryBackoffs,
-		logger:     zap.NewNop(), // Default to no-op logger
 	}
 
 	for _, opt := range opts {
@@ -98,7 +89,7 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 			if attempt < t.maxRetries {
 				backoff := t.getBackoff(attempt)
-				t.logger.Debug("Rate limited (429), retrying",
+				zap.L().Debug("Rate limited (429), retrying",
 					zap.String("url", req.URL.String()),
 					zap.Int("attempt", attempt+1),
 					zap.Duration("backoff", backoff),
@@ -114,7 +105,7 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			}
 
 			// Max retries exceeded
-			t.logger.Warn("Max retries exceeded for rate-limited request",
+			zap.L().Warn("Max retries exceeded for rate-limited request",
 				zap.String("url", req.URL.String()),
 				zap.Int("attempts", t.maxRetries+1),
 			)
@@ -145,9 +136,7 @@ func (t *RetryTransport) getBackoff(attempt int) time.Duration {
 }
 
 // NewHTTPClientWithRetry creates an http.Client with retry transport configured.
-func NewHTTPClientWithRetry(timeout time.Duration, logger *zap.Logger, opts ...RetryTransportOption) *http.Client {
-	opts = append([]RetryTransportOption{WithLogger(logger)}, opts...)
-
+func NewHTTPClientWithRetry(timeout time.Duration, opts ...RetryTransportOption) *http.Client {
 	return &http.Client{
 		Timeout:   timeout,
 		Transport: NewRetryTransport(http.DefaultTransport, opts...),

@@ -8,13 +8,11 @@ Docker configuration for the Trading Bot System with secure deployment practices
 docker/
 ├── docker-compose.yml          # Development compose (with .env)
 ├── docker-compose.prod.yml     # Production template (uses env_file)
-├── docker-compose.secure.yml   # Secure compose (optional)
 └── README.md                   # This documentation
 ```
 
-**Note:** Dockerfiles are in respective service directories:
+**Note:** Dockerfile is in the service directory:
 - `bot-trade/Dockerfile` - Go trading bot service
-- `broker/Dockerfile` - Python gRPC broker service
 
 ## 🚀 Quick Start
 
@@ -27,17 +25,10 @@ make docker-down        # Stop all services
 
 ## 🔧 Services
 
-### 1. Broker Service (Python)
-- **File**: `Dockerfile.broker`
-- **Port**: 50051 (gRPC)
-- **Purpose**: Stock data provider using vnstock
-- **Dependencies**: None
-
-### 2. Bot-Trade Service (Go)
-- **File**: `Dockerfile.bot-trade`
+### Bot-Trade Service (Go)
+- **File**: `bot-trade/Dockerfile`
 - **Port**: 8080 (HTTP)
 - **Purpose**: Trading analysis and API endpoints
-- **Dependencies**: Broker service
 - **Environment**: Loads from `../bot-trade/.env`
 
 ## ⚙️ Configuration
@@ -88,7 +79,6 @@ make docker-restart     # Restart services
 ```bash
 make docker-logs        # All service logs
 make docker-logs-bot    # Bot service only
-make docker-logs-broker # Broker service only
 make docker-ps          # Container status
 make docker-stats       # Resource usage
 ```
@@ -98,23 +88,20 @@ make docker-stats       # Resource usage
 make docker-rebuild     # Rebuild and restart
 make docker-clean       # Remove all containers/volumes
 make docker-shell-bot   # Shell into bot container
-make docker-shell-broker # Shell into broker container
 ```
 
 ## 🌐 Networking
 
 - **Network**: `trading-network` (bridge)
-- **Internal Communication**: Services use service names (e.g., `broker:50051`)
-- **External Access**: 
+- **External Access**:
   - Bot API: `http://localhost:8080`
-  - Broker gRPC: `localhost:50051`
 
 ## 🔒 Security Best Practices
 
 ### Local Development
 1. ✅ **Never commit** `.env` files with real secrets
 2. ✅ Use `.env.example` as template only
-3. ✅ `.dockerignore` properly configured in each service directory
+3. ✅ `.dockerignore` properly configured in service directory
 
 ### Production Deployment
 1. ✅ **Secrets in artifacts**: NEVER - secrets injected via SSH
@@ -136,7 +123,7 @@ Docker containers read .env.secrets
 
 ### Network & Health
 - ✅ **Network Isolation**: Services communicate only within Docker network
-- ✅ **Health Checks**: Both services monitored automatically
+- ✅ **Health Checks**: Service monitored automatically
 - ✅ **Restart Policy**: `unless-stopped` for high availability
 
 ## 🛠 Maintenance & Troubleshooting
@@ -180,20 +167,11 @@ ssh user@server
 cat /opt/trading-app/.env.secrets
 ```
 
-**Network connectivity issues:**
-```bash
-# Test from bot to broker
-make docker-shell-bot
-# Inside container:
-nc -zv broker 50051
-```
-
 ## 📋 Key Environment Variables
 
 **Non-secret (GitHub Variables):**
 - `RSI_PERIOD` - RSI calculation period (default: 14)
 - `HTTP_PORT` - API server port (default: 8080)
-- `GRPC_SERVER_ADDR` - Broker address (local: `localhost:50051`, docker: `broker:50051`)
 - `LOG_LEVEL` - Logging level (debug, info, warn, error)
 - `BEARISH_1D_ENABLED` - Enable daily bearish analysis
 - `DEFAULT_SYMBOLS` - Comma-separated stock symbols

@@ -19,7 +19,6 @@ jobs:
     environment: production
     outputs:
       docker-namespace: ${{ steps.config.outputs.DOCKER_NAMESPACE }}
-      broker-image: ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-broker:${{ github.sha }}
       bot-image: ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-bot:${{ github.sha }}
 
     steps:
@@ -48,18 +47,6 @@ jobs:
           registry: ${{ steps.config.outputs.DOCKER_REGISTRY }}
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build and push broker image
-        uses: docker/build-push-action@v5
-        with:
-          context: broker
-          file: broker/Dockerfile
-          push: true
-          tags: |
-            ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-broker:${{ github.sha }}
-            ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-broker:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Build and push bot image
         uses: docker/build-push-action@v5
@@ -122,7 +109,6 @@ jobs:
             "git_ref": "${{ github.ref }}",
             "environment": "${{ github.ref_name == 'master' && 'production' || 'staging' }}",
             "images": {
-              "broker": "${{ needs.build-images.outputs.broker-image }}",
               "bot": "${{ needs.build-images.outputs.bot-image }}"
             }
           }
