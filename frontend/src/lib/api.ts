@@ -176,7 +176,17 @@ export interface ApiPriceData {
   volume: number
 }
 
-// Divergence wrapper for unified response
+// Divergence DTO matching backend DivergenceDTO
+export interface ApiDivergence {
+  type: 'bullish' | 'bearish'
+  is_early: boolean
+  divergence_points: Array<{
+    price: number
+    date: string
+  }>
+}
+
+// Divergence wrapper for unified response (legacy)
 export interface ApiDivergenceWrapper {
   processing_time_ms: number
   timestamp: string
@@ -210,8 +220,7 @@ export interface ApiAnalysisResult {
     interval: string
     current_price: number
   }
-  bullish_divergence: ApiDivergenceWrapper | null
-  bearish_divergence: ApiDivergenceWrapper | null
+  divergences: ApiDivergence[]  // Combined divergences array with type field
   signals: ApiTradingSignal[]
   signals_count: number
   price_history: ApiPriceData[]
@@ -328,13 +337,13 @@ class ApiClient {
 
   // Legacy methods for backward compatibility - now use unified endpoint
   async analyzeBullishDivergence(symbol: string, configId?: string): Promise<ApiDivergenceWrapper> {
-    const result = await this.analyzeSymbol(symbol, { configId })
-    return result.bullish_divergence || this.createEmptyDivergenceResult()
+    await this.analyzeSymbol(symbol, { configId })
+    return this.createEmptyDivergenceResult()
   }
 
   async analyzeBearishDivergence(symbol: string, configId?: string): Promise<ApiDivergenceWrapper> {
-    const result = await this.analyzeSymbol(symbol, { configId })
-    return result.bearish_divergence || this.createEmptyDivergenceResult()
+    await this.analyzeSymbol(symbol, { configId })
+    return this.createEmptyDivergenceResult()
   }
 
   // Legacy signals method - extracts signals from unified response

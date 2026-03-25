@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Header } from '../layout/Header'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -6,10 +6,9 @@ import { Badge } from '@/components/ui/badge'
 import { Icons } from '../icons/Icons'
 import { SignalCard } from '../features/SignalCard'
 import { PriceChart } from '../features/PriceChart'
-import { api, setConfigId, getConfigId, isSignalConfirmed, isSignalPotential, type ApiAnalysisResult } from '../../lib/api'
+import { api, setConfigId, getConfigId, isSignalConfirmed, isSignalPotential, type ApiAnalysisResult, type ApiDivergence } from '../../lib/api'
 
 const CONFIDENCE_HIGH = 85 // Confidence % assigned when a divergence is confirmed
-const CONFIDENCE_LOW = 10  // Confidence % assigned when no divergence is found
 
 type SignalType = 'all' | 'bounce' | 'breakout' | 'confirmed' | 'watching'
 
@@ -30,7 +29,7 @@ export function Divergence() {
   const [analysisResult, setAnalysisResult] = useState<ApiAnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const handleAnalyzeAll = async () => {
+  const handleAnalyzeAll = useCallback(async () => {
     if (!symbol.trim()) {
       setError('Please enter a symbol')
       return
@@ -55,7 +54,7 @@ export function Divergence() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [symbol, configId, timeframe])
 
   // Extract signal data from analysis result - memoized to prevent unnecessary re-renders
   const filteredSignals = useMemo(() => {
@@ -70,41 +69,37 @@ export function Divergence() {
     })
   }, [analysisResult?.signals, signalType])
 
-  const bullishData = analysisResult?.bullish_divergence
-  const bearishData = analysisResult?.bearish_divergence
+  // Extract divergences from combined array, filter by type
+  const bullishDivergences = useMemo(() => {
+    return analysisResult?.divergences?.filter((d: ApiDivergence) => d.type === 'bullish') || []
+  }, [analysisResult?.divergences])
+
+  const bearishDivergences = useMemo(() => {
+    return analysisResult?.divergences?.filter((d: ApiDivergence) => d.type === 'bearish') || []
+  }, [analysisResult?.divergences])
 
   // Memoize trendlines from the API response with pre-calculated data points
   const trendlines = useMemo(() => {
     return analysisResult?.trendlines || []
   }, [analysisResult?.trendlines])
 
-  const bullishCount = bullishData?.divergence?.divergence_found ? 1 : 0
-  const bearishCount = bearishData?.divergence?.divergence_found ? 1 : 0
+  const bullishCount = bullishDivergences.length
+  const bearishCount = bearishDivergences.length
 
-  const getBullishSignal = () => {
-    if (!bullishData) return null
-    const { divergence } = bullishData
+  // Get divergence signal data for SignalCard
+  const getDivergenceSignal = (divergences: ApiDivergence[]) => {
+    if (!divergences.length) return null
+    const latest = divergences[0]  // Most recent divergence
     return {
-      currentRsi: divergence.current_rsi,
-      confidence: divergence.divergence_found ? CONFIDENCE_HIGH : CONFIDENCE_LOW,
-      divergenceType: divergence.type || 'N/A',
-      strength: divergence.divergence_found ? 'High' : 'None',
+      confidence: latest.is_early ? 50 : CONFIDENCE_HIGH,
+      divergenceType: latest.type,
+      strength: latest.is_early ? 'Early' : 'High',
+      points: latest.divergence_points,
     }
   }
 
-  const getBearishSignal = () => {
-    if (!bearishData) return null
-    const { divergence } = bearishData
-    return {
-      currentRsi: divergence.current_rsi,
-      confidence: divergence.divergence_found ? CONFIDENCE_HIGH : CONFIDENCE_LOW,
-      divergenceType: divergence.type || 'N/A',
-      strength: divergence.divergence_found ? 'High' : 'None',
-    }
-  }
-
-  const bullishSignal = getBullishSignal()
-  const bearishSignal = getBearishSignal()
+  const bullishSignal = getDivergenceSignal(bullishDivergences)
+  const bearishSignal = getDivergenceSignal(bearishDivergences)
 
   return (
     <div className="animate-slide-in-from-bottom">
@@ -203,17 +198,16 @@ export function Divergence() {
             type="bullish"
             title="Bullish Divergence"
             value={bullishSignal.confidence > 50 ? 'BUY' : 'HOLD'}
-            currentRsi={bullishSignal.currentRsi}
             confidence={bullishSignal.confidence}
             divergenceType={bullishSignal.divergenceType}
             strength={bullishSignal.strength}
+            points={bullishSignal.points}
           />
         ) : (
           <SignalCard
             type="bullish"
             title="Bullish Divergence"
             value="HOLD"
-            currentRsi={0}
             confidence={0}
             divergenceType="N/A"
             strength="None"
@@ -224,17 +218,16 @@ export function Divergence() {
             type="bearish"
             title="Bearish Divergence"
             value={bearishSignal.confidence > 50 ? 'SELL' : 'HOLD'}
-            currentRsi={bearishSignal.currentRsi}
             confidence={bearishSignal.confidence}
             divergenceType={bearishSignal.divergenceType}
             strength={bearishSignal.strength}
+            points={bearishSignal.points}
           />
         ) : (
           <SignalCard
             type="bearish"
             title="Bearish Divergence"
             value="HOLD"
-            currentRsi={0}
             confidence={0}
             divergenceType="N/A"
             strength="None"
