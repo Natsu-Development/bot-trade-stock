@@ -266,6 +266,7 @@ export function Divergence() {
               priceHistory={analysisResult.price_history}
               trendlines={trendlines}
               signals={filteredSignals}
+              analysisSignals={analysisResult.signals}
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-[300px] text-[var(--text-muted)]">

@@ -116,7 +116,6 @@ export interface ApiTrendlineInfo {
   end_price: number
   start_date: string
   end_date: string
-  current_line_price: number
   slope: number
 }
 
@@ -133,8 +132,14 @@ export interface ApiTrendlineDisplay {
   start_date: string
   end_date: string
   slope: number
-  broken_at?: string  // Optional: date where trendline was broken (crossed)
-  broken_type?: string  // Optional: "cross_below" for support break, "cross_above" for resistance breakout
+}
+
+// Signal from analyze API - contains crossover point for trendline extension
+export interface ApiAnalysisSignal {
+  type: string        // "bounce_confirmed", "breakout_confirmed", etc.
+  price: number       // Actual price at crossover
+  time: string        // Date of crossover
+  price_line?: number  // Trendline price at crossover (extension point)
 }
 
 export interface ApiTradingSignal {
@@ -148,6 +153,7 @@ export interface ApiTradingSignal {
   stop_loss?: number
   trendline?: ApiTrendlineInfo
   interval?: string
+  price_line?: number  // Trendline price at crossover point (from analyze API)
 }
 
 // Helper function to check if a signal is confirmed
@@ -161,6 +167,7 @@ export function isSignalPotential(signal: ApiTradingSignal): boolean {
 }
 
 export interface ApiPriceData {
+  index: number
   date: string
   open: number
   high: number

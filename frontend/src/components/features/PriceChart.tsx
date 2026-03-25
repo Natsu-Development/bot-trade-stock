@@ -8,7 +8,8 @@ import {
   HistogramData,
 } from 'lightweight-charts'
 import { cn } from '@/lib/utils'
-import { isSignalConfirmed, type ApiPriceData, ApiTrendlineDisplay, ApiTradingSignal } from '@/lib/api'
+import { isSignalConfirmed, type ApiPriceData, ApiTrendlineDisplay, ApiTradingSignal, ApiAnalysisSignal } from '@/lib/api'
+import { extendTrendlinesToCrossover } from '@/lib/trendlineUtils'
 import { useChartConfig } from '@/hooks/chart/useChartConfig'
 import { useChartControls } from '@/hooks/chart/useChartControls'
 import { useChartKeyboard } from '@/hooks/chart/useChartKeyboard'
@@ -23,6 +24,7 @@ interface PriceChartProps {
   priceHistory: ApiPriceData[]
   trendlines?: ApiTrendlineDisplay[]
   signals?: ApiTradingSignal[]
+  analysisSignals?: ApiAnalysisSignal[]  // Signals from analyze API with price_line for trendline extension
   rsiData?: Array<{ time: string; value: number }>
   className?: string
 }
@@ -59,13 +61,21 @@ function PriceChartComponent({
   priceHistory,
   trendlines: propTrendlines,
   signals: propSignals,
+  analysisSignals: propAnalysisSignals,
   rsiData: propRsiData,
   className
 }: PriceChartProps) {
   // Use stable empty arrays for default props to prevent infinite loops
   const stableTrendlines = useMemo(() => propTrendlines ?? [], [propTrendlines])
   const stableSignals = useMemo(() => propSignals ?? [], [propSignals])
+  const stableAnalysisSignals = useMemo(() => propAnalysisSignals ?? [], [propAnalysisSignals])
   const stableRsiData = useMemo(() => propRsiData ?? [], [propRsiData])
+
+  // Extend trendlines to crossover points when signals are available
+  // Pass priceHistory so we can calculate intermediate points along the slope
+  const extendedTrendlines = useMemo(() => {
+    return extendTrendlinesToCrossover(stableTrendlines, stableAnalysisSignals, priceHistory)
+  }, [stableTrendlines, stableAnalysisSignals, priceHistory])
 
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -302,7 +312,7 @@ function PriceChartComponent({
 
   // Add trendlines
   useEffect(() => {
-    if (!chartRef.current || !stableTrendlines.length || !showTrendlines) {
+    if (!chartRef.current || !extendedTrendlines.length || !showTrendlines) {
       cleanupTrendlineSeries()
       return
     }
@@ -311,7 +321,7 @@ function PriceChartComponent({
 
     const chart = chartRef.current
 
-    stableTrendlines.forEach((trendline) => {
+    extendedTrendlines.forEach((trendline) => {
       const isSupport = trendline.type === 'uptrend_support'
       const lineColor = isSupport ? '#10b981' : '#ef4444'
 
@@ -328,7 +338,7 @@ function PriceChartComponent({
       const startDate = new Date(trendline.start_date).getTime()
 
       const lineData: LineData[] = trendline.data_points
-        .filter((point) => {
+        .filter((point: { date: string; price: number }) => {
           const pointDate = new Date(point.date).getTime()
           return pointDate >= startDate
         })
@@ -341,7 +351,7 @@ function PriceChartComponent({
     return () => {
       cleanupTrendlineSeries()
     }
-  }, [stableTrendlines, showTrendlines, cleanupTrendlineSeries])
+  }, [extendedTrendlines, showTrendlines, cleanupTrendlineSeries])
 
   // Add signal markers
   useEffect(() => {
@@ -449,7 +459,7 @@ function PriceChartComponent({
 
           {/* Enhanced Legend */}
           <ChartLegend
-            trendlines={stableTrendlines}
+            trendlines={extendedTrendlines}
             signals={stableSignals}
             showTrendlines={showTrendlines}
             showSignals={showSignals}
@@ -479,6 +489,7 @@ export const PriceChart = memo(PriceChartComponent, (prevProps, nextProps) => {
     prevProps.priceHistory[prevProps.priceHistory.length - 1]?.close === nextProps.priceHistory[nextProps.priceHistory.length - 1]?.close &&
     prevProps.trendlines?.length === nextProps.trendlines?.length &&
     prevProps.signals?.length === nextProps.signals?.length &&
+    prevProps.analysisSignals?.length === nextProps.analysisSignals?.length &&
     prevProps.rsiData?.length === nextProps.rsiData?.length
   )
 })
