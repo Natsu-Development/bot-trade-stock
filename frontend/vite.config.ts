@@ -4,6 +4,11 @@ import path from 'path'
 import { visualizer } from 'rollup-plugin-visualizer'
 
 export default defineConfig({
+  server: {
+    allowedHosts: [
+      'hornet-caring-socially.ngrok-free.app',
+    ],
+  },
   plugins: [
     react(),
     // Bundle analyzer - generates stats.html after build
