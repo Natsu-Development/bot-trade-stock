@@ -5,7 +5,7 @@ services:
   bot-trade:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.bot-trade
+      dockerfile: ../bot-trade/Dockerfile
     container_name: trading-bot
     ports:
       - "8080:8080"
