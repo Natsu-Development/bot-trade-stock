@@ -1,8 +1,8 @@
 // API client for Trading Bot backend
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
-// localStorage key for config ID persistence
-const CONFIG_ID_STORAGE_KEY = 'trading-app_config-id'
+// localStorage key for config ID persistence (shared with useConfigId)
+export const CONFIG_ID_STORAGE_KEY = 'trading-app_config-id'
 
 // Default config ID for divergence analysis (can be overridden)
 let DEFAULT_CONFIG_ID = 'default'
@@ -339,17 +339,6 @@ class ApiClient {
     return this.request(`/analyze/${encodeURIComponent(symbol)}?${params.toString()}`)
   }
 
-  // Legacy methods for backward compatibility - now use unified endpoint
-  async analyzeBullishDivergence(symbol: string, configId?: string): Promise<ApiDivergenceWrapper> {
-    await this.analyzeSymbol(symbol, { configId })
-    return this.createEmptyDivergenceResult()
-  }
-
-  async analyzeBearishDivergence(symbol: string, configId?: string): Promise<ApiDivergenceWrapper> {
-    await this.analyzeSymbol(symbol, { configId })
-    return this.createEmptyDivergenceResult()
-  }
-
   // Legacy signals method - extracts signals from unified response
   async getSignals(
     symbol: string,
@@ -466,54 +455,12 @@ class ApiClient {
       body: JSON.stringify({ list_type: listType, symbols }),
     })
   }
-
-  // Helper to create empty divergence result for backward compatibility
-  private createEmptyDivergenceResult(): ApiDivergenceWrapper {
-    return {
-      processing_time_ms: 0,
-      timestamp: new Date().toISOString(),
-      parameters: {
-        start_date: '',
-        end_date: '',
-        interval: '',
-        rsi_period: 14,
-      },
-      divergence: {
-        type: 'none',
-        description: 'No analysis available',
-        divergence_found: false,
-        current_price: 0,
-        current_rsi: 0,
-      },
-    }
-  }
 }
 
 // Singleton instance
 const apiInstance = new ApiClient()
 
-// Helper to convert API metrics to frontend Stock type
-export function apiToStock(api: ApiStockMetrics) {
-  const volumeVsSma = api.volume_sma20 > 0
-    ? ((api.current_volume - api.volume_sma20) / api.volume_sma20 * 100)
-    : 0
-
-  return {
-    symbol: api.symbol,
-    name: api.symbol, // Backend doesn't provide name, use symbol
-    exchange: api.exchange as 'HOSE' | 'HNX' | 'UPCOM',
-    rs1m: api.rs_1m,
-    rs3m: api.rs_3m,
-    rs6m: api.rs_6m,
-    rs9m: api.rs_9m,
-    rs52w: api.rs_52w,
-    currentVolume: api.current_volume,
-    volumeSma20: api.volume_sma20,
-    volume: volumeVsSma > 0 ? `+${volumeVsSma.toFixed(1)}%` : `${volumeVsSma.toFixed(1)}%`,
-    price: 0, // Not provided by backend
-    change: 0, // Not provided by backend
-  }
-}
+export { apiStockMetricsToStock as apiToStock } from './screenerUtils'
 
 // Re-export api instance methods
 export const api = {
@@ -527,9 +474,6 @@ export const api = {
     o?: { configId?: string; startDate?: string; endDate?: string; interval?: string }
   ) => apiInstance.analyzeSymbol(s, o),
 
-  // Legacy methods for backward compatibility
-  analyzeBullishDivergence: (s: string, c?: string) => apiInstance.analyzeBullishDivergence(s, c),
-  analyzeBearishDivergence: (s: string, c?: string) => apiInstance.analyzeBearishDivergence(s, c),
   getSignals: (
     s: string,
     o?: { type?: 'all' | 'breakdown' | 'breakout' | 'confirmed' | 'watching'; configId?: string; startDate?: string; endDate?: string; interval?: string }

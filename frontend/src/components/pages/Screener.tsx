@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef, useDeferredValue } from 'react'
 import { Header } from '../layout/Header'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,31 +13,16 @@ import { SaveFilterPresetDialog } from '../screener/SaveFilterPresetDialog'
 import { ScreenerResultsTable } from '../screener/ScreenerResultsTable'
 import { useScreenerFilters } from '../../hooks/screener/useScreenerFilters'
 import { useStockSelection } from '../../hooks/screener/useStockSelection'
-import type { Stock, FilterFieldOption, FilterOperatorOption } from '../../types'
-
-const filterFieldOptions: FilterFieldOption[] = [
-  { value: 'rs_1m', label: 'RS 1M', shortLabel: 'RS 1M', description: '1-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_3m', label: 'RS 3M', shortLabel: 'RS 3M', description: '3-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_6m', label: 'RS 6M', shortLabel: 'RS 6M', description: '6-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_9m', label: 'RS 9M', shortLabel: 'RS 9M', description: '9-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_52w', label: 'RS 52W', shortLabel: 'RS 52W', description: '52-Week Relative Strength', category: 'RS Rating' },
-  { value: 'volume_vs_sma', label: 'Vol vs SMA', shortLabel: 'Vol vs SMA', description: 'Volume vs SMA20 (%)', category: 'Volume' },
-  { value: 'current_volume', label: 'Current Vol', shortLabel: 'Cur Vol', description: 'Current Volume', category: 'Volume' },
-  { value: 'volume_sma20', label: 'Vol SMA20', shortLabel: 'Vol SMA20', description: '20-day SMA Volume', category: 'Volume' },
-]
-
-const filterOperatorOptions: FilterOperatorOption[] = [
-  { value: '>=', label: 'Greater or equal (≥)' },
-  { value: '<=', label: 'Less or equal (≤)' },
-  { value: '>', label: 'Greater than (>)' },
-  { value: '<', label: 'Less than (<)' },
-  { value: '=', label: 'Equal (=)' },
-]
+import { SearchBox } from '../features/SearchBox'
+import type { Stock } from '../../types'
+import { SCREENER_FIELD_OPTIONS, SCREENER_OPERATOR_OPTIONS } from '@/lib/screenerFilterOptions'
 
 export function Screener() {
   const [stocks, setStocks] = useState<Stock[]>([])
   const [loading, setLoading] = useState(false)
   const [activeExchange, setActiveExchange] = useState('All')
+  const [symbolSearch, setSymbolSearch] = useState('')
+  const deferredSymbolSearch = useDeferredValue(symbolSearch)
 
   // Custom hooks
   const {
@@ -56,6 +41,16 @@ export function Screener() {
     getFilterRequest,
   } = useScreenerFilters(activeExchange)
 
+  const sortedStocks = useMemo(() => {
+    return [...stocks].sort((a, b) => a.symbol.localeCompare(b.symbol))
+  }, [stocks])
+
+  const displayStocks = useMemo(() => {
+    const q = deferredSymbolSearch.trim().toUpperCase()
+    if (!q) return sortedStocks
+    return sortedStocks.filter(s => s.symbol.toUpperCase().includes(q))
+  }, [sortedStocks, deferredSymbolSearch])
+
   const {
     selectedStocks,
     showWatchlistModal,
@@ -64,7 +59,7 @@ export function Screener() {
     handleToggleAllSelection,
     clearSelection,
     selectAllStocks,
-  } = useStockSelection(stocks)
+  } = useStockSelection(displayStocks)
 
   // Ref keeps latest getFilterRequest without destabilizing fetchStocks
   const getFilterRequestRef = useRef(getFilterRequest)
@@ -119,13 +114,13 @@ export function Screener() {
   }, [selectedStocks])
 
   const handleAddAllToWatchlistWithError = useCallback(() => {
-    if (stocks.length === 0) {
+    if (displayStocks.length === 0) {
       toast.error('No stocks to add')
       return
     }
     selectAllStocks()
     setShowWatchlistModal(true)
-  }, [stocks, selectAllStocks, setShowWatchlistModal])
+  }, [displayStocks.length, selectAllStocks, setShowWatchlistModal])
 
   const handleConfirmWatchlist = useCallback(async (listType: 'bullish' | 'bearish') => {
     try {
@@ -144,11 +139,6 @@ export function Screener() {
       toast.error('Failed to add stocks to watchlist')
     }
   }, [selectedStocks, clearSelection, setShowWatchlistModal])
-
-  // Memoize sorted stocks for stable rendering
-  const sortedStocks = useMemo(() => {
-    return [...stocks].sort((a, b) => a.symbol.localeCompare(b.symbol))
-  }, [stocks])
 
   return (
     <div className="animate-slide-in-from-bottom">
@@ -220,8 +210,8 @@ export function Screener() {
         <Card.Body>
           <FilterBar
             filters={dynamicFilters}
-            fieldOptions={filterFieldOptions}
-            operatorOptions={filterOperatorOptions}
+            fieldOptions={SCREENER_FIELD_OPTIONS}
+            operatorOptions={SCREENER_OPERATOR_OPTIONS}
             filterLogic={filterLogic}
             activeExchange={activeExchange}
             onFiltersChange={setDynamicFilters}
@@ -251,7 +241,7 @@ export function Screener() {
                 variant="secondary"
                 icon="List"
                 onClick={handleAddAllToWatchlistWithError}
-                disabled={stocks.length === 0}
+                disabled={displayStocks.length === 0}
                 className="text-xs px-3 py-1.5 h-8"
               >
                 <span>Add All</span>
@@ -266,15 +256,33 @@ export function Screener() {
           }
         >
           <Icons.Grid />
-          <span>Results <span className="text-[var(--text-muted)] font-mono ml-2">{stocks.length} stocks</span></span>
+          <span>
+            Results{' '}
+            <span className="text-[var(--text-muted)] font-mono ml-2">
+              {deferredSymbolSearch.trim()
+                ? `${displayStocks.length} of ${sortedStocks.length} stocks`
+                : `${sortedStocks.length} stocks`}
+            </span>
+          </span>
         </Card.Header>
         <Card.Body className="!p-0">
+          <div className="px-4 py-3 border-b border-[var(--border-dim)]">
+            <SearchBox
+              placeholder="Search symbol in results (e.g. VCB)..."
+              onSearch={setSymbolSearch}
+            />
+          </div>
           <ScreenerResultsTable
-            sortedStocks={sortedStocks}
+            sortedStocks={displayStocks}
             selectedStocks={selectedStocks}
             loading={loading}
             onToggleRow={handleToggleStockSelection}
             onToggleAll={handleToggleAllSelection}
+            noRowsMessage={
+              deferredSymbolSearch.trim() && sortedStocks.length > 0
+                ? 'No symbols match your search.'
+                : undefined
+            }
           />
         </Card.Body>
       </Card>

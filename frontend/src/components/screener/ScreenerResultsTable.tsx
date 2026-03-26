@@ -10,6 +10,8 @@ export interface ScreenerResultsTableProps {
   loading: boolean
   onToggleRow: (symbol: string) => void
   onToggleAll: () => void
+  /** Override empty-state copy (e.g. symbol search with no matches) */
+  noRowsMessage?: string
 }
 
 /**
@@ -21,6 +23,7 @@ export const ScreenerResultsTable = memo(function ScreenerResultsTable({
   loading,
   onToggleRow,
   onToggleAll,
+  noRowsMessage = 'No stocks found matching your filters.',
 }: ScreenerResultsTableProps) {
   if (loading) {
     return (
@@ -33,7 +36,7 @@ export const ScreenerResultsTable = memo(function ScreenerResultsTable({
   if (sortedStocks.length === 0) {
     return (
       <div className="p-10 text-center text-[var(--text-muted)]">
-        No stocks found matching your filters.
+        {noRowsMessage}
       </div>
     )
   }

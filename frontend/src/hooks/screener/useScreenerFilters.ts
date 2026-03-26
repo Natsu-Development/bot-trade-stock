@@ -4,6 +4,7 @@ import type { ScreenerFilterPreset } from '@/lib/api'
 import { toast } from '@/components/ui/Toast'
 import type { DynamicFilter, FilterField, FilterOperator } from '@/types'
 import { mapFiltersToApiFormat } from '@/lib/screenerUtils'
+import { generateId } from '@/lib/id'
 
 const getDefaultFilters = (): DynamicFilter[] => [
   { id: '1', field: 'rs_52w', operator: '>=', value: 70 },
@@ -13,8 +14,6 @@ function stripReadonlyFields(config: ApiTradingConfig): Omit<ApiTradingConfig, '
   const { created_at: _, updated_at: __, ...rest } = config
   return rest
 }
-
-const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2)
 
 export interface UseScreenerFiltersResult {
   dynamicFilters: DynamicFilter[]

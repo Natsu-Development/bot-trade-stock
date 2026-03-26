@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { api, setConfigId as setApiConfigId, getConfigId } from '../lib/api'
-
-const STORAGE_KEY = 'trading-app_config-id'
+import { api, setConfigId as setApiConfigId, getConfigId, CONFIG_ID_STORAGE_KEY } from '../lib/api'
 
 /**
  * Get configId from URL query parameter
@@ -67,13 +65,13 @@ export function useConfigId(): UseConfigIdReturn {
           setConfigIdState(urlConfigId)
           setApiConfigId(urlConfigId)
           // Also save to localStorage for persistence
-          localStorage.setItem(STORAGE_KEY, urlConfigId)
+          localStorage.setItem(CONFIG_ID_STORAGE_KEY, urlConfigId)
           return
         }
       }
 
       // Fall back to localStorage
-      const stored = localStorage.getItem(STORAGE_KEY)
+      const stored = localStorage.getItem(CONFIG_ID_STORAGE_KEY)
       if (stored) {
         setConfigIdState(stored)
         // Sync with API client
@@ -112,7 +110,7 @@ export function useConfigId(): UseConfigIdReturn {
     }
 
     // Save to localStorage
-    localStorage.setItem(STORAGE_KEY, trimmed)
+    localStorage.setItem(CONFIG_ID_STORAGE_KEY, trimmed)
     setConfigIdState(trimmed)
     setApiConfigId(trimmed)
     setError(null)
@@ -121,7 +119,7 @@ export function useConfigId(): UseConfigIdReturn {
 
   const clearConfigId = useCallback(() => {
     try {
-      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(CONFIG_ID_STORAGE_KEY)
       setConfigIdState(null)
       setApiConfigId('default')
       setError(null)
@@ -146,7 +144,7 @@ export function useConfigId(): UseConfigIdReturn {
  */
 export function initConfigId() {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
+    const stored = localStorage.getItem(CONFIG_ID_STORAGE_KEY)
     if (stored) {
       setApiConfigId(stored)
       return stored

@@ -5,77 +5,21 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { FilterPresetCard } from './FilterPresetCard'
 import { FilterEditor } from '../screener/FilterEditor'
+import { FilterPill } from '../screener/FilterPill'
 import type { ScreenerFilterPreset } from '@/lib/api'
-import type { DynamicFilter, FilterFieldOption, FilterOperatorOption, FilterField, FilterOperator } from '@/types'
+import {
+  SCREENER_EXCHANGES,
+  SCREENER_FIELD_OPTIONS,
+  SCREENER_OPERATOR_OPTIONS,
+  isValidFilterOperator,
+} from '@/lib/screenerFilterOptions'
+import { generateId } from '@/lib/id'
+import type { DynamicFilter, FilterFieldOption, FilterField, FilterOperator } from '@/types'
 
 interface MetricsFilterSectionProps {
   filters: ScreenerFilterPreset[]
   onUpdate: (filters: ScreenerFilterPreset[]) => void
 }
-
-const FILTER_FIELD_OPTIONS: FilterFieldOption[] = [
-  { value: 'rs_1m', label: 'RS 1M', shortLabel: 'RS 1M', description: '1-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_3m', label: 'RS 3M', shortLabel: 'RS 3M', description: '3-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_6m', label: 'RS 6M', shortLabel: 'RS 6M', description: '6-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_9m', label: 'RS 9M', shortLabel: 'RS 9M', description: '9-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_52w', label: 'RS 52W', shortLabel: 'RS 52W', description: '52-Week Relative Strength', category: 'RS Rating' },
-  { value: 'volume_vs_sma', label: 'Vol vs SMA', shortLabel: 'Vol vs SMA', description: 'Volume vs SMA20 (%)', category: 'Volume' },
-  { value: 'current_volume', label: 'Current Vol', shortLabel: 'Cur Vol', description: 'Current Volume', category: 'Volume' },
-  { value: 'volume_sma20', label: 'Vol SMA20', shortLabel: 'Vol SMA20', description: '20-day SMA Volume', category: 'Volume' },
-]
-
-const FILTER_OPERATOR_OPTIONS: FilterOperatorOption[] = [
-  { value: '>=', label: 'Greater or equal (≥)' },
-  { value: '<=', label: 'Less or equal (≤)' },
-  { value: '>', label: 'Greater than (>)' },
-  { value: '<', label: 'Less than (<)' },
-  { value: '=', label: 'Equal (=)' },
-]
-
-const EXCHANGES = ['HOSE', 'HNX', 'UPCOM']
-const VALID_OPERATORS = ['>=', '<=', '>', '<', '=']
-
-// Generate unique ID
-const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2)
-
-// Memoized filter pill component for preset modal
-const FilterPill = memo(function FilterPill({
-  filter,
-  fieldOption,
-  onEdit,
-  onRemove,
-}: {
-  filter: DynamicFilter
-  fieldOption: FilterFieldOption | undefined
-  onEdit: (filter: DynamicFilter) => void
-  onRemove: (id: string) => void
-}) {
-  // Stable callbacks to prevent breaking parent memoization
-  const handleEdit = useCallback(() => onEdit(filter), [onEdit, filter])
-  const handleRemove = useCallback(() => onRemove(filter.id), [onRemove, filter.id])
-
-  return (
-    <div className="inline-flex items-center gap-1 px-2 py-1 bg-[var(--bg-deep)] border border-[var(--border-dim)] rounded text-xs">
-      <span className="font-semibold text-[var(--neon-cyan)]">{fieldOption?.shortLabel || filter.field}</span>
-      <span className="text-[var(--text-muted)]">{filter.operator}</span>
-      <span className="font-mono">{filter.value}</span>
-      <button
-        className="ml-1 p-0.5 text-[var(--text-muted)] hover:text-[var(--neon-cyan)]"
-        onClick={handleEdit}
-        type="button"
-      >
-        <Icons.Settings2 className="w-3 h-3" />
-      </button>
-      <button
-        className="p-0.5 text-[var(--text-muted)] hover:text-[var(--neon-bear)]"
-        onClick={handleRemove}
-        type="button"
-      >
-        <Icons.X className="w-3 h-3" />
-      </button>
-    </div>
-  )
-})
 
 // Memoized preset card wrapper
 const MemoizedFilterPresetCard = memo(FilterPresetCard)
@@ -141,7 +85,7 @@ export function MetricsFilterSection({ filters, onUpdate }: MetricsFilterSection
     const newPreset: ScreenerFilterPreset = {
       name: data.name.trim(),
       filters: data.filters
-        .filter(f => f.value !== '' && !isNaN(Number(f.value)) && VALID_OPERATORS.includes(f.operator))
+        .filter(f => f.value !== '' && !isNaN(Number(f.value)) && isValidFilterOperator(f.operator))
         .map(f => ({
           field: f.field,
           op: f.operator,
@@ -170,7 +114,7 @@ export function MetricsFilterSection({ filters, onUpdate }: MetricsFilterSection
 
   // Memoize field lookup map for O(1) access
   const fieldOptionsMap = useMemo(() => {
-    return new Map(FILTER_FIELD_OPTIONS.map(o => [o.value, o]))
+    return new Map(SCREENER_FIELD_OPTIONS.map(o => [o.value, o]))
   }, [])
 
   return (
@@ -203,7 +147,7 @@ export function MetricsFilterSection({ filters, onUpdate }: MetricsFilterSection
                 <MemoizedFilterPresetCard
                   key={preset.name}
                   preset={preset}
-                  fieldOptions={FILTER_FIELD_OPTIONS}
+                  fieldOptions={SCREENER_FIELD_OPTIONS}
                   onEdit={handleEditPreset}
                   onDelete={handleDeletePreset}
                 />
@@ -394,7 +338,7 @@ const PresetModal = memo(function PresetModal({
           <div className="flex flex-col gap-2">
             <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Exchanges</label>
             <div className="flex gap-2">
-              {EXCHANGES.map((exchange) => (
+              {SCREENER_EXCHANGES.map((exchange) => (
                 <button
                   key={exchange}
                   className={cn(
@@ -436,6 +380,7 @@ const PresetModal = memo(function PresetModal({
                 {deferredFilters.map((filter) => (
                   <FilterPill
                     key={filter.id}
+                    variant="compact"
                     filter={filter}
                     fieldOption={fieldOptionsMap.get(filter.field)}
                     onEdit={handleEditFilter}
@@ -462,8 +407,8 @@ const PresetModal = memo(function PresetModal({
         <FilterEditor
           isOpen={showFilterEditor}
           filter={editingFilter}
-          fieldOptions={FILTER_FIELD_OPTIONS}
-          operatorOptions={FILTER_OPERATOR_OPTIONS}
+          fieldOptions={SCREENER_FIELD_OPTIONS}
+          operatorOptions={SCREENER_OPERATOR_OPTIONS}
           onSave={handleSaveFilter}
           onClose={closeFilterEditor}
         />

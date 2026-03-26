@@ -7,6 +7,7 @@ import { SymbolTag } from '../features/SymbolTag'
 import { MetricsFilterSection } from '../features/MetricsFilterSection'
 import { NumberInput } from '@/components/ui/NumberInput'
 import { api, getConfigId, type ApiTradingConfig, type ScreenerFilterPreset } from '@/lib/api'
+import { isValidFilterOperator } from '@/lib/screenerFilterOptions'
 
 export function Config() {
   const [config, setConfig] = useState<ApiTradingConfig | null>(null)
@@ -65,7 +66,7 @@ export function Config() {
         ...config,
         metrics_filter: (config.metrics_filter || []).map(preset => ({
           ...preset,
-          filters: preset.filters.filter(f => f.op && ['>=', '<=', '>', '<', '='].includes(f.op)),
+          filters: preset.filters.filter(f => f.op && isValidFilterOperator(f.op)),
         })).filter(preset => preset.filters.length > 0),
       }
       const updated = await api.updateConfig(configId, sanitizedConfig)

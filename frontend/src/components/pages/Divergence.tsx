@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Header } from '../layout/Header'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -29,32 +29,61 @@ export function Divergence() {
   const [analysisResult, setAnalysisResult] = useState<ApiAnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const handleAnalyzeAll = useCallback(async () => {
-    if (!symbol.trim()) {
-      setError('Please enter a symbol')
-      return
-    }
-
-    setLoading(true)
-    setError(null)
-
-    try {
-      setConfigId(configId)
-      const result = await api.analyzeSymbol(
-        symbol.toUpperCase(),
-        { configId, interval: timeframe }
-      )
-      setAnalysisResult(result)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Analysis failed'
-      setError(msg)
-      if (msg.includes('config')) {
-        setError(`Config error: ${msg}. Please check your Config ID in Settings.`)
+  const runAnalysis = useCallback(
+    async (sym: string) => {
+      const trimmed = sym.trim().toUpperCase()
+      if (!trimmed) {
+        setError('Please enter a symbol')
+        return
       }
-    } finally {
-      setLoading(false)
+
+      setLoading(true)
+      setError(null)
+
+      try {
+        setConfigId(configId)
+        const result = await api.analyzeSymbol(trimmed, { configId, interval: timeframe })
+        setAnalysisResult(result)
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Analysis failed'
+        setError(msg)
+        if (msg.includes('config')) {
+          setError(`Config error: ${msg}. Please check your Config ID in Settings.`)
+        }
+      } finally {
+        setLoading(false)
+      }
+    },
+    [configId, timeframe]
+  )
+
+  const handleAnalyzeAll = useCallback(() => {
+    void runAnalysis(symbol)
+  }, [symbol, runAnalysis])
+
+  useEffect(() => {
+    const syncSymbolFromHash = () => {
+      const raw = window.location.hash.replace(/^#/, '')
+      const page = raw.split(/[/?]/)[0]
+      if (page !== 'divergence') return
+      const qIndex = raw.indexOf('?')
+      const queryPart = qIndex >= 0 ? raw.slice(qIndex + 1) : ''
+      const fromParam = new URLSearchParams(queryPart).get('symbol')?.trim()
+      if (!fromParam) return
+      const upper = fromParam.toUpperCase()
+      setSymbol(upper)
+      window.history.replaceState(
+        null,
+        '',
+        `${window.location.pathname}${window.location.search}#divergence`
+      )
+      void runAnalysis(upper)
     }
-  }, [symbol, configId, timeframe])
+
+    syncSymbolFromHash()
+    window.addEventListener('hashchange', syncSymbolFromHash)
+    return () => window.removeEventListener('hashchange', syncSymbolFromHash)
+  }, [runAnalysis])
 
   // Extract signal data from analysis result - memoized to prevent unnecessary re-renders
   const filteredSignals = useMemo(() => {
