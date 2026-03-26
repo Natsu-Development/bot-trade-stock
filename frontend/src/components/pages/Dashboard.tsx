@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useDeferredValue, memo } from 'react'
 import { Header } from '../layout/Header'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,38 @@ const RS_BULLISH_THRESHOLD = 80
 const RS_BEARISH_THRESHOLD = 30
 const TOP_STOCKS_COUNT = 10
 
+const DashboardStockRow = memo(function DashboardStockRow({ stock }: { stock: Stock }) {
+  return (
+    <TableRow>
+      <TableCell>
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-sm bg-gradient-to-br from-[var(--bg-elevated)] to-[var(--bg-hover)] flex items-center justify-center text-[10px] font-semibold text-[var(--neon-cyan)] border border-[var(--border-glow)]">
+            {stock.symbol}
+          </div>
+          <span className="font-semibold text-[var(--text-primary)] font-display">
+            {stock.name}
+          </span>
+        </div>
+      </TableCell>
+      <TableCell>
+        <Badge variant={getBadgeVariantFromExchange(stock.exchange)}>
+          {stock.exchange}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        <RSRating value={stock.rs52w} />
+      </TableCell>
+      <TableCell>{formatPrice(stock.price)}</TableCell>
+      <TableCell className={stock.change >= 0 ? 'text-[var(--neon-bull)]' : 'text-[var(--neon-bear)]'}>
+        {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)}%
+      </TableCell>
+      <TableCell className="text-[var(--text-muted)]">
+        {stock.currentVolume ? `${(stock.currentVolume / 1000000).toFixed(1)}M` : '-'}
+      </TableCell>
+    </TableRow>
+  )
+})
+
 export function Dashboard() {
   const [stocks, setStocks] = useState<Stock[]>([])
   const [cacheInfo, setCacheInfo] = useState<{
@@ -26,6 +58,8 @@ export function Dashboard() {
   } | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [symbolSearch, setSymbolSearch] = useState('')
+  const deferredSymbolSearch = useDeferredValue(symbolSearch)
 
   const fetchCacheInfo = async () => {
     try {
@@ -113,6 +147,12 @@ export function Dashboard() {
     },
   ], [cacheInfo, stocks])
 
+  const displayStocks = useMemo(() => {
+    const q = deferredSymbolSearch.trim().toUpperCase()
+    if (!q) return stocks
+    return stocks.filter(s => s.symbol.toUpperCase().includes(q))
+  }, [stocks, deferredSymbolSearch])
+
   return (
     <div className="animate-slide-in-from-bottom">
       <Header
@@ -139,7 +179,10 @@ export function Dashboard() {
           <span>Quick Symbol Search</span>
         </Card.Header>
         <Card.Body>
-          <SearchBox />
+          <SearchBox
+            placeholder="Search symbol in table (e.g. VCB)..."
+            onSearch={setSymbolSearch}
+          />
         </Card.Body>
       </Card>
 
@@ -158,6 +201,10 @@ export function Dashboard() {
             <div className="p-10 text-center text-[var(--text-muted)]">
               No stocks found. Click Refresh Cache to load data.
             </div>
+          ) : displayStocks.length === 0 ? (
+            <div className="p-10 text-center text-[var(--text-muted)]">
+              No symbols match your search.
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -171,37 +218,8 @@ export function Dashboard() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {stocks.map((stock, index) => (
-                  <TableRow
-                    key={stock.symbol}
-                    style={{ animationDelay: `${index * 50}ms` }}
-                  >
-                    <TableCell>
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-sm bg-gradient-to-br from-[var(--bg-elevated)] to-[var(--bg-hover)] flex items-center justify-center text-[10px] font-semibold text-[var(--neon-cyan)] border border-[var(--border-glow)]">
-                          {stock.symbol}
-                        </div>
-                        <span className="font-semibold text-[var(--text-primary)] font-display">
-                          {stock.name}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={getBadgeVariantFromExchange(stock.exchange)}>
-                        {stock.exchange}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <RSRating value={stock.rs52w} />
-                    </TableCell>
-                    <TableCell>{formatPrice(stock.price)}</TableCell>
-                    <TableCell className={stock.change >= 0 ? 'text-[var(--neon-bull)]' : 'text-[var(--neon-bear)]'}>
-                      {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)}%
-                    </TableCell>
-                    <TableCell className="text-[var(--text-muted)]">
-                      {stock.currentVolume ? `${(stock.currentVolume / 1000000).toFixed(1)}M` : '-'}
-                    </TableCell>
-                  </TableRow>
+                {displayStocks.map((stock) => (
+                  <DashboardStockRow key={stock.symbol} stock={stock} />
                 ))}
               </TableBody>
             </Table>

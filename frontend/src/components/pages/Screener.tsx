@@ -1,44 +1,28 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef, useDeferredValue } from 'react'
 import { Header } from '../layout/Header'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogIcon } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, DialogIcon } from '@/components/ui/dialog'
 import { Icons } from '../icons/Icons'
-import { formatPrice, getBadgeVariantFromExchange } from '../../lib/utils'
 import { api, getConfigId } from '../../lib/api'
 import { toast } from '../ui/Toast'
 import { handleError } from '../../lib/errors'
 import { transformApiStocks } from '../../lib/screenerUtils'
 import { FilterBar } from '../screener/FilterBar'
+import { SaveFilterPresetDialog } from '../screener/SaveFilterPresetDialog'
+import { ScreenerResultsTable } from '../screener/ScreenerResultsTable'
 import { useScreenerFilters } from '../../hooks/screener/useScreenerFilters'
 import { useStockSelection } from '../../hooks/screener/useStockSelection'
-import type { Stock, FilterFieldOption, FilterOperatorOption } from '../../types'
-
-const filterFieldOptions: FilterFieldOption[] = [
-  { value: 'rs_1m', label: 'RS 1M', shortLabel: 'RS 1M', description: '1-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_3m', label: 'RS 3M', shortLabel: 'RS 3M', description: '3-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_6m', label: 'RS 6M', shortLabel: 'RS 6M', description: '6-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_9m', label: 'RS 9M', shortLabel: 'RS 9M', description: '9-Month Relative Strength', category: 'RS Rating' },
-  { value: 'rs_52w', label: 'RS 52W', shortLabel: 'RS 52W', description: '52-Week Relative Strength', category: 'RS Rating' },
-  { value: 'volume_vs_sma', label: 'Vol vs SMA', shortLabel: 'Vol vs SMA', description: 'Volume vs SMA20 (%)', category: 'Volume' },
-  { value: 'current_volume', label: 'Current Vol', shortLabel: 'Cur Vol', description: 'Current Volume', category: 'Volume' },
-  { value: 'volume_sma20', label: 'Vol SMA20', shortLabel: 'Vol SMA20', description: '20-day SMA Volume', category: 'Volume' },
-]
-
-const filterOperatorOptions: FilterOperatorOption[] = [
-  { value: '>=', label: 'Greater or equal (≥)' },
-  { value: '<=', label: 'Less or equal (≤)' },
-  { value: '>', label: 'Greater than (>)' },
-  { value: '<', label: 'Less than (<)' },
-  { value: '=', label: 'Equal (=)' },
-]
+import { SearchBox } from '../features/SearchBox'
+import type { Stock } from '../../types'
+import { SCREENER_FIELD_OPTIONS, SCREENER_OPERATOR_OPTIONS } from '@/lib/screenerFilterOptions'
 
 export function Screener() {
   const [stocks, setStocks] = useState<Stock[]>([])
   const [loading, setLoading] = useState(false)
   const [activeExchange, setActiveExchange] = useState('All')
+  const [symbolSearch, setSymbolSearch] = useState('')
+  const deferredSymbolSearch = useDeferredValue(symbolSearch)
 
   // Custom hooks
   const {
@@ -47,17 +31,25 @@ export function Screener() {
     savedFilters,
     selectedPreset,
     showSaveFilterModal,
-    newFilterName,
     setDynamicFilters,
     setFilterLogic,
     setShowSaveFilterModal,
-    setNewFilterName,
     handleReset,
     handleSaveFilter,
     handleLoadPreset,
     handleDeletePreset,
     getFilterRequest,
   } = useScreenerFilters(activeExchange)
+
+  const sortedStocks = useMemo(() => {
+    return [...stocks].sort((a, b) => a.symbol.localeCompare(b.symbol))
+  }, [stocks])
+
+  const displayStocks = useMemo(() => {
+    const q = deferredSymbolSearch.trim().toUpperCase()
+    if (!q) return sortedStocks
+    return sortedStocks.filter(s => s.symbol.toUpperCase().includes(q))
+  }, [sortedStocks, deferredSymbolSearch])
 
   const {
     selectedStocks,
@@ -67,13 +59,16 @@ export function Screener() {
     handleToggleAllSelection,
     clearSelection,
     selectAllStocks,
-  } = useStockSelection(stocks)
+  } = useStockSelection(displayStocks)
 
-  // Fetch stocks with current filters
+  // Ref keeps latest getFilterRequest without destabilizing fetchStocks
+  const getFilterRequestRef = useRef(getFilterRequest)
+  getFilterRequestRef.current = getFilterRequest
+
   const fetchStocks = useCallback(async () => {
     setLoading(true)
     try {
-      const filterRequest = getFilterRequest()
+      const filterRequest = getFilterRequestRef.current()
 
       const response = await api.filterStocks({
         ...filterRequest,
@@ -93,12 +88,12 @@ export function Screener() {
     } finally {
       setLoading(false)
     }
-  }, [dynamicFilters, filterLogic, activeExchange, getFilterRequest, clearSelection])
+  }, [activeExchange, clearSelection])
 
-  // Refetch when exchange changes
+  // Only refetch when exchange changes (filter changes require explicit "Apply")
   useEffect(() => {
     fetchStocks()
-  }, [activeExchange, fetchStocks])
+  }, [fetchStocks])
 
   const handleApplyFilters = useCallback(() => {
     fetchStocks()
@@ -119,13 +114,13 @@ export function Screener() {
   }, [selectedStocks])
 
   const handleAddAllToWatchlistWithError = useCallback(() => {
-    if (stocks.length === 0) {
+    if (displayStocks.length === 0) {
       toast.error('No stocks to add')
       return
     }
     selectAllStocks()
     setShowWatchlistModal(true)
-  }, [stocks, selectAllStocks, setShowWatchlistModal])
+  }, [displayStocks.length, selectAllStocks, setShowWatchlistModal])
 
   const handleConfirmWatchlist = useCallback(async (listType: 'bullish' | 'bearish') => {
     try {
@@ -144,11 +139,6 @@ export function Screener() {
       toast.error('Failed to add stocks to watchlist')
     }
   }, [selectedStocks, clearSelection, setShowWatchlistModal])
-
-  // Memoize sorted stocks for stable rendering
-  const sortedStocks = useMemo(() => {
-    return [...stocks].sort((a, b) => a.symbol.localeCompare(b.symbol))
-  }, [stocks])
 
   return (
     <div className="animate-slide-in-from-bottom">
@@ -220,8 +210,8 @@ export function Screener() {
         <Card.Body>
           <FilterBar
             filters={dynamicFilters}
-            fieldOptions={filterFieldOptions}
-            operatorOptions={filterOperatorOptions}
+            fieldOptions={SCREENER_FIELD_OPTIONS}
+            operatorOptions={SCREENER_OPERATOR_OPTIONS}
             filterLogic={filterLogic}
             activeExchange={activeExchange}
             onFiltersChange={setDynamicFilters}
@@ -251,7 +241,7 @@ export function Screener() {
                 variant="secondary"
                 icon="List"
                 onClick={handleAddAllToWatchlistWithError}
-                disabled={stocks.length === 0}
+                disabled={displayStocks.length === 0}
                 className="text-xs px-3 py-1.5 h-8"
               >
                 <span>Add All</span>
@@ -266,138 +256,48 @@ export function Screener() {
           }
         >
           <Icons.Grid />
-          <span>Results <span className="text-[var(--text-muted)] font-mono ml-2">{stocks.length} stocks</span></span>
+          <span>
+            Results{' '}
+            <span className="text-[var(--text-muted)] font-mono ml-2">
+              {deferredSymbolSearch.trim()
+                ? `${displayStocks.length} of ${sortedStocks.length} stocks`
+                : `${sortedStocks.length} stocks`}
+            </span>
+          </span>
         </Card.Header>
         <Card.Body className="!p-0">
-          {loading ? (
-            <div className="p-10 text-center text-[var(--text-muted)]">
-              Loading...
-            </div>
-          ) : stocks.length === 0 ? (
-            <div className="p-10 text-center text-[var(--text-muted)]">
-              No stocks found matching your filters.
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedStocks.size === stocks.length && stocks.length > 0}
-                        onChange={handleToggleAllSelection}
-                      />
-                    </label>
-                  </TableHead>
-                  <TableHead>Symbol</TableHead>
-                  <TableHead>Exchange</TableHead>
-                  <TableHead>RS 1M</TableHead>
-                  <TableHead>RS 3M</TableHead>
-                  <TableHead>RS 52W</TableHead>
-                  <TableHead>Vol/SMA</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Change %</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedStocks.map((stock, index) => (
-                  <TableRow
-                    key={stock.symbol}
-                    selected={selectedStocks.has(stock.symbol)}
-                    style={{ animationDelay: `${index * 50}ms` }}
-                  >
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        checked={selectedStocks.has(stock.symbol)}
-                        onChange={() => handleToggleStockSelection(stock.symbol)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-sm bg-gradient-to-br from-[var(--bg-elevated)] to-[var(--bg-hover)] flex items-center justify-center text-[10px] font-semibold text-[var(--neon-cyan)] border border-[var(--border-glow)]">
-                          {stock.symbol}
-                        </div>
-                        <span className="font-semibold text-[var(--text-primary)] font-display">
-                          {stock.name}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={getBadgeVariantFromExchange(stock.exchange)}>
-                        {stock.exchange}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className={stock.rs1m !== undefined && stock.rs1m >= 80 ? 'text-[var(--neon-bull)]' : ''}>
-                      {stock.rs1m ?? '-'}
-                    </TableCell>
-                    <TableCell className={stock.rs3m !== undefined && stock.rs3m >= 80 ? 'text-[var(--neon-bull)]' : ''}>
-                      {stock.rs3m ?? '-'}
-                    </TableCell>
-                    <TableCell className={stock.rs52w >= 80 ? 'text-[var(--neon-bull)]' : ''}>
-                      {stock.rs52w}
-                    </TableCell>
-                    <TableCell className={parseFloat(stock.volume || '') >= 0 ? 'text-[var(--neon-cyan)]' : 'text-[var(--text-muted)]'}>
-                      {stock.volume}
-                    </TableCell>
-                    <TableCell>{formatPrice(stock.price)}</TableCell>
-                    <TableCell className={stock.change >= 0 ? 'text-[var(--neon-bull)]' : 'text-[var(--neon-bear)]'}>
-                      {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)}%
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <div className="px-4 py-3 border-b border-[var(--border-dim)]">
+            <SearchBox
+              placeholder="Search symbol in results (e.g. VCB)..."
+              onSearch={setSymbolSearch}
+            />
+          </div>
+          <ScreenerResultsTable
+            sortedStocks={displayStocks}
+            selectedStocks={selectedStocks}
+            loading={loading}
+            onToggleRow={handleToggleStockSelection}
+            onToggleAll={handleToggleAllSelection}
+            noRowsMessage={
+              deferredSymbolSearch.trim() && sortedStocks.length > 0
+                ? 'No symbols match your search.'
+                : undefined
+            }
+          />
         </Card.Body>
       </Card>
 
-      <Dialog open={showSaveFilterModal} onOpenChange={(open) => setShowSaveFilterModal(open)}>
-        <DialogContent size="md">
-          <DialogHeader>
-            <DialogIcon><Icons.Save /></DialogIcon>
-            Save Filter Preset
-          </DialogHeader>
-          <DialogBody>
-            <div className="mb-4">
-              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-2 uppercase tracking-wider">
-                Filter Name
-              </label>
-              <input
-                type="text"
-                className="flex h-10 w-full rounded-md border border-[var(--border-dim)] bg-[var(--bg-elevated)] px-4 py-2 text-sm text-[var(--text-primary)] font-mono shadow-sm transition-colors placeholder:text-[var(--text-muted)] focus-visible:outline-none focus-visible:border-[var(--neon-cyan)] focus-visible:ring-[3px] focus-visible:ring-[var(--neon-cyan-dim)]"
-                placeholder="e.g., High RS Stocks (80+)"
-                value={newFilterName}
-                onChange={(e) => setNewFilterName(e.target.value)}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleSaveFilter()
-                  }
-                }}
-              />
-              <p className="mt-1 text-xs text-[var(--text-muted)]">
-                This will save your current filter conditions and logic for quick access later.
-              </p>
-            </div>
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="secondary" onClick={() => setShowSaveFilterModal(false)}>
-              <span>Cancel</span>
-            </Button>
-            <Button icon="Save" onClick={handleSaveFilter}>
-              <span>Save Filter</span>
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SaveFilterPresetDialog
+        open={showSaveFilterModal}
+        onOpenChange={setShowSaveFilterModal}
+        onSave={handleSaveFilter}
+      />
 
       <Dialog open={showWatchlistModal} onOpenChange={(open) => setShowWatchlistModal(open)}>
-        <DialogContent size="md">
+        <DialogContent size="md" aria-describedby={undefined}>
           <DialogHeader>
             <DialogIcon><Icons.List /></DialogIcon>
-            Add to Watchlist
+            <DialogTitle>Add to Watchlist</DialogTitle>
           </DialogHeader>
           <DialogBody>
             <p className="mb-4">

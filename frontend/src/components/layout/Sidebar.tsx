@@ -28,11 +28,14 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
         {navItems.map((item) => {
           const isActive = currentPage === item.id
           return (
-            <div
+            <button
               key={item.id}
+              type="button"
               onClick={() => onNavigate(item.id)}
+              aria-label={item.label}
+              aria-current={isActive ? 'page' : undefined}
               className={cn(
-                'group relative w-12 h-12 flex items-center justify-center rounded-md cursor-pointer transition-all duration-150 border border-transparent',
+                'group relative w-12 h-12 flex items-center justify-center rounded-md cursor-pointer transition-all duration-150 border border-transparent bg-transparent',
                 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]',
                 '[&_svg]:w-[22px] [&_svg]:h-[22px] [&_svg]:flex-shrink-0',
                 isActive && [
@@ -45,11 +48,10 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
               )}
             >
               <item.icon />
-              {/* Tooltip */}
               <span className="absolute left-[60px] px-3 py-1.5 bg-[var(--bg-elevated)] text-[var(--text-primary)] text-xs font-medium whitespace-nowrap rounded-sm border border-[var(--border-glow)] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-[1000]">
                 {item.label}
               </span>
-            </div>
+            </button>
           )
         })}
       </nav>

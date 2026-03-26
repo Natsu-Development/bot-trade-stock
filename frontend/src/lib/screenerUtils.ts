@@ -1,5 +1,6 @@
-import type { DynamicFilter } from '../types'
+import type { DynamicFilter, Stock } from '../types'
 import type { ApiFilterRequest, ApiStockMetrics } from './api'
+import { isValidFilterOperator } from './screenerFilterOptions'
 
 /**
  * Map dynamic filters to API filter format
@@ -10,7 +11,12 @@ export function mapFiltersToApiFormat(
   filterLogic: 'and' | 'or'
 ): ApiFilterRequest {
   const filters = dynamicFilters
-    .filter(f => f.value !== '' && !isNaN(Number(f.value)))
+    .filter(
+      f =>
+        f.value !== '' &&
+        !isNaN(Number(f.value)) &&
+        isValidFilterOperator(f.operator)
+    )
     .map(f => ({
       field: f.field,
       op: f.operator,
@@ -23,29 +29,33 @@ export function mapFiltersToApiFormat(
   }
 }
 
+/** Convert a single API metrics row to the dashboard/screener Stock shape */
+export function apiStockMetricsToStock(api: ApiStockMetrics): Stock {
+  const volumeVsSma =
+    api.volume_sma20 > 0
+      ? ((api.current_volume - api.volume_sma20) / api.volume_sma20) * 100
+      : 0
+
+  return {
+    symbol: api.symbol,
+    name: api.symbol,
+    exchange: api.exchange as 'HOSE' | 'HNX' | 'UPCOM',
+    rs1m: api.rs_1m,
+    rs3m: api.rs_3m,
+    rs6m: api.rs_6m,
+    rs9m: api.rs_9m,
+    rs52w: api.rs_52w,
+    currentVolume: api.current_volume,
+    volumeSma20: api.volume_sma20,
+    volume: volumeVsSma > 0 ? `+${volumeVsSma.toFixed(1)}%` : `${volumeVsSma.toFixed(1)}%`,
+    price: 0,
+    change: 0,
+  }
+}
+
 /**
  * Transform API stock metrics to frontend Stock type
  */
-export function transformApiStocks(apiStocks: ApiStockMetrics[]) {
-  return apiStocks.map(api => {
-    const volumeVsSma = api.volume_sma20 > 0
-      ? ((api.current_volume - api.volume_sma20) / api.volume_sma20 * 100)
-      : 0
-
-    return {
-      symbol: api.symbol,
-      name: api.symbol,
-      exchange: api.exchange as 'HOSE' | 'HNX' | 'UPCOM',
-      rs1m: api.rs_1m,
-      rs3m: api.rs_3m,
-      rs6m: api.rs_6m,
-      rs9m: api.rs_9m,
-      rs52w: api.rs_52w,
-      currentVolume: api.current_volume,
-      volumeSma20: api.volume_sma20,
-      volume: volumeVsSma > 0 ? `+${volumeVsSma.toFixed(1)}%` : `${volumeVsSma.toFixed(1)}%`,
-      price: 0,
-      change: 0,
-    }
-  })
+export function transformApiStocks(apiStocks: ApiStockMetrics[]): Stock[] {
+  return apiStocks.map(apiStockMetricsToStock)
 }

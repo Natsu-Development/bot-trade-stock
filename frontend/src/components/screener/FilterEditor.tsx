@@ -1,4 +1,4 @@
-import { useState, useEffect, KeyboardEvent } from 'react'
+import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { cn } from '@/lib/utils'
 import { Icons } from '../icons/Icons'
 import { Button } from '@/components/ui/button'
@@ -21,9 +21,11 @@ const operatorSymbols: Record<string, string> = {
   '=': '=',
 }
 
-type ValueState = number | ''
+const DEFAULT_FIELD: FilterField = 'rs_52w'
+const DEFAULT_OPERATOR: FilterOperator = '>='
+const DEFAULT_VALUE = 70
 
-export function FilterEditor({
+export const FilterEditor = memo(function FilterEditor({
   isOpen,
   filter,
   fieldOptions,
@@ -31,42 +33,80 @@ export function FilterEditor({
   onSave,
   onClose,
 }: FilterEditorProps) {
-  const [field, setField] = useState<FilterField>(filter?.field || 'rs_52w')
-  const [operator, setOperator] = useState<FilterOperator>(filter?.operator || '>=')
-  const [value, setValue] = useState<ValueState>(filter?.value as number || 70)
+  const initField = filter?.field || DEFAULT_FIELD
+  const initOp = filter?.operator || DEFAULT_OPERATOR
+  const initValue = (filter?.value as number) || DEFAULT_VALUE
+
+  const [field, setField] = useState<FilterField>(initField)
+  const [operator, setOperator] = useState<FilterOperator>(initOp)
+  const [value, setValue] = useState<number>(initValue)
+  const [localValue, setLocalValue] = useState(initValue.toString())
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (filter) {
-      setField(filter.field)
-      setOperator(filter.operator)
-      setValue(filter.value as number)
-    }
-  }, [filter])
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }, [])
 
-  const handleSave = () => {
-    if (value === '' || isNaN(Number(value))) return
+  const handleSave = useCallback(() => {
+    const parsed = parseFloat(localValue)
+    const finalValue = isNaN(parsed) ? value : parsed
 
     const newFilter: DynamicFilter = {
       id: filter?.id || `filter_${Date.now()}`,
       field,
       operator,
-      value: Number(value),
+      value: finalValue,
     }
 
     onSave(newFilter)
     onClose()
-  }
+  }, [filter, field, operator, value, localValue, onSave, onClose])
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
+      e.preventDefault()
       handleSave()
     } else if (e.key === 'Escape') {
       onClose()
     }
-  }
+  }, [handleSave, onClose])
 
-  const getFieldOption = () => fieldOptions.find(o => o.value === field)
-  const fieldOption = getFieldOption()
+  const handleFieldChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setField(e.target.value as FilterField)
+  }, [])
+
+  const handleOperatorChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setOperator(e.target.value as FilterOperator)
+  }, [])
+
+  const handleValueChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value
+    setLocalValue(raw)
+    const parsed = parseFloat(raw)
+    if (!isNaN(parsed)) {
+      setValue(parsed)
+    }
+  }, [])
+
+  const handleValueBlur = useCallback(() => {
+    const parsed = parseFloat(localValue)
+    if (isNaN(parsed)) {
+      setLocalValue(value.toString())
+    } else {
+      setValue(parsed)
+      setLocalValue(parsed.toString())
+    }
+  }, [localValue, value])
+
+  const handleBackdropClick = useCallback(() => {
+    onClose()
+  }, [onClose])
+
+  const handleModalClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+  }, [])
+
+  const fieldOption = fieldOptions.find(o => o.value === field)
 
   if (!isOpen) return null
 
@@ -77,12 +117,12 @@ export function FilterEditor({
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1000] animate-fade-in"
-      onClick={onClose}
+      className="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000] animate-fade-in"
+      onClick={handleBackdropClick}
     >
       <div
         className="bg-[var(--bg-elevated)] border border-[var(--border-dim)] rounded-lg shadow-[0_20px_60px_rgba(0,0,0,0.4)] w-full max-w-[420px] animate-slide-in-from-bottom"
-        onClick={(e) => e.stopPropagation()}
+        onClick={handleModalClick}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-dim)]">
           <h3 className="text-base font-semibold text-[var(--text-primary)]">
@@ -103,7 +143,7 @@ export function FilterEditor({
             <select
               className={inputBaseStyles}
               value={field}
-              onChange={(e) => setField(e.target.value as FilterField)}
+              onChange={handleFieldChange}
             >
               {fieldOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -118,7 +158,7 @@ export function FilterEditor({
             <select
               className={inputBaseStyles}
               value={operator}
-              onChange={(e) => setOperator(e.target.value as FilterOperator)}
+              onChange={handleOperatorChange}
             >
               {operatorOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -131,13 +171,13 @@ export function FilterEditor({
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Value</label>
             <input
+              ref={inputRef}
               type="number"
               className={inputBaseStyles}
-              value={value}
-              onChange={(e) => setValue(e.target.value ? parseFloat(e.target.value) : '')}
+              value={localValue}
+              onChange={handleValueChange}
+              onBlur={handleValueBlur}
               onKeyDown={handleKeyDown}
-              placeholder="Enter value"
-              autoFocus
             />
           </div>
 
@@ -160,7 +200,6 @@ export function FilterEditor({
           <Button
             variant="primary"
             onClick={handleSave}
-            disabled={value === '' || isNaN(Number(value))}
             type="button"
           >
             {filter ? 'Update' : 'Add'} Filter
@@ -169,4 +208,4 @@ export function FilterEditor({
       </div>
     </div>
   )
-}
+})

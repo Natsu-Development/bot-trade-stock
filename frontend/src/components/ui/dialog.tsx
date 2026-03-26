@@ -29,10 +29,12 @@ const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     size?: 'sm' | 'md' | 'lg' | 'xl'
+    /** Merged onto overlay; use e.g. `backdrop-blur-none` to avoid full-page blur cost on large UIs */
+    overlayClassName?: string
   }
->(({ className, children, size = 'md', ...props }, ref) => (
+>(({ className, children, size = 'md', overlayClassName, ...props }, ref) => (
   <DialogPortal>
-    <DialogOverlay />
+    <DialogOverlay className={overlayClassName} />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
