@@ -5,23 +5,23 @@ package valueobject
 type SignalType string
 
 const (
-	// Uptrend Support Bounce Signals
-	BounceConfirmed SignalType = "bounce_confirmed" // Bounced off support
-	BouncePotential SignalType = "bounce_potential" // Approaching support
+	// Uptrend Support Breakdown Signals (price broke below support)
+	BreakdownConfirmed SignalType = "breakdown_confirmed" // Broke below support
+	BreakdownPotential SignalType = "breakdown_potential" // Approaching support
 
-	// Downtrend Resistance Breakout Signals
+	// Downtrend Resistance Breakout Signals (price broke above resistance)
 	BreakoutConfirmed SignalType = "breakout_confirmed" // Broke above resistance
 	BreakoutPotential SignalType = "breakout_potential" // Approaching resistance
 )
 
 // IsConfirmed returns true if this is a confirmed signal.
 func (st SignalType) IsConfirmed() bool {
-	return st == BounceConfirmed || st == BreakoutConfirmed
+	return st == BreakdownConfirmed || st == BreakoutConfirmed
 }
 
 // IsPotential returns true if this is a potential signal.
 func (st SignalType) IsPotential() bool {
-	return st == BouncePotential || st == BreakoutPotential
+	return st == BreakdownPotential || st == BreakoutPotential
 }
 
 // Signal is a value object representing a trading signal.

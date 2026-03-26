@@ -87,7 +87,7 @@ func GenerateSupportSignals(
 		if crossing.Found {
 			linePrice := line.PriceAt(currentIndex)
 			signals = append(signals, valueobject.Signal{
-				Type:      valueobject.BounceConfirmed,
+				Type:      valueobject.BreakdownConfirmed,
 				Price:     crossing.Price,
 				Time:      crossing.Date,
 				PriceLine: linePrice,
@@ -100,7 +100,7 @@ func GenerateSupportSignals(
 
 		if distance >= -proximityPercent && distance <= proximityPercent {
 			signals = append(signals, valueobject.Signal{
-				Type:      valueobject.BouncePotential,
+				Type:      valueobject.BreakdownPotential,
 				Price:     currentPrice,
 				Time:      currentDate,
 				PriceLine: linePrice,

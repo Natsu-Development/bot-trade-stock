@@ -89,13 +89,13 @@ function findMatchingSignal(
     // Signal must be AFTER trendline end date
     if (signalDate <= endDate) continue
 
-    // Match by trendline type
-    const isSupportSignal = trendline.type === 'uptrend_support' &&
-      (signal.type === 'bounce_confirmed' || signal.type.includes('break'))
-    const isResistanceSignal = trendline.type === 'downtrend_resistance' &&
-      signal.type === 'breakout_confirmed'
+    // Resistance trendline: extend on breakout (price broke above resistance)
+    if (trendline.type === 'downtrend_resistance' && signal.type === 'breakout_confirmed') {
+      return signal
+    }
 
-    if (isSupportSignal || isResistanceSignal) {
+    // Support trendline: extend on breakdown (price broke below support) - for visualization
+    if (trendline.type === 'uptrend_support' && signal.type === 'breakdown_confirmed') {
       return signal
     }
   }
