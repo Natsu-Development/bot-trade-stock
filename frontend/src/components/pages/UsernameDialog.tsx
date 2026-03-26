@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogIcon } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, DialogIcon } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Icons } from '../icons/Icons'
 
@@ -45,10 +45,10 @@ export function UsernameDialog({ isOpen, setConfigId }: UsernameDialogProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={() => {}}>
-      <DialogContent size="sm">
+      <DialogContent size="sm" aria-describedby={undefined}>
         <DialogHeader>
           <DialogIcon><Icons.Users /></DialogIcon>
-          Welcome to Trading Bot
+          <DialogTitle>Welcome to Trading Bot</DialogTitle>
         </DialogHeader>
 
         <DialogBody className="flex flex-col gap-5">

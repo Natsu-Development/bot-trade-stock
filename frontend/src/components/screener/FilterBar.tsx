@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { Icons } from '../icons/Icons'
 import { FilterPill } from './FilterPill'
@@ -85,6 +85,15 @@ export function FilterBar({
   const [editingFilter, setEditingFilter] = useState<DynamicFilter | null>(null)
   const [activePresetId, setActivePresetId] = useState<string | null>(null)
 
+  // Memoize field lookup map for O(1) access instead of O(n) find()
+  const fieldOptionsMap = useMemo(() => {
+    return new Map(fieldOptions.map(o => [o.value, o]))
+  }, [fieldOptions])
+
+  const getFieldOption = (field: FilterField) => {
+    return fieldOptionsMap.get(field)
+  }
+
   const handleAddFilter = () => {
     setEditingFilter(null)
     setIsEditorOpen(true)
@@ -121,10 +130,6 @@ export function FilterBar({
     if (preset.filters.length > 1) {
       onLogicChange('and')
     }
-  }
-
-  const getFieldOption = (field: FilterField) => {
-    return fieldOptions.find(o => o.value === field)
   }
 
   return (
@@ -220,14 +225,16 @@ export function FilterBar({
         )}
       </div>
 
-      <FilterEditor
-        isOpen={isEditorOpen}
-        filter={editingFilter}
-        fieldOptions={fieldOptions}
-        operatorOptions={operatorOptions}
-        onSave={handleSaveFilter}
-        onClose={() => setIsEditorOpen(false)}
-      />
+      {isEditorOpen && (
+        <FilterEditor
+          isOpen={isEditorOpen}
+          filter={editingFilter}
+          fieldOptions={fieldOptions}
+          operatorOptions={operatorOptions}
+          onSave={handleSaveFilter}
+          onClose={() => setIsEditorOpen(false)}
+        />
+      )}
     </div>
   )
 }

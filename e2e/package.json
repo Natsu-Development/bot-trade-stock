@@ -8,7 +8,11 @@
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:screenshot": "playwright test --project=chromium",
-    "capture": "tsx tests/capture-screenshots.ts",
+    "test:dashboard": "playwright test dashboard/",
+    "test:screener": "playwright test screener/",
+    "test:divergence": "playwright test divergence/",
+    "test:config": "playwright test config/",
+    "test:all-pages": "playwright test dashboard/ screener/ divergence/ config/",
     "report": "playwright show-report"
   },
   "devDependencies": {

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { api, getConfigId } from '@/lib/api'
+import { api, getConfigId, type ApiTradingConfig } from '@/lib/api'
 import type { ScreenerFilterPreset } from '@/lib/api'
 import { toast } from '@/components/ui/Toast'
 import type { DynamicFilter, FilterField, FilterOperator } from '@/types'
@@ -9,6 +9,11 @@ const getDefaultFilters = (): DynamicFilter[] => [
   { id: '1', field: 'rs_52w', operator: '>=', value: 70 },
 ]
 
+function stripReadonlyFields(config: ApiTradingConfig): Omit<ApiTradingConfig, 'created_at' | 'updated_at'> {
+  const { created_at: _, updated_at: __, ...rest } = config
+  return rest
+}
+
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2)
 
 export interface UseScreenerFiltersResult {
@@ -17,13 +22,11 @@ export interface UseScreenerFiltersResult {
   savedFilters: ScreenerFilterPreset[]
   selectedPreset: string | null
   showSaveFilterModal: boolean
-  newFilterName: string
   setDynamicFilters: (filters: DynamicFilter[]) => void
   setFilterLogic: (logic: 'and' | 'or') => void
   setShowSaveFilterModal: (show: boolean) => void
-  setNewFilterName: (name: string) => void
   handleReset: () => void
-  handleSaveFilter: () => Promise<void>
+  handleSaveFilter: (name: string) => Promise<void>
   handleLoadPreset: (presetName: string) => void
   handleDeletePreset: (presetName: string) => Promise<void>
   loadSavedFilters: () => Promise<void>
@@ -36,12 +39,6 @@ export function useScreenerFilters(activeExchange: string): UseScreenerFiltersRe
   const [savedFilters, setSavedFilters] = useState<ScreenerFilterPreset[]>([])
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null)
   const [showSaveFilterModal, setShowSaveFilterModal] = useState(false)
-  const [newFilterName, setNewFilterName] = useState('')
-
-  // Load saved filters on mount
-  useEffect(() => {
-    loadSavedFilters()
-  }, [])
 
   const loadSavedFilters = useCallback(async () => {
     try {
@@ -53,14 +50,19 @@ export function useScreenerFilters(activeExchange: string): UseScreenerFiltersRe
     }
   }, [])
 
+  useEffect(() => {
+    loadSavedFilters()
+  }, [loadSavedFilters])
+
   const handleReset = useCallback(() => {
     setDynamicFilters(getDefaultFilters())
     setFilterLogic('and')
     setSelectedPreset(null)
   }, [])
 
-  const handleSaveFilter = useCallback(async () => {
-    if (!newFilterName.trim()) {
+  const handleSaveFilter = useCallback(async (name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) {
       toast.error('Please enter a filter name')
       return
     }
@@ -71,37 +73,38 @@ export function useScreenerFilters(activeExchange: string): UseScreenerFiltersRe
 
       const filterRequest = mapFiltersToApiFormat(dynamicFilters, filterLogic)
       const newPreset: ScreenerFilterPreset = {
-        name: newFilterName,
+        name: trimmed,
         filters: filterRequest.filters || [],
         logic: filterLogic,
         exchanges: activeExchange !== 'All' ? [activeExchange] : undefined,
         created_at: new Date().toISOString(),
       }
 
-      const existingIndex = (config.metrics_filter || []).findIndex(f => f.name === newFilterName)
+      const currentFilters = config.metrics_filter || []
+      const existingIndex = currentFilters.findIndex(f => f.name === trimmed)
 
       let updatedFilters: ScreenerFilterPreset[]
       if (existingIndex >= 0) {
-        updatedFilters = [...(config.metrics_filter || [])]
+        updatedFilters = [...currentFilters]
         updatedFilters[existingIndex] = newPreset
         toast.success('Filter updated successfully')
       } else {
-        updatedFilters = [...(config.metrics_filter || []), newPreset]
+        updatedFilters = [...currentFilters, newPreset]
         toast.success('Filter saved successfully')
       }
 
       await api.updateConfig(configId, {
+        ...stripReadonlyFields(config),
         metrics_filter: updatedFilters,
       })
 
       setSavedFilters(updatedFilters)
-      setNewFilterName('')
       setShowSaveFilterModal(false)
     } catch (error) {
       console.error('Failed to save filter:', error)
       toast.error('Failed to save filter')
     }
-  }, [dynamicFilters, filterLogic, activeExchange, newFilterName])
+  }, [dynamicFilters, filterLogic, activeExchange])
 
   const handleLoadPreset = useCallback((presetName: string) => {
     const preset = savedFilters.find(f => f.name === presetName)
@@ -128,6 +131,7 @@ export function useScreenerFilters(activeExchange: string): UseScreenerFiltersRe
       const updatedFilters = (config.metrics_filter || []).filter(f => f.name !== presetName)
 
       await api.updateConfig(configId, {
+        ...stripReadonlyFields(config),
         metrics_filter: updatedFilters,
       })
 
@@ -152,11 +156,9 @@ export function useScreenerFilters(activeExchange: string): UseScreenerFiltersRe
     savedFilters,
     selectedPreset,
     showSaveFilterModal,
-    newFilterName,
     setDynamicFilters,
     setFilterLogic,
     setShowSaveFilterModal,
-    setNewFilterName,
     handleReset,
     handleSaveFilter,
     handleLoadPreset,

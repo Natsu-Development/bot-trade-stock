@@ -371,7 +371,7 @@ function PriceChartComponent({
     })
 
     const markers = sortedSignals.map((signal) => {
-      const isBullish = signal.type.includes('bounce')
+      const isBullish = signal.type.includes('breakout') // breakout above resistance = bullish
       const color = isBullish ? '#10b981' : '#ef4444'
       const shape = isBullish ? 'arrowUp' : 'arrowDown'
       const confirmed = isSignalConfirmed(signal)

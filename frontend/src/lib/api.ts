@@ -136,7 +136,7 @@ export interface ApiTrendlineDisplay {
 
 // Signal from analyze API - contains crossover point for trendline extension
 export interface ApiAnalysisSignal {
-  type: string        // "bounce_confirmed", "breakout_confirmed", etc.
+  type: string        // "breakdown_confirmed", "breakout_confirmed", etc.
   price: number       // Actual price at crossover
   time: string        // Date of crossover
   price_line?: number  // Trendline price at crossover (extension point)
@@ -144,7 +144,7 @@ export interface ApiAnalysisSignal {
 
 export interface ApiTradingSignal {
   id: string
-  type: string // "bounce_confirmed", "bounce_potential", "breakout_confirmed", "breakout_potential"
+  type: string // "breakdown_confirmed", "breakdown_potential", "breakout_confirmed", "breakout_potential"
   price: number
   message: string
   source: string
@@ -227,26 +227,30 @@ export interface ApiAnalysisResult {
   trendlines: ApiTrendlineDisplay[]  // Active trendlines with pre-calculated data points
 }
 
-// Trading config types
+// Trading config types - matches backend TradingConfigResponse
 export interface ApiTradingConfig {
   id: string
   rsi_period: number
-  start_date_offset: number
+  pivot_period: number
+  lookback_day: number
   divergence: {
-    lookback_left: number
-    lookback_right: number
     range_min: number
     range_max: number
   }
-  early_detection_enabled: boolean
+  trendline: {
+    max_lines: number
+    proximity_percent: number
+  }
+  indices_recent: number
+  bearish_early: boolean | null
   bearish_symbols: string[]
   bullish_symbols: string[]
-  metrics_filter?: ScreenerFilterPreset[]
   telegram: {
     enabled: boolean
     bot_token?: string
     chat_id?: string
   }
+  metrics_filter?: ScreenerFilterPreset[]
   created_at: string
   updated_at: string
 }
@@ -350,7 +354,7 @@ class ApiClient {
   async getSignals(
     symbol: string,
     options?: {
-      type?: 'all' | 'bounce' | 'breakout' | 'confirmed' | 'watching'
+      type?: 'all' | 'breakdown' | 'breakout' | 'confirmed' | 'watching'
       configId?: string
       startDate?: string
       endDate?: string
@@ -366,8 +370,8 @@ class ApiClient {
       filteredSignals = result.signals.filter(s => {
         const signalType = s.type
         switch (type) {
-          case 'bounce':
-            return signalType.includes('bounce')
+          case 'breakdown':
+            return signalType.includes('breakdown')
           case 'breakout':
             return signalType.includes('breakout')
           case 'confirmed':
@@ -411,14 +415,18 @@ class ApiClient {
     const defaultConfig = {
       id,
       rsi_period: 14,
-      start_date_offset: 365,
+      pivot_period: 5,
+      lookback_day: 365,
       divergence: {
-        lookback_left: 5,
-        lookback_right: 5,
         range_min: 30,
         range_max: 70,
       },
-      early_detection_enabled: false,
+      trendline: {
+        max_lines: 5,
+        proximity_percent: 3,
+      },
+      indices_recent: 5,
+      bearish_early: null,
       bearish_symbols: [],
       bullish_symbols: [],
       telegram: { enabled: false },
@@ -444,6 +452,17 @@ class ApiClient {
   ): Promise<{ message: string; list_type: string; symbols: string[] }> {
     return this.request(`/config/${encodeURIComponent(configId)}/watchlist`, {
       method: 'POST',
+      body: JSON.stringify({ list_type: listType, symbols }),
+    })
+  }
+
+  async removeSymbolsFromWatchlist(
+    configId: string,
+    listType: 'bullish' | 'bearish',
+    symbols: string[]
+  ): Promise<{ message: string; list_type: string; symbols: string[] }> {
+    return this.request(`/config/${encodeURIComponent(configId)}/watchlist`, {
+      method: 'DELETE',
       body: JSON.stringify({ list_type: listType, symbols }),
     })
   }
@@ -513,7 +532,7 @@ export const api = {
   analyzeBearishDivergence: (s: string, c?: string) => apiInstance.analyzeBearishDivergence(s, c),
   getSignals: (
     s: string,
-    o?: { type?: 'all' | 'bounce' | 'breakout' | 'confirmed' | 'watching'; configId?: string; startDate?: string; endDate?: string; interval?: string }
+    o?: { type?: 'all' | 'breakdown' | 'breakout' | 'confirmed' | 'watching'; configId?: string; startDate?: string; endDate?: string; interval?: string }
   ) => apiInstance.getSignals(s, o),
   analyzeSignals: (s: string, c?: string, sd?: string, ed?: string, i?: string) =>
     apiInstance.analyzeSignals(s, c, sd, ed, i),
@@ -524,4 +543,6 @@ export const api = {
   updateConfig: (id: string, c: Partial<ApiTradingConfig>) => apiInstance.updateConfig(id, c),
   addSymbolsToWatchlist: (cId: string, lT: 'bullish' | 'bearish', s: string[]) =>
     apiInstance.addSymbolsToWatchlist(cId, lT, s),
+  removeSymbolsFromWatchlist: (cId: string, lT: 'bullish' | 'bearish', s: string[]) =>
+    apiInstance.removeSymbolsFromWatchlist(cId, lT, s),
 }

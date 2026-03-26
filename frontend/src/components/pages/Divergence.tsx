@@ -10,12 +10,12 @@ import { api, setConfigId, getConfigId, isSignalConfirmed, isSignalPotential, ty
 
 const CONFIDENCE_HIGH = 85 // Confidence % assigned when a divergence is confirmed
 
-type SignalType = 'all' | 'bounce' | 'breakout' | 'confirmed' | 'watching'
+type SignalType = 'all' | 'breakdown' | 'breakout' | 'confirmed' | 'watching'
 
 const SIGNAL_TYPE_OPTIONS: { value: SignalType; label: string; color: string }[] = [
   { value: 'all', label: 'All Signals', color: 'cyan' },
-  { value: 'bounce', label: 'Bounce', color: 'emerald' },
-  { value: 'breakout', label: 'Breakout', color: 'rose' },
+  { value: 'breakdown', label: 'Breakdown', color: 'rose' },
+  { value: 'breakout', label: 'Breakout', color: 'emerald' },
   { value: 'confirmed', label: 'Confirmed', color: 'cyan' },
   { value: 'watching', label: 'Watching', color: 'amber' },
 ]
@@ -61,7 +61,7 @@ export function Divergence() {
     if (!analysisResult?.signals) return []
     return analysisResult.signals.filter(s => {
       if (signalType === 'all') return true
-      if (signalType === 'bounce') return s.type.includes('bounce')
+      if (signalType === 'breakdown') return s.type.includes('breakdown')
       if (signalType === 'breakout') return s.type.includes('breakout')
       if (signalType === 'confirmed') return isSignalConfirmed(s)
       if (signalType === 'watching') return isSignalPotential(s)
