@@ -1,8 +1,9 @@
-import { memo, useMemo, useCallback } from 'react'
+import { memo, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { Icons } from '../icons/Icons'
+import { FilterPill } from '../screener/FilterPill'
 import type { ScreenerFilterPreset } from '@/lib/api'
-import type { FilterFieldOption } from '@/types'
+import type { FilterFieldOption, DynamicFilter } from '@/types'
 
 interface FilterPresetCardProps {
   preset: ScreenerFilterPreset
@@ -11,24 +12,19 @@ interface FilterPresetCardProps {
   onDelete: (name: string) => void
 }
 
-const operatorSymbols: Record<string, string> = {
-  '>=': '≥',
-  '<=': '≤',
-  '>': '>',
-  '<': '<',
-  '=': '=',
-}
-
 export const FilterPresetCard = memo(function FilterPresetCard({ preset, fieldOptions, onEdit, onDelete }: FilterPresetCardProps) {
-  // Memoize the field lookup map for O(1) access
   const fieldOptionsMap = useMemo(() => {
     return new Map<string, FilterFieldOption>(fieldOptions.map(o => [o.value, o]))
   }, [fieldOptions])
 
-  const getFieldLabel = useCallback((field: string) => {
-    const option = fieldOptionsMap.get(field)
-    return option?.shortLabel || field
-  }, [fieldOptionsMap])
+  const dynamicFilters = useMemo(() => {
+    return preset.filters.map((f, index) => ({
+      id: `preset-${index}`,
+      field: f.field,
+      operator: f.op,
+      value: f.value,
+    })) as DynamicFilter[]
+  }, [preset.filters])
 
   return (
     <div className="p-4 bg-[var(--bg-elevated)] border border-[var(--border-dim)] rounded-lg hover:border-[var(--border-glow)] transition-all duration-200">
@@ -68,15 +64,14 @@ export const FilterPresetCard = memo(function FilterPresetCard({ preset, fieldOp
 
       {/* Filter conditions */}
       <div className="flex flex-wrap gap-1.5 mb-3">
-        {preset.filters.map((filter, index) => (
-          <div
-            key={index}
-            className="inline-flex items-center gap-1 px-2 py-1 bg-[var(--bg-deep)] border border-[var(--border-dim)] rounded text-[12px]"
-          >
-            <span className="font-semibold text-[var(--neon-cyan)]">{getFieldLabel(filter.field)}</span>
-            <span className="text-[var(--text-muted)]">{operatorSymbols[filter.op] || filter.op}</span>
-            <span className="font-mono text-[var(--text-primary)]">{filter.value}</span>
-          </div>
+        {dynamicFilters.map((filter) => (
+          <FilterPill
+            key={filter.id}
+            filter={filter}
+            fieldOption={fieldOptionsMap.get(filter.field)}
+            variant="compact"
+            hideActions
+          />
         ))}
       </div>
 

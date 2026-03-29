@@ -4,6 +4,51 @@ import { Badge } from '@/components/ui/badge'
 import { formatPrice, getBadgeVariantFromExchange } from '@/lib/utils'
 import type { Stock } from '@/types'
 
+/** Signal badge colors - compact pill style */
+const SIGNAL_STYLES = {
+  breakout: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  breakdown: 'bg-red-500/20 text-red-400 border-red-500/30',
+  bullish: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+  bearish: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+} as const
+
+/** Compact signal badge component */
+function SignalBadge({ type, label }: { type: keyof typeof SIGNAL_STYLES; label: string }) {
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${SIGNAL_STYLES[type]}`}>
+      {label}
+    </span>
+  )
+}
+
+/** Render signal badges for a stock */
+function SignalIndicators({ stock }: { stock: Stock }) {
+  const signals: JSX.Element[] = []
+
+  if (stock.hasBreakoutPotential) {
+    signals.push(<SignalBadge key="bop" type="breakout" label="BO↑" />)
+  }
+  if (stock.hasBreakoutConfirmed) {
+    signals.push(<SignalBadge key="boc" type="breakout" label="BO✓" />)
+  }
+  if (stock.hasBreakdownPotential) {
+    signals.push(<SignalBadge key="bdp" type="breakdown" label="BD↓" />)
+  }
+  if (stock.hasBreakdownConfirmed) {
+    signals.push(<SignalBadge key="bdc" type="breakdown" label="BD✓" />)
+  }
+  if (stock.hasBullishRSI) {
+    signals.push(<SignalBadge key="brsi" type="bullish" label="RSI↑" />)
+  }
+  if (stock.hasBearishRSI) {
+    signals.push(<SignalBadge key="rrsi" type="bearish" label="RSI↓" />)
+  }
+
+  if (signals.length === 0) return null
+
+  return <div className="flex flex-wrap gap-1">{signals}</div>
+}
+
 export interface ScreenerResultsTableProps {
   sortedStocks: Stock[]
   selectedStocks: ReadonlySet<string>
@@ -64,7 +109,12 @@ export const ScreenerResultsTable = memo(function ScreenerResultsTable({
           <TableHead>RS 52W</TableHead>
           <TableHead>Vol/SMA</TableHead>
           <TableHead>Price</TableHead>
-          <TableHead>Change %</TableHead>
+          <TableHead>Chg%</TableHead>
+          <TableHead>EMA9</TableHead>
+          <TableHead>EMA21</TableHead>
+          <TableHead>EMA50</TableHead>
+          <TableHead>SMA200</TableHead>
+          <TableHead>Signals</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -110,6 +160,13 @@ export const ScreenerResultsTable = memo(function ScreenerResultsTable({
             <TableCell>{formatPrice(stock.price)}</TableCell>
             <TableCell className={stock.change >= 0 ? 'text-[var(--neon-bull)]' : 'text-[var(--neon-bear)]'}>
               {stock.change >= 0 ? '+' : ''}{stock.change.toFixed(2)}%
+            </TableCell>
+            <TableCell>{stock.ema9 > 0 ? formatPrice(stock.ema9) : '-'}</TableCell>
+            <TableCell>{stock.ema21 > 0 ? formatPrice(stock.ema21) : '-'}</TableCell>
+            <TableCell>{stock.ema50 > 0 ? formatPrice(stock.ema50) : '-'}</TableCell>
+            <TableCell>{stock.sma200 > 0 ? formatPrice(stock.sma200) : '-'}</TableCell>
+            <TableCell>
+              <SignalIndicators stock={stock} />
             </TableCell>
           </TableRow>
         ))}

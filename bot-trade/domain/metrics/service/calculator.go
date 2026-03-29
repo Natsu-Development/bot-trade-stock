@@ -8,6 +8,7 @@ import (
 	metricsagg "bot-trade/domain/metrics/aggregate"
 	periodvo "bot-trade/domain/metrics/valueobject"
 	marketvo "bot-trade/domain/shared/valueobject/market"
+	indicatorsvc "bot-trade/domain/shared/service"
 )
 
 // Calculator calculates stock metrics including RS ratings.
@@ -108,6 +109,21 @@ func (c *Calculator) CalculateForStock(symbol, exchange string, priceHistory []m
 
 	// Calculate volume metrics
 	metrics.CurrentVolume, metrics.VolumeSMA20 = c.calculateVolumeSMA20(priceHistory)
+
+	// Calculate price metrics
+	metrics.CurrentPrice = priceHistory[n-1].Close
+	if n >= 2 {
+		prevClose := priceHistory[n-2].Close
+		if prevClose > 0 {
+			metrics.PriceChangePct = roundTo4Decimals((metrics.CurrentPrice - prevClose) / prevClose * 100)
+		}
+	}
+
+	// Calculate moving averages
+	metrics.EMA9 = indicatorsvc.CalculateEMA(priceHistory, 9)
+	metrics.EMA21 = indicatorsvc.CalculateEMA(priceHistory, 21)
+	metrics.EMA50 = indicatorsvc.CalculateEMA(priceHistory, 50)
+	metrics.SMA200 = indicatorsvc.CalculateSMA(priceHistory, 200)
 
 	return metrics
 }

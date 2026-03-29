@@ -4,9 +4,7 @@
 package filter
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 
 	marketvo "bot-trade/domain/shared/valueobject/market"
 )
@@ -18,56 +16,11 @@ var (
 
 // StockFilter represents runtime filter criteria for stock screening.
 // Logic defaults to AND if empty.
-// JSON unmarshaling validates all values including logic and exchanges.
+// Use NewStockFilter factory method for validation.
 type StockFilter struct {
 	Conditions []FilterCondition `json:"filters"`
 	Logic      FilterLogic       `json:"logic"` // "and" or "or"
 	Exchanges  []string          `json:"exchanges,omitempty"`
-}
-
-// UnmarshalJSON implements json.Unmarshaler for StockFilter with validation.
-func (sf *StockFilter) UnmarshalJSON(b []byte) error {
-	type Alias StockFilter // Prevent recursion
-	var raw struct {
-		Filters   []json.RawMessage `json:"filters"`
-		Logic     string           `json:"logic"`
-		Exchanges []string         `json:"exchanges,omitempty"`
-	}
-
-	if err := json.Unmarshal(b, &raw); err != nil {
-		return err
-	}
-
-	// Unmarshal and validate each condition
-	conditions := make([]FilterCondition, len(raw.Filters))
-	for i, fcBytes := range raw.Filters {
-		var cond FilterCondition
-		if err := json.Unmarshal(fcBytes, &cond); err != nil {
-			return fmt.Errorf("invalid filter at index %d: %w", i, err)
-		}
-		conditions[i] = cond
-	}
-
-	// Validate logic (defaults to AND if empty)
-	filterLogic, err := Validate(raw.Logic)
-	if err != nil && raw.Logic != "" {
-		return fmt.Errorf("invalid logic: %w", err)
-	}
-	if raw.Logic == "" {
-		filterLogic = LogicAND // Default
-	}
-
-	// Validate exchanges
-	for _, e := range raw.Exchanges {
-		if _, err := marketvo.NewExchange(e); err != nil {
-			return fmt.Errorf("invalid exchange '%s': %w", e, err)
-		}
-	}
-
-	sf.Conditions = conditions
-	sf.Logic = filterLogic
-	sf.Exchanges = raw.Exchanges
-	return nil
 }
 
 // NewStockFilter creates a validated stock filter.

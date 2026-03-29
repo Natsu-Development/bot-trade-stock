@@ -34,7 +34,7 @@ func (uc *BreakoutUseCase) Execute(data *appPrep.DataPrepare) ([]dto.TrendlineDT
 	signals := analysisservice.GenerateResistanceSignals(
 		trendlines,
 		data.DataRecent,
-		data.Config.Trendline.ProximityPercent,
+		data.Config.Trendline.ProximityDecimal(),
 	)
 
 	trendlineDTOs := dto.ToTrendlineDTOs(data.DataRecent, trendlines)

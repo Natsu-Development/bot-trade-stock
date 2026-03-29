@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { cn } from '@/lib/utils'
 import { Icons } from '../icons/Icons'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
+import { isMAField, isSignalField, MA_OPERATOR_LABELS } from '@/lib/screenerFilterOptions'
 import type { DynamicFilter, FilterField, FilterOperator, FilterFieldOption, FilterOperatorOption } from '../../types'
 
 interface FilterEditorProps {
@@ -35,12 +37,14 @@ export const FilterEditor = memo(function FilterEditor({
 }: FilterEditorProps) {
   const initField = filter?.field || DEFAULT_FIELD
   const initOp = filter?.operator || DEFAULT_OPERATOR
-  const initValue = (filter?.value as number) || DEFAULT_VALUE
+  const initValue = filter?.value ?? (isSignalField(initField) ? false : DEFAULT_VALUE)
 
   const [field, setField] = useState<FilterField>(initField)
   const [operator, setOperator] = useState<FilterOperator>(initOp)
-  const [value, setValue] = useState<number>(initValue)
-  const [localValue, setLocalValue] = useState(initValue.toString())
+  const [value, setValue] = useState<number | boolean>(initValue as number | boolean)
+  const [localValue, setLocalValue] = useState(
+    typeof initValue === 'boolean' ? '' : String(initValue)
+  )
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -48,13 +52,19 @@ export const FilterEditor = memo(function FilterEditor({
   }, [])
 
   const handleSave = useCallback(() => {
-    const parsed = parseFloat(localValue)
-    const finalValue = isNaN(parsed) ? value : parsed
+    let finalValue: number | boolean
+
+    if (isSignalField(field)) {
+      finalValue = value as boolean
+    } else {
+      const parsed = parseFloat(localValue)
+      finalValue = isNaN(parsed) ? (value as number) : parsed
+    }
 
     const newFilter: DynamicFilter = {
       id: filter?.id || `filter_${Date.now()}`,
       field,
-      operator,
+      operator: isSignalField(field) ? '=' : operator,
       value: finalValue,
     }
 
@@ -72,7 +82,16 @@ export const FilterEditor = memo(function FilterEditor({
   }, [handleSave, onClose])
 
   const handleFieldChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setField(e.target.value as FilterField)
+    const newField = e.target.value as FilterField
+    setField(newField)
+    // Reset value when switching field types
+    if (isSignalField(newField)) {
+      setValue(false)
+      setLocalValue('')
+    } else {
+      setValue(DEFAULT_VALUE)
+      setLocalValue(String(DEFAULT_VALUE))
+    }
   }, [])
 
   const handleOperatorChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -153,38 +172,62 @@ export const FilterEditor = memo(function FilterEditor({
             </select>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Operator</label>
-            <select
-              className={inputBaseStyles}
-              value={operator}
-              onChange={handleOperatorChange}
-            >
-              {operatorOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!isSignalField(field) && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Operator</label>
+              <select
+                className={inputBaseStyles}
+                value={operator}
+                onChange={handleOperatorChange}
+              >
+                {operatorOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {isMAField(field) ? MA_OPERATOR_LABELS[option.value] : option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">Value</label>
-            <input
-              ref={inputRef}
-              type="number"
-              className={inputBaseStyles}
-              value={localValue}
-              onChange={handleValueChange}
-              onBlur={handleValueBlur}
-              onKeyDown={handleKeyDown}
-            />
+            {isMAField(field) ? (
+              <input
+                disabled
+                className={cn(inputBaseStyles, 'opacity-60 cursor-not-allowed')}
+                value="Compares current price vs MA"
+              />
+            ) : isSignalField(field) ? (
+              <div className="flex items-center gap-3 px-3 py-2.5 bg-[var(--bg-deep)] border border-[var(--border-dim)] rounded">
+                <Switch
+                  checked={value === true}
+                  onCheckedChange={(checked) => setValue(checked)}
+                />
+                <span className="text-sm text-[var(--text-secondary)]">
+                  {value === true ? 'Has signal' : 'No signal'}
+                </span>
+              </div>
+            ) : (
+              <input
+                ref={inputRef}
+                type="number"
+                className={inputBaseStyles}
+                value={localValue}
+                onChange={handleValueChange}
+                onBlur={handleValueBlur}
+                onKeyDown={handleKeyDown}
+              />
+            )}
           </div>
 
           <div className="p-3 bg-[var(--bg-deep)] border border-[var(--border-dim)] rounded flex items-center justify-center gap-2">
             <span className="text-[11px] font-medium text-[var(--text-muted)] uppercase">Preview</span>
             <span className="text-sm font-medium text-[var(--neon-cyan)] font-mono">
-              {fieldOption?.shortLabel || field} {operatorSymbols[operator]} {value}
+              {isMAField(field)
+                ? `Price ${MA_OPERATOR_LABELS[operator]} ${fieldOption?.shortLabel}`
+                : isSignalField(field)
+                ? `${value === true ? 'Has' : 'No'} ${fieldOption?.shortLabel}`
+                : `${fieldOption?.shortLabel || field} ${operatorSymbols[operator]} ${value}`}
             </span>
           </div>
         </div>

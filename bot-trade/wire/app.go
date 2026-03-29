@@ -52,7 +52,7 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 
 	// Use Cases
 	configUC := usecase.NewConfigUseCase(configRepo)
-	stockMetricsUC := usecase.NewStockMetricsUseCase(gateway, stockMetricsRepo)
+	stockMetricsUC := usecase.NewStockMetricsUseCase(gateway, stockMetricsRepo, configRepo)
 
 	// Load cached data on startup
 	loadCtx, loadCancel := context.WithTimeout(context.Background(), 10*time.Second)

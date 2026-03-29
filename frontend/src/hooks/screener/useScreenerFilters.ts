@@ -4,7 +4,6 @@ import type { ScreenerFilterPreset } from '@/lib/api'
 import { toast } from '@/components/ui/Toast'
 import type { DynamicFilter, FilterField, FilterOperator } from '@/types'
 import { mapFiltersToApiFormat } from '@/lib/screenerUtils'
-import { generateId } from '@/lib/id'
 
 const getDefaultFilters = (): DynamicFilter[] => [
   { id: '1', field: 'rs_52w', operator: '>=', value: 70 },
@@ -112,10 +111,10 @@ export function useScreenerFilters(activeExchange: string): UseScreenerFiltersRe
     setSelectedPreset(presetName)
 
     const loadedFilters: DynamicFilter[] = preset.filters.map((f, index) => ({
-      id: generateId() + index,
+      id: String(index),
       field: f.field as FilterField,
       operator: f.op as FilterOperator,
-      value: f.value,
+      value: f.value ?? '',
     }))
 
     setDynamicFilters(loadedFilters.length > 0 ? loadedFilters : getDefaultFilters())
