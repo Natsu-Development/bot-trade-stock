@@ -14,9 +14,6 @@ var globalRegistry = NewJobRegistry()
 
 // JobDependencies contains all dependencies needed to create jobs.
 type JobDependencies struct {
-	// Legacy analyzer for backward compatibility (used by API)
-	Analyzer inbound.Analyzer
-
 	// Preparer for jobs to prepare data before calling use cases
 	Preparer *appPrep.Preparer
 

@@ -1,6 +1,21 @@
 // Package filter provides shared immutable value objects for screener filter bounded contexts.
 package filter
 
+// BoolToFloat converts boolean to float64 for filter value storage.
+// true → 1.0, false → 0.0.
+func BoolToFloat(b bool) float64 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// FloatToBool converts float64 to boolean.
+// 0 → false, non-zero → true.
+func FloatToBool(v float64) bool {
+	return v != 0
+}
+
 // FilterCondition represents a single filter condition for runtime queries.
 // All values stored as float64: numeric = actual value, boolean = 0 (false) / 1 (true).
 type FilterCondition struct {
@@ -16,7 +31,7 @@ func (fc FilterCondition) IsBooleanField() bool {
 
 // GetBoolValue returns the value as boolean (0=false, non-zero=true).
 func (fc FilterCondition) GetBoolValue() bool {
-	return fc.Value != 0
+	return FloatToBool(fc.Value)
 }
 
 // NewFilterCondition creates a validated filter condition.

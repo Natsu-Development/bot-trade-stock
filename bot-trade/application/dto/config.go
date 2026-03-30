@@ -95,15 +95,11 @@ func (c ConfigFilterCondition) ToFilterCondition() (filtervo.FilterCondition, er
 		return filtervo.FilterCondition{}, err
 	}
 
-	// Convert any value to float64
+	// Convert value to float64 using domain helper
 	var numVal float64
 	switch v := c.Value.(type) {
 	case bool:
-		if v {
-			numVal = 1 // true → 1
-		} else {
-			numVal = 0 // false → 0
-		}
+		numVal = filtervo.BoolToFloat(v)
 	case float64:
 		numVal = v
 	case int:

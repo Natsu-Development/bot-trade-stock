@@ -120,10 +120,10 @@ func (c *Calculator) CalculateForStock(symbol, exchange string, priceHistory []m
 	}
 
 	// Calculate moving averages
-	metrics.EMA9 = indicatorsvc.CalculateEMA(priceHistory, 9)
-	metrics.EMA21 = indicatorsvc.CalculateEMA(priceHistory, 21)
-	metrics.EMA50 = indicatorsvc.CalculateEMA(priceHistory, 50)
-	metrics.SMA200 = indicatorsvc.CalculateSMA(priceHistory, 200)
+	metrics.EMA9 = indicatorsvc.CalculateEMA(priceHistory, periodvo.EMA9)
+	metrics.EMA21 = indicatorsvc.CalculateEMA(priceHistory, periodvo.EMA21)
+	metrics.EMA50 = indicatorsvc.CalculateEMA(priceHistory, periodvo.EMA50)
+	metrics.SMA200 = indicatorsvc.CalculateSMA(priceHistory, periodvo.SMA200)
 
 	return metrics
 }

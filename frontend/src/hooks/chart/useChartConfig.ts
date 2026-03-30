@@ -37,9 +37,10 @@ export function useChartConfig(containerWidth: number, chartHeight: number, show
   }), [showRsi])
 
   // Calculate price scale margins based on RSI visibility
+  // Small margins to show full price range (like TradingView)
   const priceScaleMargins = useMemo(() => ({
-    top: 0,
-    bottom: showRsi ? 0.5 : 0.25,
+    top: 0.05,
+    bottom: showRsi ? 0.5 : 0.1,
   }), [showRsi])
 
   // Chart options
@@ -76,8 +77,11 @@ export function useChartConfig(containerWidth: number, chartHeight: number, show
       },
     },
     rightPriceScale: {
+      visible: true,
+      borderVisible: true,
       borderColor: 'rgba(142, 148, 156, 0.15)',
       scaleMargins: priceScaleMargins,
+      entireTextOnly: false,
     },
     timeScale: {
       borderColor: 'rgba(142, 148, 156, 0.15)',

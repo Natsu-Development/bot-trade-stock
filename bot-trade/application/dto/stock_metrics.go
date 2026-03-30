@@ -16,10 +16,7 @@ type FilterValue float64
 func (v *FilterValue) UnmarshalJSON(data []byte) error {
 	var b bool
 	if err := json.Unmarshal(data, &b); err == nil {
-		*v = 0
-		if b {
-			*v = 1
-		}
+		*v = FilterValue(filtervo.BoolToFloat(b))
 		return nil
 	}
 

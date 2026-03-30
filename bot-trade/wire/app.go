@@ -79,7 +79,6 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 
 	// Build job dependencies
 	jobDeps := jobsRegistry.JobDependencies{
-		Analyzer:            analyzer,
 		Preparer:            dataPreparer,
 		BullishRSIUC:        bullishRSIUC,
 		BearishRSIUC:        bearishRSIUC,

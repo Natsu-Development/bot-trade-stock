@@ -169,7 +169,7 @@ function PriceChartComponent({
 
     chartRef.current = chart
 
-    // Add candlestick series
+    // Add candlestick series with current price line (like TradingView)
     const candlestickSeries = chart.addCandlestickSeries({
       upColor: '#10b981',
       downColor: '#ef4444',
@@ -179,7 +179,11 @@ function PriceChartComponent({
       wickDownColor: '#ef4444',
       borderVisible: true,
       wickVisible: true,
-      priceScaleId: '',
+      lastValueVisible: true, // Show current price tag on y-axis
+      priceLineVisible: true, // Show horizontal line at current price
+      priceLineWidth: 1,
+      priceLineColor: '#2962FF',
+      priceLineStyle: 2, // Dashed line
     })
 
     candlestickSeriesRef.current = candlestickSeries
@@ -332,7 +336,6 @@ function PriceChartComponent({
         priceLineVisible: false,
         lastValueVisible: true,
         pointMarkersVisible: false,
-        priceScaleId: '',
       })
 
       const startDate = new Date(trendline.start_date).getTime()

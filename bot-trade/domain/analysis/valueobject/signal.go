@@ -14,16 +14,6 @@ const (
 	BreakoutPotential SignalType = "breakout_potential" // Approaching resistance
 )
 
-// IsConfirmed returns true if this is a confirmed signal.
-func (st SignalType) IsConfirmed() bool {
-	return st == BreakdownConfirmed || st == BreakoutConfirmed
-}
-
-// IsPotential returns true if this is a potential signal.
-func (st SignalType) IsPotential() bool {
-	return st == BreakdownPotential || st == BreakoutPotential
-}
-
 // Signal is a value object representing a trading signal.
 // This contains signal information without presentation details.
 type Signal struct {

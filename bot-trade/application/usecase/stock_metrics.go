@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,17 +22,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// SignalDaysThreshold defines how many days a signal is considered valid.
+// Signals older than this threshold result in false boolean flags.
+const SignalDaysThreshold = 50
+
 // Note: Retry logic for rate-limited requests (429) is handled at the HTTP transport layer
 // via infrastructure/http.RetryTransport. This keeps the usecase clean and focused on
 // business logic while making retry behavior reusable across all HTTP-based gateways.
-
-const (
-	// Stock metrics requires ~400 days (1.5 trading years) for RS Rating calculations.
-	// This is intentionally separate from TradingConfig.LookbackDay which is for
-	// divergence/trendline analysis (typically 30-90 days).
-	stockMetricsDateRangeDays = 400 // Days of price history fetched per stock (covers ~1.5 trading years)
-	// maxFailedLogSamples       = 20  // Maximum failed-stock entries shown in the refresh summary log
-)
 
 var _ inbound.StockMetricsManager = (*StockMetricsUseCase)(nil)
 
@@ -67,7 +64,7 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*dto.StockMetricsRe
 	startTime := time.Now()
 	zap.L().Info("Starting stock metrics refresh for all exchanges")
 
-	// Fetch system config for signal computation
+	// Fetch system config for signal computation and data range
 	systemConfig, err := uc.configRepo.GetByID(ctx, "system")
 	if err != nil {
 		zap.L().Warn("System config not found, signal computation will be skipped",
@@ -93,7 +90,7 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*dto.StockMetricsRe
 	// Step 2: Build queries (usecase logic - no exchange field needed)
 	queries := make([]marketvo.MarketDataQuery, 0, len(allStocks))
 	for _, stock := range allStocks {
-		query, err := marketvo.NewMarketDataQueryFromStrings(string(stock.Symbol), "", "1D", marketvo.LookbackDay(stockMetricsDateRangeDays))
+		query, err := marketvo.NewMarketDataQueryFromStrings(string(stock.Symbol), "", "1D", marketvo.LookbackDay(systemConfig.LookbackDay))
 		if err != nil {
 			zap.L().Warn("Invalid query", zap.String("symbol", string(stock.Symbol)), zap.Error(err))
 			continue
@@ -250,7 +247,9 @@ func (uc *StockMetricsUseCase) logRefreshSummary(totalStocks, successCount int, 
 
 	failedList := make([]string, 0, len(failedSymbols))
 	for sym, reason := range failedSymbols {
-		failedList = append(failedList, fmt.Sprintf("%s: %s", sym, reason))
+		if !strings.Contains(reason, "insufficient data") {
+			failedList = append(failedList, fmt.Sprintf("%s: %s", sym, reason))
+		}
 	}
 
 	zap.L().Info("========== STOCK METRICS REFRESH SUMMARY ==========")
@@ -315,6 +314,7 @@ func (uc *StockMetricsUseCase) computeSignals(
 	rangeMin := cfg.Divergence.RangeMin
 	rangeMax := cfg.Divergence.RangeMax
 	maxLines := cfg.Trendline.MaxLines
+	signalThreshold := time.Now().AddDate(0, 0, -SignalDaysThreshold)
 
 	if len(priceHistory) < rsiPeriod+1 {
 		return
@@ -330,41 +330,73 @@ func (uc *StockMetricsUseCase) computeSignals(
 	startIndex := len(dataWithRSI) - indicesRecent
 	recentData := dataWithRSI[startIndex:]
 
-	// 3. Find pivots (price pivots already have RSI values from recentData)
-	highPivots := analysissvc.FindHighPivots(recentData, analysisvo.FieldHigh, pivotPeriod)
-	lowPivots := analysissvc.FindLowPivots(recentData, analysisvo.FieldLow, pivotPeriod)
+	// 3. Find pivots
+	// RSI pivots for divergence detection (must use FieldRSI)
+	rsiHighPivots := analysissvc.FindHighPivots(recentData, analysisvo.FieldRSI, pivotPeriod)
+	rsiLowPivots := analysissvc.FindLowPivots(recentData, analysisvo.FieldRSI, pivotPeriod)
+	// Price pivots for trendline building (uses FieldHigh/FieldLow)
+	priceHighPivots := analysissvc.FindHighPivots(recentData, analysisvo.FieldHigh, pivotPeriod)
+	priceLowPivots := analysissvc.FindLowPivots(recentData, analysisvo.FieldLow, pivotPeriod)
 
 	// 4. Detect divergences using config values
-	bullishDivergences := analysissvc.FindBullishDivergences(lowPivots, rangeMin, rangeMax)
-	bearishDivergences := analysissvc.FindBearishDivergences(highPivots, rangeMin, rangeMax)
+	bullishDivergences := analysissvc.FindBullishDivergences(rsiLowPivots, rangeMin, rangeMax)
+	bearishDivergences := analysissvc.FindBearishDivergences(rsiHighPivots, rangeMin, rangeMax)
 
-	metrics.HasBullishRSI = len(bullishDivergences) > 0
-	metrics.HasBearishRSI = len(bearishDivergences) > 0
+	// Check divergence dates - use second pivot date (most recent point)
+	if len(bullishDivergences) > 0 {
+		latestDiv := bullishDivergences[0]
+		if isSignalWithinDays(latestDiv.SecondPivot.Date, signalThreshold) {
+			metrics.HasBullishRSI = true
+		}
+	}
+
+	if len(bearishDivergences) > 0 {
+		latestDiv := bearishDivergences[0]
+		if isSignalWithinDays(latestDiv.SecondPivot.Date, signalThreshold) {
+			metrics.HasBearishRSI = true
+		}
+	}
 
 	// 5. Build trendlines using config maxLines
-	supportTrendlines := analysissvc.BuildSupportTrendlines(lowPivots, maxLines)
-	resistanceTrendlines := analysissvc.BuildResistanceTrendlines(highPivots, maxLines)
+	supportTrendlines := analysissvc.BuildSupportTrendlines(priceLowPivots, maxLines)
+	resistanceTrendlines := analysissvc.BuildResistanceTrendlines(priceHighPivots, maxLines)
 
 	// 6. Generate signals
 	breakdownSignals := analysissvc.GenerateSupportSignals(supportTrendlines, recentData, proximityPct)
 	breakoutSignals := analysissvc.GenerateResistanceSignals(resistanceTrendlines, recentData, proximityPct)
 
-	// 7. Extract signal types
+	// 7. Extract signal types with date threshold check
 	for _, s := range breakdownSignals {
-		switch s.Type {
-		case analysisvo.BreakdownPotential:
-			metrics.HasBreakdownPotential = true
-		case analysisvo.BreakdownConfirmed:
-			metrics.HasBreakdownConfirmed = true
+		if isSignalWithinDays(s.Time, signalThreshold) {
+			switch s.Type {
+			case analysisvo.BreakdownPotential:
+				metrics.HasBreakdownPotential = true
+			case analysisvo.BreakdownConfirmed:
+				metrics.HasBreakdownConfirmed = true
+			}
 		}
 	}
 
 	for _, s := range breakoutSignals {
-		switch s.Type {
-		case analysisvo.BreakoutPotential:
-			metrics.HasBreakoutPotential = true
-		case analysisvo.BreakoutConfirmed:
-			metrics.HasBreakoutConfirmed = true
+		if isSignalWithinDays(s.Time, signalThreshold) {
+			switch s.Type {
+			case analysisvo.BreakoutPotential:
+				metrics.HasBreakoutPotential = true
+			case analysisvo.BreakoutConfirmed:
+				metrics.HasBreakoutConfirmed = true
+			}
 		}
 	}
+}
+
+// isSignalWithinDays checks if a date string (YYYY-MM-DD) is within threshold.
+func isSignalWithinDays(dateStr string, threshold time.Time) bool {
+	if dateStr == "" {
+		return false
+	}
+	signalDate, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return false
+	}
+	return signalDate.After(threshold) || signalDate.Equal(threshold)
 }

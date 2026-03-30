@@ -107,6 +107,10 @@ func (p *SSIProvider) FetchBars(
 		return nil, fmt.Errorf("SSI API returned error: code=%s, message=%s", chartResp.Code, chartResp.Message)
 	}
 
+	if len(chartResp.Data.Timestamps) == 0 {
+		return nil, fmt.Errorf("SSI API returned empty data")
+	}
+
 	result := TransformOHLCV(OHLCVData{
 		Timestamps: chartResp.Data.Timestamps,
 		Opens:      chartResp.Data.Opens,
