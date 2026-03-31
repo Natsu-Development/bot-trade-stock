@@ -174,7 +174,7 @@ func (c *Calculator) calculateVolumeSMA20(priceHistory []marketvo.MarketData) (c
 // RankAll assigns percentile ratings (1-99) based on relative position among all stocks.
 // Higher price ratio = better rank = higher percentile.
 // Stocks without enough data for a period (return = 0) get RS = 0 for that period.
-// Returns the metrics sorted by RS52W (best first), then by RS1M for stocks without RS52W.
+// Returns the metrics sorted by RS1M (best first).
 func (c *Calculator) RankAll(metrics []*metricsagg.StockMetrics) []*metricsagg.StockMetrics {
 	if len(metrics) == 0 {
 		return metrics
@@ -185,12 +185,8 @@ func (c *Calculator) RankAll(metrics []*metricsagg.StockMetrics) []*metricsagg.S
 		rankByFieldFiltered(metrics, cfg.getValue, cfg.hasData, cfg.setPercentile)
 	}
 
-	// Sort by RS52W for final output (best first)
-	// For stocks without RS52W (0), sort by RS1M as fallback
+	// Sort by RS1M for final output (best first)
 	sort.Slice(metrics, func(i, j int) bool {
-		if metrics[i].RS52W != metrics[j].RS52W {
-			return metrics[i].RS52W > metrics[j].RS52W
-		}
 		return metrics[i].RS1M > metrics[j].RS1M
 	})
 
