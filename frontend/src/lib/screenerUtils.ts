@@ -49,7 +49,7 @@ export function apiStockMetricsToStock(api: ApiStockMetrics): Stock {
 
   return {
     symbol: api.symbol,
-    name: api.symbol,
+    name: api.name ?? api.symbol, // Use actual name, fallback to symbol
     exchange: api.exchange as 'HOSE' | 'HNX' | 'UPCOM',
     rs1m: api.rs_1m,
     rs3m: api.rs_3m,

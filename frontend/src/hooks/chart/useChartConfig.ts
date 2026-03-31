@@ -62,7 +62,7 @@ export function useChartConfig(containerWidth: number, chartHeight: number, show
       },
     },
     crosshair: {
-      mode: CrosshairMode.Magnet,
+      mode: CrosshairMode.Normal, // Follow mouse freely like TradingView
       vertLine: {
         color: 'rgba(255, 255, 255, 0.3)',
         width: 1,

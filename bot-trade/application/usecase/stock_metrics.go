@@ -22,10 +22,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// SignalDaysThreshold defines how many days a signal is considered valid.
-// Signals older than this threshold result in false boolean flags.
-const SignalDaysThreshold = 50
-
 // Note: Retry logic for rate-limited requests (429) is handled at the HTTP transport layer
 // via infrastructure/http.RetryTransport. This keeps the usecase clean and focused on
 // business logic while making retry behavior reusable across all HTTP-based gateways.
@@ -39,6 +35,9 @@ type StockMetricsUseCase struct {
 	calculator *metricsservice.Calculator
 	configRepo outbound.ConfigRepository
 
+	// Signal threshold (days a signal is considered valid)
+	signalDaysThreshold int
+
 	// RAM cache
 	cachedMetrics []*metricsagg.StockMetrics
 	cachedAt      time.Time
@@ -50,12 +49,14 @@ func NewStockMetricsUseCase(
 	gateway outbound.MarketGateway,
 	repository outbound.StockMetricsRepository,
 	configRepo outbound.ConfigRepository,
+	signalDaysThreshold int,
 ) *StockMetricsUseCase {
 	return &StockMetricsUseCase{
-		gateway:    gateway,
-		repository: repository,
-		calculator: metricsservice.NewCalculator(),
-		configRepo: configRepo,
+		gateway:             gateway,
+		repository:          repository,
+		calculator:          metricsservice.NewCalculator(),
+		configRepo:          configRepo,
+		signalDaysThreshold: signalDaysThreshold,
 	}
 }
 
@@ -109,16 +110,25 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*dto.StockMetricsRe
 	)
 
 	// Step 4: Calculate metrics (usecase logic)
-	// Build a lookup map for exchange info
-	exchangeLookup := make(map[string]string, len(allStocks))
+	// Build a lookup map for exchange and name info
+	stockInfoLookup := make(map[string]struct {
+		exchange string
+		name     string
+	}, len(allStocks))
 	for _, stock := range allStocks {
-		exchangeLookup[string(stock.Symbol)] = string(stock.Exchange)
+		stockInfoLookup[string(stock.Symbol)] = struct {
+			exchange string
+			name     string
+		}{
+			exchange: string(stock.Exchange),
+			name:     stock.Name,
+		}
 	}
 
 	allMetrics := make([]*metricsagg.StockMetrics, 0, len(successData))
 	for symbol, data := range successData {
-		exchange := exchangeLookup[symbol]
-		metrics := uc.calculator.CalculateForStock(symbol, exchange, data)
+		info := stockInfoLookup[symbol]
+		metrics := uc.calculator.CalculateForStock(symbol, info.exchange, info.name, data)
 		if metrics != nil {
 			// Compute signals using system config if available
 			if systemConfig != nil {
@@ -314,7 +324,7 @@ func (uc *StockMetricsUseCase) computeSignals(
 	rangeMin := cfg.Divergence.RangeMin
 	rangeMax := cfg.Divergence.RangeMax
 	maxLines := cfg.Trendline.MaxLines
-	signalThreshold := time.Now().AddDate(0, 0, -SignalDaysThreshold)
+	signalThreshold := time.Now().AddDate(0, 0, -uc.signalDaysThreshold)
 
 	if len(priceHistory) < rsiPeriod+1 {
 		return

@@ -9,6 +9,7 @@ import (
 // StockMetrics represents comprehensive metrics for a single stock.
 type StockMetrics struct {
 	Symbol        marketvo.Symbol   `json:"symbol" bson:"symbol"`
+	Name          string            `json:"name" bson:"name"`         // Vietnamese stock name from listallstock
 	Exchange      marketvo.Exchange `json:"exchange" bson:"exchange"` // HOSE, HNX, UPCOM
 	RS1M          int               `json:"rs_1m" bson:"rs_1m"`       // 1-month percentile (1-99), 0 if not enough data
 	RS3M          int               `json:"rs_3m" bson:"rs_3m"`       // 3-month percentile (1-99), 0 if not enough data

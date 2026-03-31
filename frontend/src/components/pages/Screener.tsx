@@ -11,8 +11,10 @@ import { transformApiStocks } from '../../lib/screenerUtils'
 import { FilterBar } from '../screener/FilterBar'
 import { SaveFilterPresetDialog } from '../screener/SaveFilterPresetDialog'
 import { ScreenerResultsTable } from '../screener/ScreenerResultsTable'
+import { ColumnSelector } from '../screener/ColumnSelector'
 import { useScreenerFilters } from '../../hooks/screener/useScreenerFilters'
 import { useStockSelection } from '../../hooks/screener/useStockSelection'
+import { useTableColumns } from '../../hooks/useTableColumns'
 import { SearchBox } from '../features/SearchBox'
 import type { Stock } from '../../types'
 import { SCREENER_FIELD_OPTIONS, SCREENER_OPERATOR_OPTIONS } from '@/lib/screenerFilterOptions'
@@ -40,6 +42,14 @@ export function Screener() {
     handleDeletePreset,
     getFilterRequest,
   } = useScreenerFilters(activeExchange)
+
+  // Table column visibility
+  const {
+    visibleColumns,
+    toggleColumn,
+    resetToDefaults: resetColumns,
+    columnsByCategory,
+  } = useTableColumns()
 
   const sortedStocks = useMemo(() => {
     return [...stocks].sort((a, b) => a.symbol.localeCompare(b.symbol))
@@ -246,6 +256,12 @@ export function Screener() {
               >
                 <span>Add All</span>
               </Button>
+              <ColumnSelector
+                columnsByCategory={columnsByCategory}
+                visibleColumns={visibleColumns}
+                onToggle={toggleColumn}
+                onReset={resetColumns}
+              />
               <button
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] transition-colors [&_svg]:w-[16px] [&_svg]:h-[16px] [&_svg]:flex-shrink-0"
               >
@@ -278,6 +294,7 @@ export function Screener() {
             loading={loading}
             onToggleRow={handleToggleStockSelection}
             onToggleAll={handleToggleAllSelection}
+            visibleColumns={visibleColumns}
             noRowsMessage={
               deferredSymbolSearch.trim() && sortedStocks.length > 0
                 ? 'No symbols match your search.'

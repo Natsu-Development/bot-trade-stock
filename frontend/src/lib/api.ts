@@ -60,6 +60,7 @@ export function getConfigId(): string {
 // Types for stock metrics
 export interface ApiStockMetrics {
   symbol: string
+  name?: string // Vietnamese stock name from listallstock
   exchange: string
   rs_1m: number
   rs_3m: number

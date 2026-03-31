@@ -59,7 +59,7 @@ var periodRankingConfigs = []periodConfig{
 // Returns nil if there is insufficient data (less than MinDataPoints).
 // Calculates partial RS for periods with enough data, sets 0 for periods without enough data.
 // Percentile ratings are assigned later in RankAll based on relative position.
-func (c *Calculator) CalculateForStock(symbol, exchange string, priceHistory []marketvo.MarketData) *metricsagg.StockMetrics {
+func (c *Calculator) CalculateForStock(symbol, exchange, name string, priceHistory []marketvo.MarketData) *metricsagg.StockMetrics {
 	n := len(priceHistory)
 
 	if n < periodvo.MinDataPoints {
@@ -74,6 +74,7 @@ func (c *Calculator) CalculateForStock(symbol, exchange string, priceHistory []m
 
 	metrics := &metricsagg.StockMetrics{
 		Symbol:   marketvo.Symbol(symbol),
+		Name:     name,
 		Exchange: exch,
 	}
 
