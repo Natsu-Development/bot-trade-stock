@@ -14,7 +14,9 @@ COPY . .
 
 # Build argument for API URL (relative path for same-origin)
 ARG VITE_API_URL=/api
+ARG VITE_APP_VERSION=dev
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_APP_VERSION=$VITE_APP_VERSION
 
 # Build the application
 RUN yarn build
