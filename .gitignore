@@ -3,13 +3,16 @@
 .env.*
 !.env.example
 
-# AI Context Files
-.cursor/
-.kiro/
+# Frontend Build Artifacts
+frontend/dist/
+frontend/node_modules/
+trading-ui-preview.html
+node_modules/
 
 # Go Build Artifacts (only at root level of bot-trade)
 bot-trade/main
 bot-trade/server
+bot-trade/bin/
 *.test
 *.out
 tmp/
@@ -35,10 +38,17 @@ x``
 *.tmp
 *.bak
 
-# Ai - DLC
+# AI Context Files
 .cursor/
 .kiro/
 .claude/
 CLAUDE.md
 .review/
 bot-trade/review/
+
+# Playwright test files
+e2e/node_modules/
+e2e/playwright-report/
+e2e/test-results/
+e2e/screenshots/
+.playwright-mcp/

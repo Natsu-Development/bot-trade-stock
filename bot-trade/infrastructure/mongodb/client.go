@@ -33,4 +33,3 @@ func ConnectMongoDB(ctx context.Context, uri string, timeout time.Duration) (*mo
 
 	return client, nil
 }
-

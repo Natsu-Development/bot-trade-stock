@@ -1,0 +1,14 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://localhost:5173",
+      "localStorage": [
+        {
+          "name": "trading-app_config-id",
+          "value": "e2e_test_user"
+        }
+      ]
+    }
+  ]
+}

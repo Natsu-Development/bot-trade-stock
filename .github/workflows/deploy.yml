@@ -2,7 +2,7 @@ name: Build and Deploy Trading App
 
 on:
   push:
-    branches: [master, develop]
+    branches: [master]
   workflow_dispatch:
     inputs:
       environment:
@@ -19,8 +19,8 @@ jobs:
     environment: production
     outputs:
       docker-namespace: ${{ steps.config.outputs.DOCKER_NAMESPACE }}
-      broker-image: ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-broker:${{ github.sha }}
       bot-image: ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-bot:${{ github.sha }}
+      frontend-image: ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-frontend:${{ github.sha }}
 
     steps:
       - name: Checkout code
@@ -49,18 +49,6 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and push broker image
-        uses: docker/build-push-action@v5
-        with:
-          context: broker
-          file: broker/Dockerfile
-          push: true
-          tags: |
-            ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-broker:${{ github.sha }}
-            ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-broker:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
       - name: Build and push bot image
         uses: docker/build-push-action@v5
         with:
@@ -70,6 +58,28 @@ jobs:
           tags: |
             ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-bot:${{ github.sha }}
             ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-bot:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Get version from package.json
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' frontend/package.json)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-frontend:${{ github.sha }}
+            ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-frontend:latest
+            ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-frontend:v${{ steps.version.outputs.VERSION }}
+          build-args: |
+            VITE_API_URL=/api
+            VITE_APP_VERSION=${{ steps.version.outputs.VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -122,8 +132,8 @@ jobs:
             "git_ref": "${{ github.ref }}",
             "environment": "${{ github.ref_name == 'master' && 'production' || 'staging' }}",
             "images": {
-              "broker": "${{ needs.build-images.outputs.broker-image }}",
-              "bot": "${{ needs.build-images.outputs.bot-image }}"
+              "bot": "${{ needs.build-images.outputs.bot-image }}",
+              "frontend": "${{ needs.build-images.outputs.frontend-image }}"
             }
           }
           EOF

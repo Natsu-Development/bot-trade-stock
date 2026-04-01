@@ -4,24 +4,8 @@ include makefiles/common.mk
 
 # Development targets
 .PHONY: dev
-dev: proto-gen python-setup golang-dev
+dev: golang-dev
 	$(call print_success,"Development environment ready!")
-
-# Setup Python environment
-.PHONY: python-setup
-python-setup:
-	$(call print_header,"Setting up Python Environment")
-	@cd $(PYTHON_SERVICE_DIR) && \
-	python3 -m venv venv && \
-	./venv/bin/pip install --upgrade pip && \
-	./venv/bin/pip install -r requirements.txt
-	$(call print_success,"Python environment setup complete")
-
-# Run Python service standalone
-.PHONY: python
-python-run:
-	$(call print_header,"Starting Python gRPC Server")
-	@cd $(PYTHON_SERVICE_DIR) && ./venv/bin/python vnstock_server.py
 
 # Development mode - run Go service with hot reload
 .PHONY: golang-dev
@@ -54,26 +38,15 @@ clean-golang:
 	rm -f server
 	$(call print_success,"Go build artifacts cleaned")
 
-# Clean Python cache and virtual environment
-.PHONY: clean-python
-clean-python:
-	$(call print_info,"Cleaning Python artifacts...")
-	@cd $(PYTHON_SERVICE_DIR) && \
-	rm -rf venv/ && \
-	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
-	find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	$(call print_success,"Python artifacts cleaned")
-
 # Clean all development artifacts
 .PHONY: clean-dev
-clean-dev: clean-golang clean-python
+clean-dev: clean-golang
 	$(call print_success,"All development artifacts cleaned")
 
 # Stop all running services
 .PHONY: stop-services
 stop-services:
 	$(call print_warning,"Stopping all running services...")
-	@pkill -f "python.*vnstock_server.py" || true
 	@pkill -f "trading-bot" || true
 	@pkill -f "air" || true
 	$(call print_success,"All services stopped")
@@ -82,14 +55,6 @@ stop-services:
 .PHONY: dev-status
 dev-status:
 	$(call print_header,"Development Environment Status")
-	@echo "$(BLUE)Python Environment:$(NC)"
-	@if [ -d "$(PYTHON_SERVICE_DIR)/venv" ]; then \
-		echo "  $(GREEN)✅ Virtual environment exists$(NC)"; \
-		echo "  📍 Location: $(PYTHON_SERVICE_DIR)/venv"; \
-	else \
-		echo "  $(RED)❌ Virtual environment not found$(NC)"; \
-	fi
-	@echo ""
 	@echo "$(BLUE)Go Environment:$(NC)"
 	@if command -v go >/dev/null 2>&1; then \
 		echo "  $(GREEN)✅ Go installed:$(NC) $$(go version)"; \

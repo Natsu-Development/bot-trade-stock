@@ -1,8 +1,52 @@
 services:
+  # Nginx Reverse Proxy - Single entry point
+  nginx:
+    image: ${DOCKER_REGISTRY}/trading-frontend:${IMAGE_TAG:-latest}
+    container_name: trading-nginx
+    ports:
+      - "80:80"
+    depends_on:
+      bot-trade:
+        condition: service_healthy
+    networks:
+      - trading-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Go Trading Bot Service
+  bot-trade:
+    image: ${DOCKER_REGISTRY}/trading-bot:${IMAGE_TAG:-latest}
+    container_name: trading-bot
+    # Internal only - accessible via nginx
+    expose:
+      - "8080"
+    env_file:
+      - .env.secrets      # MongoDB credentials and URI
+      - .env.production   # All non-sensitive config
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - trading-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
   # MongoDB Database
   mongo:
     image: mongo:7
     container_name: trading-mongo
+    ports:
+      - "27017:27017"
     env_file:
       - .env.secrets
     environment:
@@ -20,46 +64,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-
-  # Python gRPC Stock Data Service
-  broker:
-    image: ${DOCKER_REGISTRY}/trading-broker:${IMAGE_TAG:-latest}
-    container_name: trading-broker
-    ports:
-      - "50051:50051"
-    networks:
-      - trading-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import grpc; channel = grpc.insecure_channel('localhost:50051'); channel.close()"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
-  # Go Trading Bot Service
-  bot-trade:
-    image: ${DOCKER_REGISTRY}/trading-bot:${IMAGE_TAG:-latest}
-    container_name: trading-bot
-    ports:
-      - "8080:8080"
-    env_file:
-      - .env.secrets      # MongoDB credentials and URI
-      - .env.production   # All non-sensitive config
-    depends_on:
-      mongo:
-        condition: service_healthy
-      broker:
-        condition: service_healthy
-    networks:
-      - trading-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8080/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
 
 networks:
   trading-network:

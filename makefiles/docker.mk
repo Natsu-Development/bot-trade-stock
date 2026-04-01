@@ -9,7 +9,6 @@ docker-up:
 	@docker-compose -f $(DOCKER_COMPOSE_FILE) up -d
 	$(call print_success,"Docker containers started")
 	$(call print_info,"Access API at: http://localhost:8080")
-	$(call print_info,"gRPC Broker at: localhost:50051")
 
 # Build Docker images
 .PHONY: docker-build
@@ -52,12 +51,6 @@ docker-logs-bot:
 	$(call print_info,"Showing bot-trade service logs (Ctrl+C to exit)...")
 	@docker-compose -f $(DOCKER_COMPOSE_FILE) logs -f bot-trade
 
-# View Docker logs for broker service
-.PHONY: docker-logs-broker
-docker-logs-broker:
-	$(call print_info,"Showing broker service logs (Ctrl+C to exit)...")
-	@docker-compose -f $(DOCKER_COMPOSE_FILE) logs -f broker
-
 # Show Docker container status
 .PHONY: docker-ps
 docker-ps:
@@ -76,12 +69,6 @@ docker-restart:
 docker-shell-bot:
 	$(call print_info,"Opening shell in bot-trade container...")
 	@docker-compose -f $(DOCKER_COMPOSE_FILE) exec bot-trade sh
-
-# Execute shell in broker container
-.PHONY: docker-shell-broker
-docker-shell-broker:
-	$(call print_info,"Opening shell in broker container...")
-	@docker-compose -f $(DOCKER_COMPOSE_FILE) exec broker bash
 
 # Test API health and endpoints
 .PHONY: docker-test
@@ -127,6 +114,5 @@ docker-update:
 docker-backup:
 	$(call print_header,"Creating Docker Backup")
 	@mkdir -p backups
-	@docker-compose -f $(DOCKER_COMPOSE_FILE) exec -T broker tar czf - /app > backups/broker-backup-$$(date +%Y%m%d-%H%M%S).tar.gz || true
 	@docker-compose -f $(DOCKER_COMPOSE_FILE) exec -T bot-trade tar czf - /root > backups/bot-trade-backup-$$(date +%Y%m%d-%H%M%S).tar.gz || true
 	$(call print_success,"Docker backup completed in backups/ directory")

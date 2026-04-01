@@ -1,0 +1,22 @@
+{
+  "name": "trading-app-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:screenshot": "playwright test --project=chromium",
+    "test:dashboard": "playwright test dashboard/",
+    "test:screener": "playwright test screener/",
+    "test:divergence": "playwright test divergence/",
+    "test:config": "playwright test config/",
+    "test:all-pages": "playwright test dashboard/ screener/ divergence/ config/",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.1",
+    "tsx": "^4.21.0"
+  }
+}

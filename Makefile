@@ -5,14 +5,13 @@
 include makefiles/common.mk
 include makefiles/development.mk
 include makefiles/docker.mk
-include makefiles/proto.mk
 
 # Default target
 .DEFAULT_GOAL := help
 
 # Project setup - complete initialization
 .PHONY: setup
-setup: proto-check-deps python-setup proto-gen install-dev-deps
+setup: install-dev-deps
 	$(call print_header,"Project Setup Complete")
 	$(call print_success,"Trading project is ready for development!")
 	$(call print_info,"Run 'make dev' to start development environment")
@@ -28,7 +27,7 @@ start-docker: docker-up
 
 # Complete project cleanup
 .PHONY: clean
-clean: clean-dev proto-clean docker-clean
+clean: clean-dev docker-clean
 	$(call print_header,"Complete Project Cleanup")
 	@rm -rf reports/ backups/ logs/
 	$(call print_success,"Project cleaned completely")
@@ -38,8 +37,6 @@ clean: clean-dev proto-clean docker-clean
 status:
 	$(call print_header,"Trading Project Status")
 	@make -s dev-status
-	@echo ""
-	@make -s proto-status
 	@echo ""
 	@make -s docker-ps 2>/dev/null || echo "$(YELLOW)⚠️  Docker services not running$(NC)"
 
@@ -53,9 +50,7 @@ help:
 	@echo "  $(GREEN)start-docker$(NC)   - Start with Docker containers"
 	@echo ""
 	@echo "$(CYAN)📦 Development:$(NC)"
-	@echo "  $(GREEN)dev$(NC)            - Setup and start development environment"
-	@echo "  $(GREEN)python-setup$(NC)   - Setup Python virtual environment"
-	@echo "  $(GREEN)python-run$(NC)     - Run Python gRPC server"
+	@echo "  $(GREEN)dev$(NC)            - Start development environment with hot reload"
 	@echo "  $(GREEN)golang-dev$(NC)     - Start Go service with hot reload"
 	@echo "  $(GREEN)golang-build$(NC)   - Build Go service"
 	@echo "  $(GREEN)golang-run$(NC)     - Run Go service"
@@ -71,26 +66,16 @@ help:
 	@echo "  $(GREEN)docker-test$(NC)    - Test API endpoints"
 	@echo "  $(GREEN)docker-clean$(NC)   - Clean all Docker resources"
 	@echo ""
-	@echo "$(CYAN)🔧 Protocol Buffers:$(NC)"
-	@echo "  $(GREEN)proto-gen$(NC)      - Generate protobuf files"
-	@echo "  $(GREEN)proto-clean$(NC)    - Clean generated protobuf files"
-	@echo "  $(GREEN)proto-lint$(NC)     - Lint protobuf files"
-	@echo "  $(GREEN)proto-format$(NC)   - Format protobuf files"
-	@echo ""
 	@echo "$(CYAN)🧪 Testing & Quality:$(NC)"
 	@echo "  $(GREEN)test$(NC)           - Run all tests"
 	@echo "  $(GREEN)test-go$(NC)        - Run Go tests"
-	@echo "  $(GREEN)test-python$(NC)    - Run Python tests"
 	@echo "  $(GREEN)lint$(NC)           - Run all linting"
 	@echo "  $(GREEN)format$(NC)         - Format all code"
-	@echo "  $(GREEN)quality-check$(NC)  - Comprehensive quality check"
-	@echo "  $(GREEN)coverage-report$(NC) - Generate test coverage reports"
 	@echo ""
 	@echo "$(CYAN)🧹 Cleanup:$(NC)"
 	@echo "  $(GREEN)clean$(NC)          - Complete project cleanup"
 	@echo "  $(GREEN)clean-dev$(NC)      - Clean development artifacts"
 	@echo "  $(GREEN)clean-golang$(NC)   - Clean Go build artifacts"
-	@echo "  $(GREEN)clean-python$(NC)   - Clean Python artifacts"
 	@echo ""
 	@echo "$(CYAN)ℹ️  Information:$(NC)"
 	@echo "  $(GREEN)status$(NC)         - Show project status"
@@ -110,7 +95,5 @@ version:
 	@echo "$(BLUE)System Information:$(NC)"
 	@echo "  🖥️  OS: $$(uname -s) $$(uname -r)"
 	@echo "  🐹 Go: $$(go version 2>/dev/null || echo 'Not installed')"
-	@echo "  🐍 Python: $$(python3 --version 2>/dev/null || echo 'Not installed')"
 	@echo "  🐳 Docker: $$(docker --version 2>/dev/null || echo 'Not installed')"
 	@echo "  🔧 Docker Compose: $$(docker-compose --version 2>/dev/null || echo 'Not installed')"
-	@echo "  📦 Buf: $$(buf --version 2>/dev/null || echo 'Not installed')"
