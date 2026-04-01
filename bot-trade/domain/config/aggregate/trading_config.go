@@ -239,10 +239,6 @@ func (c *TradingConfig) Validate() error {
 		errs = append(errs, err.Error())
 	}
 
-	if len(c.BearishSymbols) == 0 && len(c.BullishSymbols) == 0 {
-		errs = append(errs, "at least one of bearish_symbols or bullish_symbols must contain symbols")
-	}
-
 	if len(errs) > 0 {
 		return shared.NewValidationError(errs...)
 	}
