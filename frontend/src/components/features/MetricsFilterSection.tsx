@@ -12,8 +12,8 @@ import {
   SCREENER_FIELD_OPTIONS,
   SCREENER_OPERATOR_OPTIONS,
   isValidFilterOperator,
+  isSignalField,
 } from '@/lib/screenerFilterOptions'
-import { generateId } from '@/lib/id'
 import type { DynamicFilter, FilterFieldOption, FilterField, FilterOperator } from '@/types'
 
 interface MetricsFilterSectionProps {
@@ -36,11 +36,11 @@ export function MetricsFilterSection({ filters, onUpdate }: MetricsFilterSection
         name: editingPreset.name,
         logic: editingPreset.logic || 'and',
         exchanges: editingPreset.exchanges || [],
-        filters: editingPreset.filters.map((f, index) => ({
-          id: generateId() + index,
+        filters: editingPreset.filters.map((f, index): DynamicFilter => ({
+          id: String(index),
           field: f.field as FilterField,
           operator: f.op as FilterOperator,
-          value: f.value,
+          value: f.value ?? '',
         })),
         editingPreset,
       }
@@ -85,12 +85,26 @@ export function MetricsFilterSection({ filters, onUpdate }: MetricsFilterSection
     const newPreset: ScreenerFilterPreset = {
       name: data.name.trim(),
       filters: data.filters
-        .filter(f => f.value !== '' && !isNaN(Number(f.value)) && isValidFilterOperator(f.operator))
-        .map(f => ({
-          field: f.field,
-          op: f.operator,
-          value: Number(f.value),
-        })),
+        .filter(f => {
+          if (isSignalField(f.field)) {
+            return typeof f.value === 'boolean'
+          }
+          return f.value !== '' && !isNaN(Number(f.value)) && isValidFilterOperator(f.operator)
+        })
+        .map(f => {
+          if (isSignalField(f.field)) {
+            return {
+              field: f.field,
+              op: '=',
+              value: f.value as boolean,
+            }
+          }
+          return {
+            field: f.field,
+            op: f.operator,
+            value: Number(f.value),
+          }
+        }),
       logic: data.logic,
       exchanges: data.exchanges.length > 0 ? data.exchanges : undefined,
       created_at: data.editingPreset?.created_at || new Date().toISOString(),

@@ -60,6 +60,7 @@ export function getConfigId(): string {
 // Types for stock metrics
 export interface ApiStockMetrics {
   symbol: string
+  name?: string // Vietnamese stock name from listallstock
   exchange: string
   rs_1m: number
   rs_3m: number
@@ -75,11 +76,26 @@ export interface ApiStockMetrics {
     p9: number
     p12: number
   }
+  // Price metrics
+  current_price: number
+  price_change_pct: number
+  // Moving averages
+  ema_9: number
+  ema_21: number
+  ema_50: number
+  sma_200: number
+  // Signal metrics
+  has_breakout_potential?: boolean
+  has_breakout_confirmed?: boolean
+  has_breakdown_potential?: boolean
+  has_breakdown_confirmed?: boolean
+  has_bullish_rsi?: boolean
+  has_bearish_rsi?: boolean
 }
 
 export interface ScreenerFilterPreset {
   name: string
-  filters: Array<{ field: string; op: string; value: number }>
+  filters: Array<{ field: string; op: string; value?: number | boolean }>
   logic: 'and' | 'or'
   exchanges?: string[]
   created_at: string
@@ -89,7 +105,7 @@ export interface ApiFilterRequest {
   filters?: Array<{
     field: string
     op: string
-    value: number
+    value?: number | boolean
   }>
   logic?: 'and' | 'or'
   exchanges?: string[]

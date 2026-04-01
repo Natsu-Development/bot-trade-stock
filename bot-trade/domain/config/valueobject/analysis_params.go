@@ -25,8 +25,14 @@ func (d *Divergence) Validate() error {
 
 // Trendline holds configuration for trendline building and signal generation.
 type Trendline struct {
-	MaxLines         int     `bson:"max_lines"`                 // Maximum number of lines to keep per direction
+	MaxLines         int     `bson:"max_lines"`
 	ProximityPercent float64 `bson:"proximity_percent"` // Percentage distance from price to trendline for signal generation
+}
+
+// ProximityDecimal returns the proximity percentage as a decimal (e.g., 3% → 0.03).
+// Use this for calculations in domain services.
+func (t *Trendline) ProximityDecimal() float64 {
+	return t.ProximityPercent / 100.0
 }
 
 // Validate checks trendline invariants.

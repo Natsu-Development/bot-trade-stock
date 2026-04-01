@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"bot-trade/application/dto"
 	"bot-trade/application/port/inbound"
 	filtervo "bot-trade/domain/shared/valueobject/filter"
 	marketvo "bot-trade/domain/shared/valueobject/market"
@@ -66,8 +67,8 @@ func (h *StockHandler) GetCacheInfo(c *gin.Context) {
 // Logic: "and" (all conditions must match) or "or" (any condition must match)
 // Exchanges: optional filter by exchanges (HOSE, HNX, UPCOM)
 func (h *StockHandler) FilterStocks(c *gin.Context) {
-	var filter filtervo.StockFilter
-	if err := c.ShouldBindJSON(&filter); err != nil {
+	var req dto.StockFilterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Invalid request body",
 			"details": err.Error(),
@@ -83,8 +84,23 @@ func (h *StockHandler) FilterStocks(c *gin.Context) {
 		return
 	}
 
-	// Execute filter (validation already performed during JSON unmarshaling)
-	result, err := h.stockMetrics.Filter(c.Request.Context(), &filter)
+	// Convert DTO to domain value object
+	filter, err := req.ToDomain()
+	if err != nil {
+		// Include helpful hints for validation errors
+		resp := gin.H{
+			"error":           "Invalid filter parameters",
+			"details":         err.Error(),
+			"valid_fields":    filtervo.ValidFilterFields(),
+			"valid_operators": filtervo.ValidFilterOperators(),
+			"valid_exchanges": exchangesList(),
+		}
+		c.JSON(http.StatusBadRequest, resp)
+		return
+	}
+
+	// Execute filter
+	result, err := h.stockMetrics.Filter(c.Request.Context(), filter)
 	if err != nil {
 		if errors.Is(err, inbound.ErrCacheNotReady) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
@@ -93,15 +109,10 @@ func (h *StockHandler) FilterStocks(c *gin.Context) {
 			})
 			return
 		}
-		// Include helpful hints for validation errors from domain layer
-		resp := gin.H{
-			"error":           "Failed to filter stocks",
-			"details":         err.Error(),
-			"valid_fields":    filtervo.ValidFilterFields(),
-			"valid_operators": filtervo.ValidFilterOperators(),
-			"valid_exchanges": exchangesList(),
-		}
-		c.JSON(http.StatusBadRequest, resp)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to filter stocks",
+			"details": err.Error(),
+		})
 		return
 	}
 

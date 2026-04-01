@@ -1,6 +1,6 @@
 import type { DynamicFilter, Stock } from '../types'
 import type { ApiFilterRequest, ApiStockMetrics } from './api'
-import { isValidFilterOperator } from './screenerFilterOptions'
+import { isValidFilterOperator, isSignalField } from './screenerFilterOptions'
 
 /**
  * Map dynamic filters to API filter format
@@ -11,17 +11,28 @@ export function mapFiltersToApiFormat(
   filterLogic: 'and' | 'or'
 ): ApiFilterRequest {
   const filters = dynamicFilters
-    .filter(
-      f =>
-        f.value !== '' &&
-        !isNaN(Number(f.value)) &&
-        isValidFilterOperator(f.operator)
-    )
-    .map(f => ({
-      field: f.field,
-      op: f.operator,
-      value: Number(f.value),
-    }))
+    .filter(f => {
+      // Signal fields need boolean values
+      if (isSignalField(f.field)) {
+        return typeof f.value === 'boolean'
+      }
+      // Numeric fields need valid numbers
+      return f.value !== '' && !isNaN(Number(f.value)) && isValidFilterOperator(f.operator)
+    })
+    .map(f => {
+      if (isSignalField(f.field)) {
+        return {
+          field: f.field,
+          op: '=',
+          value: f.value as boolean,
+        }
+      }
+      return {
+        field: f.field,
+        op: f.operator,
+        value: Number(f.value),
+      }
+    })
 
   return {
     filters,
@@ -38,7 +49,7 @@ export function apiStockMetricsToStock(api: ApiStockMetrics): Stock {
 
   return {
     symbol: api.symbol,
-    name: api.symbol,
+    name: api.name ?? api.symbol, // Use actual name, fallback to symbol
     exchange: api.exchange as 'HOSE' | 'HNX' | 'UPCOM',
     rs1m: api.rs_1m,
     rs3m: api.rs_3m,
@@ -48,8 +59,23 @@ export function apiStockMetricsToStock(api: ApiStockMetrics): Stock {
     currentVolume: api.current_volume,
     volumeSma20: api.volume_sma20,
     volume: volumeVsSma > 0 ? `+${volumeVsSma.toFixed(1)}%` : `${volumeVsSma.toFixed(1)}%`,
-    price: 0,
-    change: 0,
+    // Price metrics
+    price: api.current_price,
+    change: api.price_change_pct,
+    currentPrice: api.current_price,
+    priceChangePct: api.price_change_pct,
+    // Moving averages
+    ema9: api.ema_9,
+    ema21: api.ema_21,
+    ema50: api.ema_50,
+    sma200: api.sma_200,
+    // Signal metrics
+    hasBreakoutPotential: api.has_breakout_potential,
+    hasBreakoutConfirmed: api.has_breakout_confirmed,
+    hasBreakdownPotential: api.has_breakdown_potential,
+    hasBreakdownConfirmed: api.has_breakdown_confirmed,
+    hasBullishRSI: api.has_bullish_rsi,
+    hasBearishRSI: api.has_bearish_rsi,
   }
 }
 

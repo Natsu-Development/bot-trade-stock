@@ -52,7 +52,7 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 
 	// Use Cases
 	configUC := usecase.NewConfigUseCase(configRepo)
-	stockMetricsUC := usecase.NewStockMetricsUseCase(gateway, stockMetricsRepo)
+	stockMetricsUC := usecase.NewStockMetricsUseCase(gateway, stockMetricsRepo, configRepo, cfg.SignalDaysThreshold)
 
 	// Load cached data on startup
 	loadCtx, loadCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -79,7 +79,6 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 
 	// Build job dependencies
 	jobDeps := jobsRegistry.JobDependencies{
-		Analyzer:            analyzer,
 		Preparer:            dataPreparer,
 		BullishRSIUC:        bullishRSIUC,
 		BearishRSIUC:        bearishRSIUC,

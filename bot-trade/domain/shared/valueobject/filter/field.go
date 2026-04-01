@@ -28,11 +28,34 @@ const (
 	FieldVolumeVsSMA   FilterField = "volume_vs_sma"
 	FieldCurrentVolume FilterField = "current_volume"
 	FieldVolumeSMA20   FilterField = "volume_sma20"
+
+	// Price fields
+	FieldCurrentPrice   FilterField = "current_price"
+	FieldPriceChangePct FilterField = "price_change_pct"
+
+	// Moving average fields
+	FieldEMA9   FilterField = "ema_9"
+	FieldEMA21  FilterField = "ema_21"
+	FieldEMA50  FilterField = "ema_50"
+	FieldSMA200 FilterField = "sma_200"
+
+	// Signal fields (boolean)
+	FieldHasBreakoutPotential  FilterField = "has_breakout_potential"
+	FieldHasBreakoutConfirmed  FilterField = "has_breakout_confirmed"
+	FieldHasBreakdownPotential FilterField = "has_breakdown_potential"
+	FieldHasBreakdownConfirmed FilterField = "has_breakdown_confirmed"
+	FieldHasBullishRSI         FilterField = "has_bullish_rsi"
+	FieldHasBearishRSI         FilterField = "has_bearish_rsi"
 )
 
 var validFields = []FilterField{
 	FieldRS1M, FieldRS3M, FieldRS6M, FieldRS9M, FieldRS52W,
 	FieldVolumeVsSMA, FieldCurrentVolume, FieldVolumeSMA20,
+	FieldCurrentPrice, FieldPriceChangePct,
+	FieldEMA9, FieldEMA21, FieldEMA50, FieldSMA200,
+	FieldHasBreakoutPotential, FieldHasBreakoutConfirmed,
+	FieldHasBreakdownPotential, FieldHasBreakdownConfirmed,
+	FieldHasBullishRSI, FieldHasBearishRSI,
 }
 
 func isValidFilterField(f FilterField) bool {
@@ -68,6 +91,18 @@ func ValidFilterFields() []string {
 // String returns the string representation of the field.
 func (f FilterField) String() string {
 	return string(f)
+}
+
+// IsMovingAverage returns true if the field is a moving average type.
+func (f FilterField) IsMovingAverage() bool {
+	return f == FieldEMA9 || f == FieldEMA21 || f == FieldEMA50 || f == FieldSMA200
+}
+
+// IsSignal returns true if the field is a signal type (boolean).
+func (f FilterField) IsSignal() bool {
+	return f == FieldHasBreakoutPotential || f == FieldHasBreakoutConfirmed ||
+		f == FieldHasBreakdownPotential || f == FieldHasBreakdownConfirmed ||
+		f == FieldHasBullishRSI || f == FieldHasBearishRSI
 }
 
 // MarshalJSON implements json.Marshaler for FilterField.

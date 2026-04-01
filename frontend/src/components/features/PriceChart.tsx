@@ -15,7 +15,7 @@ import { useChartControls } from '@/hooks/chart/useChartControls'
 import { useChartKeyboard } from '@/hooks/chart/useChartKeyboard'
 import { ChartControls } from '@/components/chart/ChartControls'
 import { ChartLegend } from '@/components/chart/ChartLegend'
-import { CrosshairOverlay } from '@/components/chart/CrosshairOverlay'
+import { CrosshairOverlay, type CrosshairOverlayRef } from '@/components/chart/CrosshairOverlay'
 import { ChartShortcutsHint } from '@/components/chart/ChartShortcutsHint'
 import type { ChartTime, ChartCandlestickData, ChartLineData } from '@/types/chart'
 
@@ -83,17 +83,13 @@ function PriceChartComponent({
   const trendlineSeriesRef = useRef<ISeriesApi<'Line'>[]>([])
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
   const rsiSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const crosshairOverlayRef = useRef<CrosshairOverlayRef>(null)
 
   const [chartHeight, setChartHeight] = useState(400)
   const [showTrendlines, setShowTrendlines] = useState(true)
   const [showSignals, setShowSignals] = useState(true)
   const showVolume = true // Always show volume
   const [showRsi, setShowRsi] = useState(false)
-  const [crosshairInfo, setCrosshairInfo] = useState<{
-    time?: string
-    price?: number
-    OHLC?: { open: number; high: number; low: number; close: number }
-  }>({})
 
   // Chart configuration hook
   const { totalHeight, volumeScaleMargins, chartOptions } = useChartConfig(
@@ -169,7 +165,7 @@ function PriceChartComponent({
 
     chartRef.current = chart
 
-    // Add candlestick series
+    // Add candlestick series with current price line (like TradingView)
     const candlestickSeries = chart.addCandlestickSeries({
       upColor: '#10b981',
       downColor: '#ef4444',
@@ -179,7 +175,11 @@ function PriceChartComponent({
       wickDownColor: '#ef4444',
       borderVisible: true,
       wickVisible: true,
-      priceScaleId: '',
+      lastValueVisible: true, // Show current price tag on y-axis
+      priceLineVisible: true, // Show horizontal line at current price
+      priceLineWidth: 1,
+      priceLineColor: '#2962FF',
+      priceLineStyle: 2, // Dashed line
     })
 
     candlestickSeriesRef.current = candlestickSeries
@@ -220,16 +220,18 @@ function PriceChartComponent({
       },
     })
 
-    // Subscribe to crosshair moves
+    // Subscribe to crosshair moves - update via ref for zero-delay performance (like TradingView)
     chart.subscribeCrosshairMove((param) => {
+      if (!crosshairOverlayRef.current) return
+
       if (!param.point || !param.time) {
-        setCrosshairInfo({})
+        crosshairOverlayRef.current.update({})
         return
       }
 
       const candleData = param.seriesData.get(candlestickSeries) as CandlestickData | undefined
       if (candleData) {
-        setCrosshairInfo({
+        crosshairOverlayRef.current.update({
           time: param.time as string,
           price: param.logical as number,
           OHLC: {
@@ -332,7 +334,6 @@ function PriceChartComponent({
         priceLineVisible: false,
         lastValueVisible: true,
         pointMarkersVisible: false,
-        priceScaleId: '',
       })
 
       const startDate = new Date(trendline.start_date).getTime()
@@ -453,7 +454,7 @@ function PriceChartComponent({
           <div className="relative">
             <div ref={chartContainerRef} className="w-full rounded-lg overflow-hidden" data-testid="chart-container" />
 
-            <CrosshairOverlay crosshairInfo={crosshairInfo} />
+            <CrosshairOverlay ref={crosshairOverlayRef} />
             <ChartShortcutsHint />
           </div>
 

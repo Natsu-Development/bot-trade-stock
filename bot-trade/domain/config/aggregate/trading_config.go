@@ -222,11 +222,6 @@ func (c *TradingConfig) Validate() error {
 		return shared.NewValidationError("pivot_period is required")
 	}
 
-	var emptyOffset market.LookbackDay
-	if c.LookbackDay == emptyOffset {
-		return shared.NewValidationError("lookback_day is required")
-	}
-
 	// IndicesRecent is optional, but if set must be valid
 	var emptyIndices valueobject.IndicesRecent
 	if c.IndicesRecent != emptyIndices && c.IndicesRecent < 1 {

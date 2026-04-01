@@ -65,3 +65,46 @@ func rsiValue(avgGain, avgLoss float64) float64 {
 	}
 	return 100.0 - (100.0 / (1.0 + avgGain/avgLoss))
 }
+
+// CalculateSMA computes Simple Moving Average for the given period.
+// Returns the SMA value for the most recent data point, or 0 if insufficient data.
+func CalculateSMA(data []marketvo.MarketData, period int) float64 {
+	n := len(data)
+	if n < period {
+		return 0
+	}
+
+	var sum float64
+	for i := n - period; i < n; i++ {
+		sum += data[i].Close
+	}
+	return sum / float64(period)
+}
+
+// CalculateEMA computes Exponential Moving Average for the given period.
+// Uses standard EMA formula: EMA = Close * k + EMA_prev * (1 - k)
+// where k = 2 / (period + 1)
+// Returns 0 if insufficient data.
+func CalculateEMA(data []marketvo.MarketData, period int) float64 {
+	n := len(data)
+	if n < period {
+		return 0
+	}
+
+	// Smoothing factor
+	k := 2.0 / float64(period+1)
+
+	// Start with SMA for the first EMA value
+	var sum float64
+	for i := 0; i < period; i++ {
+		sum += data[i].Close
+	}
+	ema := sum / float64(period)
+
+	// Apply EMA formula for remaining data
+	for i := period; i < n; i++ {
+		ema = data[i].Close*k + ema*(1-k)
+	}
+
+	return ema
+}

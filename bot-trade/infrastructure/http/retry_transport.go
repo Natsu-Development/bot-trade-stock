@@ -2,6 +2,7 @@
 package http
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -63,14 +64,24 @@ func NewRetryTransport(base http.RoundTripper, opts ...RetryTransportOption) *Re
 }
 
 // RoundTrip executes a single HTTP transaction with retry logic for 429 responses.
-// It implements the http.RoundTripper interface.
+// After exhausting retries, returns the 429 response so providers can handle rate limiting.
 func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	var lastResp *http.Response
 	var lastErr error
 
 	for attempt := 0; attempt <= t.maxRetries; attempt++ {
-		// Clone request for retry (body needs to be re-readable)
+		// Clone request for retry
 		clonedReq := req.Clone(req.Context())
+
+		// Reset body for requests with body (POST, PUT, PATCH).
+		// GetBody is nil for bodyless requests (GET, DELETE) - no action needed.
+		// This ensures each retry gets a fresh, unread body reader.
+		if clonedReq.GetBody != nil {
+			body, err := clonedReq.GetBody()
+			if err != nil {
+				return nil, fmt.Errorf("failed to reset request body: %w", err)
+			}
+			clonedReq.Body = body
+		}
 
 		resp, err := t.base.RoundTrip(clonedReq)
 
@@ -83,11 +94,10 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		// Check for rate limit response
 		if resp.StatusCode == http.StatusTooManyRequests {
-			// Close the response body to avoid resource leaks
-			resp.Body.Close()
-			lastResp = resp
-
 			if attempt < t.maxRetries {
+				// Close body before retry to release connection
+				resp.Body.Close()
+
 				backoff := t.getBackoff(attempt)
 				zap.L().Debug("Rate limited (429), retrying",
 					zap.String("url", req.URL.String()),
@@ -104,8 +114,9 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 				}
 			}
 
-			// Max retries exceeded
-			zap.L().Warn("Max retries exceeded for rate-limited request",
+			// Max retries exceeded - return 429 response with body intact
+			// Provider will read body via HandleHTTPError and return contract.ErrRateLimited
+			zap.L().Warn("Max retries exceeded for rate-limited request, returning 429 to provider",
 				zap.String("url", req.URL.String()),
 				zap.Int("attempts", t.maxRetries+1),
 			)
@@ -116,10 +127,6 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return resp, nil
 	}
 
-	// Return last response or error
-	if lastResp != nil {
-		return lastResp, nil
-	}
 	return nil, lastErr
 }
 

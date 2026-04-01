@@ -3,14 +3,19 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"bot-trade/application/dto"
 	"bot-trade/application/port/inbound"
 	"bot-trade/application/port/outbound"
+	analysissvc "bot-trade/domain/analysis/service"
+	analysisvo "bot-trade/domain/analysis/valueobject"
+	configagg "bot-trade/domain/config/aggregate"
 	metricsagg "bot-trade/domain/metrics/aggregate"
 	metricsservice "bot-trade/domain/metrics/service"
+	sharedservice "bot-trade/domain/shared/service"
 	filtervo "bot-trade/domain/shared/valueobject/filter"
 	marketvo "bot-trade/domain/shared/valueobject/market"
 
@@ -21,14 +26,6 @@ import (
 // via infrastructure/http.RetryTransport. This keeps the usecase clean and focused on
 // business logic while making retry behavior reusable across all HTTP-based gateways.
 
-const (
-	// Stock metrics requires ~400 days (1.5 trading years) for RS Rating calculations.
-	// This is intentionally separate from TradingConfig.LookbackDay which is for
-	// divergence/trendline analysis (typically 30-90 days).
-	stockMetricsDateRangeDays = 400 // Days of price history fetched per stock (covers ~1.5 trading years)
-	maxFailedLogSamples       = 20  // Maximum failed-stock entries shown in the refresh summary log
-)
-
 var _ inbound.StockMetricsManager = (*StockMetricsUseCase)(nil)
 
 // StockMetricsUseCase orchestrates the stock metrics calculation for all stocks.
@@ -36,6 +33,10 @@ type StockMetricsUseCase struct {
 	gateway    outbound.MarketGateway
 	repository outbound.StockMetricsRepository
 	calculator *metricsservice.Calculator
+	configRepo outbound.ConfigRepository
+
+	// Signal threshold (days a signal is considered valid)
+	signalDaysThreshold int
 
 	// RAM cache
 	cachedMetrics []*metricsagg.StockMetrics
@@ -47,11 +48,15 @@ type StockMetricsUseCase struct {
 func NewStockMetricsUseCase(
 	gateway outbound.MarketGateway,
 	repository outbound.StockMetricsRepository,
+	configRepo outbound.ConfigRepository,
+	signalDaysThreshold int,
 ) *StockMetricsUseCase {
 	return &StockMetricsUseCase{
-		gateway:    gateway,
-		repository: repository,
-		calculator: metricsservice.NewCalculator(),
+		gateway:             gateway,
+		repository:          repository,
+		calculator:          metricsservice.NewCalculator(),
+		configRepo:          configRepo,
+		signalDaysThreshold: signalDaysThreshold,
 	}
 }
 
@@ -59,6 +64,15 @@ func NewStockMetricsUseCase(
 func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*dto.StockMetricsResult, error) {
 	startTime := time.Now()
 	zap.L().Info("Starting stock metrics refresh for all exchanges")
+
+	// Fetch system config for signal computation and data range
+	systemConfig, err := uc.configRepo.GetByID(ctx, "system")
+	if err != nil {
+		zap.L().Warn("System config not found, signal computation will be skipped",
+			zap.Error(err),
+			zap.String("hint", "Create a config with _id='system' to enable signals"),
+		)
+	}
 
 	// Step 1: List all stocks (check for optional capability)
 	stockLister, ok := uc.gateway.(outbound.StockLister)
@@ -77,7 +91,7 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*dto.StockMetricsRe
 	// Step 2: Build queries (usecase logic - no exchange field needed)
 	queries := make([]marketvo.MarketDataQuery, 0, len(allStocks))
 	for _, stock := range allStocks {
-		query, err := marketvo.NewMarketDataQueryFromStrings(string(stock.Symbol), "", "1D", marketvo.LookbackDay(stockMetricsDateRangeDays))
+		query, err := marketvo.NewMarketDataQueryFromStrings(string(stock.Symbol), "", "1D", marketvo.LookbackDay(systemConfig.LookbackDay))
 		if err != nil {
 			zap.L().Warn("Invalid query", zap.String("symbol", string(stock.Symbol)), zap.Error(err))
 			continue
@@ -96,17 +110,30 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*dto.StockMetricsRe
 	)
 
 	// Step 4: Calculate metrics (usecase logic)
-	// Build a lookup map for exchange info
-	exchangeLookup := make(map[string]string, len(allStocks))
+	// Build a lookup map for exchange and name info
+	stockInfoLookup := make(map[string]struct {
+		exchange string
+		name     string
+	}, len(allStocks))
 	for _, stock := range allStocks {
-		exchangeLookup[string(stock.Symbol)] = string(stock.Exchange)
+		stockInfoLookup[string(stock.Symbol)] = struct {
+			exchange string
+			name     string
+		}{
+			exchange: string(stock.Exchange),
+			name:     stock.Name,
+		}
 	}
 
 	allMetrics := make([]*metricsagg.StockMetrics, 0, len(successData))
 	for symbol, data := range successData {
-		exchange := exchangeLookup[symbol]
-		metrics := uc.calculator.CalculateForStock(symbol, exchange, data)
+		info := stockInfoLookup[symbol]
+		metrics := uc.calculator.CalculateForStock(symbol, info.exchange, info.name, data)
 		if metrics != nil {
+			// Compute signals using system config if available
+			if systemConfig != nil {
+				uc.computeSignals(metrics, data, systemConfig)
+			}
 			allMetrics = append(allMetrics, metrics)
 		} else {
 			failedData[symbol] = fmt.Sprintf("insufficient data: got %d points, need at least 21", len(data))
@@ -230,7 +257,7 @@ func (uc *StockMetricsUseCase) logRefreshSummary(totalStocks, successCount int, 
 
 	failedList := make([]string, 0, len(failedSymbols))
 	for sym, reason := range failedSymbols {
-		if len(failedList) < maxFailedLogSamples {
+		if !strings.Contains(reason, "insufficient data") {
 			failedList = append(failedList, fmt.Sprintf("%s: %s", sym, reason))
 		}
 	}
@@ -248,12 +275,6 @@ func (uc *StockMetricsUseCase) logRefreshSummary(totalStocks, successCount int, 
 			zap.Int("total_failed", failedCount),
 			zap.Strings("failed_samples", failedList),
 		)
-
-		if failedCount > maxFailedLogSamples {
-			zap.L().Warn("Additional failed stocks not shown",
-				zap.Int("hidden_count", failedCount-maxFailedLogSamples),
-			)
-		}
 	}
 
 	zap.L().Info("====================================================")
@@ -288,4 +309,104 @@ func (uc *StockMetricsUseCase) fetchBatch(
 
 	wg.Wait()
 	return successData, failedData
+}
+
+// computeSignals populates signal fields using analysis domain services.
+func (uc *StockMetricsUseCase) computeSignals(
+	metrics *metricsagg.StockMetrics,
+	priceHistory []marketvo.MarketData,
+	cfg *configagg.TradingConfig,
+) {
+	rsiPeriod := int(cfg.RSIPeriod)
+	pivotPeriod := int(cfg.PivotPeriod)
+	indicesRecent := int(cfg.IndicesRecent)
+	proximityPct := cfg.Trendline.ProximityDecimal()
+	rangeMin := cfg.Divergence.RangeMin
+	rangeMax := cfg.Divergence.RangeMax
+	maxLines := cfg.Trendline.MaxLines
+	signalThreshold := time.Now().AddDate(0, 0, -uc.signalDaysThreshold)
+
+	if len(priceHistory) < rsiPeriod+1 {
+		return
+	}
+
+	// 1. Calculate RSI
+	dataWithRSI := sharedservice.CalculateRSI(priceHistory, rsiPeriod)
+	if len(dataWithRSI) < indicesRecent {
+		return
+	}
+
+	// 2. Slice recent data
+	startIndex := len(dataWithRSI) - indicesRecent
+	recentData := dataWithRSI[startIndex:]
+
+	// 3. Find pivots
+	// RSI pivots for divergence detection (must use FieldRSI)
+	rsiHighPivots := analysissvc.FindHighPivots(recentData, analysisvo.FieldRSI, pivotPeriod)
+	rsiLowPivots := analysissvc.FindLowPivots(recentData, analysisvo.FieldRSI, pivotPeriod)
+	// Price pivots for trendline building (uses FieldHigh/FieldLow)
+	priceHighPivots := analysissvc.FindHighPivots(recentData, analysisvo.FieldHigh, pivotPeriod)
+	priceLowPivots := analysissvc.FindLowPivots(recentData, analysisvo.FieldLow, pivotPeriod)
+
+	// 4. Detect divergences using config values
+	bullishDivergences := analysissvc.FindBullishDivergences(rsiLowPivots, rangeMin, rangeMax)
+	bearishDivergences := analysissvc.FindBearishDivergences(rsiHighPivots, rangeMin, rangeMax)
+
+	// Check divergence dates - use second pivot date (most recent point)
+	if len(bullishDivergences) > 0 {
+		latestDiv := bullishDivergences[0]
+		if isSignalWithinDays(latestDiv.SecondPivot.Date, signalThreshold) {
+			metrics.HasBullishRSI = true
+		}
+	}
+
+	if len(bearishDivergences) > 0 {
+		latestDiv := bearishDivergences[0]
+		if isSignalWithinDays(latestDiv.SecondPivot.Date, signalThreshold) {
+			metrics.HasBearishRSI = true
+		}
+	}
+
+	// 5. Build trendlines using config maxLines
+	supportTrendlines := analysissvc.BuildSupportTrendlines(priceLowPivots, maxLines)
+	resistanceTrendlines := analysissvc.BuildResistanceTrendlines(priceHighPivots, maxLines)
+
+	// 6. Generate signals
+	breakdownSignals := analysissvc.GenerateSupportSignals(supportTrendlines, recentData, proximityPct)
+	breakoutSignals := analysissvc.GenerateResistanceSignals(resistanceTrendlines, recentData, proximityPct)
+
+	// 7. Extract signal types with date threshold check
+	for _, s := range breakdownSignals {
+		if isSignalWithinDays(s.Time, signalThreshold) {
+			switch s.Type {
+			case analysisvo.BreakdownPotential:
+				metrics.HasBreakdownPotential = true
+			case analysisvo.BreakdownConfirmed:
+				metrics.HasBreakdownConfirmed = true
+			}
+		}
+	}
+
+	for _, s := range breakoutSignals {
+		if isSignalWithinDays(s.Time, signalThreshold) {
+			switch s.Type {
+			case analysisvo.BreakoutPotential:
+				metrics.HasBreakoutPotential = true
+			case analysisvo.BreakoutConfirmed:
+				metrics.HasBreakoutConfirmed = true
+			}
+		}
+	}
+}
+
+// isSignalWithinDays checks if a date string (YYYY-MM-DD) is within threshold.
+func isSignalWithinDays(dateStr string, threshold time.Time) bool {
+	if dateStr == "" {
+		return false
+	}
+	signalDate, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return false
+	}
+	return signalDate.After(threshold) || signalDate.Equal(threshold)
 }
