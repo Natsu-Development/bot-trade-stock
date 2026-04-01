@@ -23,7 +23,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server ./cmd/serv
 FROM alpine:latest
 
 # Install ca-certificates for HTTPS and wget for healthcheck
-RUN apk --no-cache add ca-certificates wget
+RUN apk --no-cache add ca-certificates wget tzdata
 
 # Set working directory
 WORKDIR /root/
