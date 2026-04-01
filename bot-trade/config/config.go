@@ -53,6 +53,9 @@ type InfraConfig struct {
 
 	// Signal Configuration
 	SignalDaysThreshold int // Days a signal is considered valid
+
+	// Cron Configuration
+	CronTimezone string // Cron scheduler timezone (e.g., "Asia/Ho_Chi_Minh")
 }
 
 // LoadInfraFromEnv loads and validates infrastructure configuration from .env file.
@@ -94,6 +97,9 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 
 	// Signal Configuration
 	cfg.SignalDaysThreshold = getNumberEnv("SIGNAL_DAYS_THRESHOLD", &errors)
+
+	// Cron Configuration
+	cfg.CronTimezone = getStringEnv("CRON_TIMEZONE", &errors)
 
 	if len(errors) > 0 {
 		return nil, fmt.Errorf("configuration validation failed:\n%s", strings.Join(errors, "\n"))

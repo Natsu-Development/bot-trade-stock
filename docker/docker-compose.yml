@@ -1,14 +1,35 @@
 version: '3.8'
 
 services:
+  # Frontend - Nginx + React
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: trading-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      bot-trade:
+        condition: service_healthy
+    networks:
+      - trading-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   # Go Trading Bot Service (Direct VietCap API)
   bot-trade:
     build:
       context: ..
       dockerfile: ../bot-trade/Dockerfile
     container_name: trading-bot
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     environment:
       - NODE_ENV=production
     env_file:

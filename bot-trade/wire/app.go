@@ -74,7 +74,12 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 	analyzer := appAnalyze.NewAnalyzer(configUC, gateway)
 
 	// Scheduler with cron adapter
-	cronAdapter := infraCron.NewAdapter(nil)
+	loc, err := time.LoadLocation(cfg.CronTimezone)
+	if err != nil {
+		zap.L().Warn("Invalid cron timezone, using UTC", zap.String("timezone", cfg.CronTimezone), zap.Error(err))
+		loc = time.UTC
+	}
+	cronAdapter := infraCron.NewAdapter(loc)
 	scheduler := appService.NewJobScheduler(cronAdapter)
 
 	// Build job dependencies
