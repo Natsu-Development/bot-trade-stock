@@ -107,6 +107,10 @@ func (p *SSIProvider) FetchBars(
 		return nil, fmt.Errorf("SSI API returned error: code=%s, message=%s", chartResp.Code, chartResp.Message)
 	}
 
+	if len(chartResp.Data.Timestamps) == 0 {
+		return nil, fmt.Errorf("SSI API returned empty data")
+	}
+
 	result := TransformOHLCV(OHLCVData{
 		Timestamps: chartResp.Data.Timestamps,
 		Opens:      chartResp.Data.Opens,
@@ -131,4 +135,3 @@ func (p *SSIProvider) setDefaultHeaders(req *http.Request) {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36")
 }
-

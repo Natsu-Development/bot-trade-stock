@@ -1,22 +1,27 @@
-import { useState } from 'react'
+import { useState, memo, startTransition } from 'react'
 import { Input } from '@/components/ui/input'
 import { Icons } from '../icons/Icons'
 
 interface SearchBoxProps {
   placeholder?: string
+  /** Called when the query changes; runs inside startTransition so heavy parents stay responsive. */
   onSearch?: (query: string) => void
 }
 
-export function SearchBox({
+export const SearchBox = memo(function SearchBox({
   placeholder = 'Enter symbol (e.g., VCB, VIC, FPT...)',
-  onSearch
+  onSearch,
 }: SearchBoxProps) {
   const [query, setQuery] = useState('')
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
     setQuery(value)
-    onSearch?.(value)
+    if (onSearch) {
+      startTransition(() => {
+        onSearch(value)
+      })
+    }
   }
 
   return (
@@ -30,4 +35,4 @@ export function SearchBox({
       className="py-3"
     />
   )
-}
+})

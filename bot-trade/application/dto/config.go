@@ -2,6 +2,7 @@
 package dto
 
 import (
+	"fmt"
 	"time"
 
 	configagg "bot-trade/domain/config/aggregate"
@@ -12,6 +13,7 @@ import (
 
 // TradingConfigRequest is the DTO for creating/updating trading configuration.
 type TradingConfigRequest struct {
+	ID             string                 `json:"id,omitempty"`
 	RSIPeriod      int                    `json:"rsi_period"`
 	PivotPeriod    int                    `json:"pivot_period"`
 	LookbackDay    int                    `json:"lookback_day"`
@@ -72,10 +74,41 @@ type ConfigMetricsFilter struct {
 }
 
 // ConfigFilterCondition represents a single filter condition for config.
+// Value accepts number or boolean (converted to 0/1 for boolean fields).
 type ConfigFilterCondition struct {
-	Field    string  `json:"field"`
-	Operator string  `json:"op"`
-	Value    float64 `json:"value"`
+	Field    string      `json:"field"`
+	Operator string      `json:"op"`
+	Value    interface{} `json:"value,omitempty"`
+}
+
+// ToFilterCondition converts DTO to domain FilterCondition.
+// Converts boolean values to 0/1 for storage.
+func (c ConfigFilterCondition) ToFilterCondition() (filtervo.FilterCondition, error) {
+	// Validate field and operator
+	_, err := filtervo.NewFilterField(c.Field)
+	if err != nil {
+		return filtervo.FilterCondition{}, err
+	}
+
+	_, err = filtervo.NewFilterOperator(c.Operator)
+	if err != nil {
+		return filtervo.FilterCondition{}, err
+	}
+
+	// Convert value to float64 using domain helper
+	var numVal float64
+	switch v := c.Value.(type) {
+	case bool:
+		numVal = filtervo.BoolToFloat(v)
+	case float64:
+		numVal = v
+	case int:
+		numVal = float64(v)
+	default:
+		return filtervo.FilterCondition{}, fmt.Errorf("invalid value type for field %s", c.Field)
+	}
+
+	return filtervo.NewFilterCondition(c.Field, c.Operator, numVal)
 }
 
 // ToTradingConfigResponse converts a domain TradingConfig to response DTO.
@@ -189,8 +222,10 @@ func ToTradingConfigAggregate(req TradingConfigRequest) (*configagg.TradingConfi
 	}
 
 	// Convert metrics filters
+	// Use MetricsFilter != nil to distinguish between "not provided" (nil) and "explicitly empty" ([]).
+	// When user sends metrics_filter: [], it means "clear all filters".
 	var metricsFilter []configvo.MetricsFilter
-	if len(req.MetricsFilter) > 0 {
+	if req.MetricsFilter != nil && len(req.MetricsFilter) > 0 {
 		metricsFilter = make([]configvo.MetricsFilter, len(req.MetricsFilter))
 		for i, mf := range req.MetricsFilter {
 			converted, err := toConfigMetricsFilterVO(mf)
@@ -199,9 +234,12 @@ func ToTradingConfigAggregate(req TradingConfigRequest) (*configagg.TradingConfi
 			}
 			metricsFilter[i] = converted
 		}
+	} else if req.MetricsFilter != nil {
+		// Explicitly empty slice means "clear filters"
+		metricsFilter = []configvo.MetricsFilter{}
 	}
 
-	return &configagg.TradingConfig{
+	cfg := &configagg.TradingConfig{
 		RSIPeriod:      rsiPeriod,
 		PivotPeriod:    pivotPeriod,
 		LookbackDay:    lookbackDay,
@@ -213,7 +251,18 @@ func ToTradingConfigAggregate(req TradingConfigRequest) (*configagg.TradingConfi
 		BullishSymbols: bullishSymbols,
 		Telegram:       telegram,
 		MetricsFilter:  metricsFilter,
-	}, nil
+	}
+
+	// Set ID if provided
+	if req.ID != "" {
+		configID, err := configvo.NewConfigID(req.ID)
+		if err != nil {
+			return nil, err
+		}
+		cfg.ID = configID
+	}
+
+	return cfg, nil
 }
 
 // toConfigMetricsFilter converts a domain MetricsFilter to DTO.
@@ -226,10 +275,19 @@ func toConfigMetricsFilter(mf configvo.MetricsFilter) ConfigMetricsFilter {
 
 	dto.Conditions = make([]ConfigFilterCondition, len(mf.Conditions))
 	for i, c := range mf.Conditions {
-		dto.Conditions[i] = ConfigFilterCondition{
-			Field:    string(c.Field),
-			Operator: string(c.Operator),
-			Value:    c.Value,
+		// For response, convert back to bool for signal fields
+		if c.IsBooleanField() {
+			dto.Conditions[i] = ConfigFilterCondition{
+				Field:    string(c.Field),
+				Operator: string(c.Operator),
+				Value:    c.GetBoolValue(), // Returns true/false for JSON
+			}
+		} else {
+			dto.Conditions[i] = ConfigFilterCondition{
+				Field:    string(c.Field),
+				Operator: string(c.Operator),
+				Value:    c.Value,
+			}
 		}
 	}
 
@@ -250,7 +308,7 @@ func toConfigMetricsFilterVO(dto ConfigMetricsFilter) (configvo.MetricsFilter, e
 
 	conditions := make([]filtervo.FilterCondition, len(dto.Conditions))
 	for i, c := range dto.Conditions {
-		condition, err := filtervo.NewFilterCondition(c.Field, c.Operator, c.Value)
+		condition, err := c.ToFilterCondition()
 		if err != nil {
 			return configvo.MetricsFilter{}, err
 		}

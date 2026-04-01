@@ -62,7 +62,42 @@ type OHLCVData struct {
 	Volumes    []int64
 }
 
+// priceNormalizationThreshold is the threshold above which prices are considered
+// to be in actual VND and need to be normalized to thousands of VND.
+// Vietnamese stocks typically trade below 1000 (thousands of VND).
+// If prices are above this threshold, they're likely in actual VND (e.g., 82100 instead of 82.1).
+const priceNormalizationThreshold = 10000.0
+
+// needsPriceNormalization checks if prices need to be normalized from actual VND to thousands of VND.
+// Returns true if the median price is above the threshold, indicating prices are in actual VND.
+func needsPriceNormalization(prices []float64) bool {
+	if len(prices) == 0 {
+		return false
+	}
+
+	// Use the first close price as a sample
+	// If it's above the threshold, prices are likely in actual VND
+	samplePrice := prices[0]
+	return samplePrice > priceNormalizationThreshold
+}
+
+// normalizePrices converts prices from actual VND to thousands of VND if needed.
+// This ensures consistent price format across all providers.
+// Example: 82100 VND -> 82.1 (thousands of VND)
+func normalizePrices(prices []float64) []float64 {
+	if !needsPriceNormalization(prices) {
+		return prices
+	}
+
+	normalized := make([]float64, len(prices))
+	for i, p := range prices {
+		normalized[i] = p / 1000.0
+	}
+	return normalized
+}
+
 // TransformOHLCV converts normalized OHLCV data to MarketData slice.
+// Automatically normalizes prices from actual VND to thousands of VND if needed.
 func TransformOHLCV(data OHLCVData) []marketvo.MarketData {
 	n := len(data.Timestamps)
 	if n == 0 {
@@ -71,6 +106,12 @@ func TransformOHLCV(data OHLCVData) []marketvo.MarketData {
 	if len(data.Opens) != n || len(data.Highs) != n || len(data.Lows) != n || len(data.Closes) != n {
 		return nil
 	}
+
+	// Normalize prices if they appear to be in actual VND
+	opens := normalizePrices(data.Opens)
+	highs := normalizePrices(data.Highs)
+	lows := normalizePrices(data.Lows)
+	closes := normalizePrices(data.Closes)
 
 	result := make([]marketvo.MarketData, 0, n)
 	for i := 0; i < n; i++ {
@@ -82,10 +123,10 @@ func TransformOHLCV(data OHLCVData) []marketvo.MarketData {
 		result = append(result, marketvo.MarketData{
 			Index:  i,
 			Date:   t.Format("2006-01-02"),
-			Open:   data.Opens[i],
-			High:   data.Highs[i],
-			Low:    data.Lows[i],
-			Close:  data.Closes[i],
+			Open:   opens[i],
+			High:   highs[i],
+			Low:    lows[i],
+			Close:  closes[i],
 			Volume: volume,
 		})
 	}

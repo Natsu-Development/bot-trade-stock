@@ -46,13 +46,3 @@ func NewExchange(value string) (Exchange, error) {
 func AllExchanges() []Exchange {
 	return []Exchange{ExchangeHOSE, ExchangeHNX, ExchangeUPCOM}
 }
-
-// Contains checks if the exchange is in the provided list.
-func Contains(exchange Exchange, list []string) bool {
-	for _, item := range list {
-		if string(exchange) == item {
-			return true
-		}
-	}
-	return false
-}

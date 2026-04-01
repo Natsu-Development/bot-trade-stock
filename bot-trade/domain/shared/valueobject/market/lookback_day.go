@@ -5,7 +5,7 @@ import "errors"
 
 var (
 	// ErrInvalidLookbackDay is returned when LookbackDay is outside valid range.
-	ErrInvalidLookbackDay = errors.New("lookback day must be between 1 and 365")
+	ErrInvalidLookbackDay = errors.New("lookback day must be between 1 and 500")
 )
 
 // LookbackDay represents the number of days of historical data to fetch for analysis.
@@ -14,7 +14,7 @@ type LookbackDay int
 
 const (
 	MinLookbackDay LookbackDay = 1
-	MaxLookbackDay LookbackDay = 365
+	MaxLookbackDay LookbackDay = 500
 )
 
 // NewLookbackDay creates a validated LookbackDay.

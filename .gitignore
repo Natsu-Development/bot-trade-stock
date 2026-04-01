@@ -47,6 +47,8 @@ CLAUDE.md
 bot-trade/review/
 
 # Playwright test files
-frontend/playwright-report/
-frontend/test-results/
-frontend/screenshots/
+e2e/node_modules/
+e2e/playwright-report/
+e2e/test-results/
+e2e/screenshots/
+.playwright-mcp/

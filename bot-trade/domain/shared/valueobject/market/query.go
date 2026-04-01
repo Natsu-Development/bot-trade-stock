@@ -6,11 +6,6 @@ import (
 	"time"
 )
 
-const (
-	minDateRangeDays = 1   // Minimum required lookback window
-	maxDateRangeDays = 400 // Hard cap to prevent excessively large requests
-)
-
 // MarketDataQuery is a value object for market data query parameters.
 // It has no identity and is immutable after creation.
 type MarketDataQuery struct {
@@ -66,8 +61,8 @@ func calculateDateRange(endDate string, lookbackDay LookbackDay) (time.Time, tim
 		return time.Time{}, time.Time{}, errors.New("end_date cannot be in the future")
 	}
 
-	if parsedEndDate.Sub(parsedStartDate) > time.Duration(maxDateRangeDays)*24*time.Hour {
-		return time.Time{}, time.Time{}, fmt.Errorf("date range cannot exceed %d days", maxDateRangeDays)
+	if parsedEndDate.Sub(parsedStartDate) > time.Duration(MaxLookbackDay)*24*time.Hour {
+		return time.Time{}, time.Time{}, fmt.Errorf("date range cannot exceed %d days", MaxLookbackDay)
 	}
 
 	return parsedStartDate, parsedEndDate, nil

@@ -50,6 +50,9 @@ type InfraConfig struct {
 	// Logging Configuration
 	LogLevel    string
 	Environment string // development, production
+
+	// Signal Configuration
+	SignalDaysThreshold int // Days a signal is considered valid
 }
 
 // LoadInfraFromEnv loads and validates infrastructure configuration from .env file.
@@ -88,6 +91,9 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	// Logging Configuration
 	cfg.LogLevel = getLogLevelEnv("LOG_LEVEL", &errors)
 	cfg.Environment = getEnvironmentEnv("ENVIRONMENT", &errors)
+
+	// Signal Configuration
+	cfg.SignalDaysThreshold = getNumberEnv("SIGNAL_DAYS_THRESHOLD", &errors)
 
 	if len(errors) > 0 {
 		return nil, fmt.Errorf("configuration validation failed:\n%s", strings.Join(errors, "\n"))

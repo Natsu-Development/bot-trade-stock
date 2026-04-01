@@ -1,8 +1,8 @@
 // API client for Trading Bot backend
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
-// localStorage key for config ID persistence
-const CONFIG_ID_STORAGE_KEY = 'trading-app_config-id'
+// localStorage key for config ID persistence (shared with useConfigId)
+export const CONFIG_ID_STORAGE_KEY = 'trading-app_config-id'
 
 // Default config ID for divergence analysis (can be overridden)
 let DEFAULT_CONFIG_ID = 'default'
@@ -60,6 +60,7 @@ export function getConfigId(): string {
 // Types for stock metrics
 export interface ApiStockMetrics {
   symbol: string
+  name?: string // Vietnamese stock name from listallstock
   exchange: string
   rs_1m: number
   rs_3m: number
@@ -75,11 +76,26 @@ export interface ApiStockMetrics {
     p9: number
     p12: number
   }
+  // Price metrics
+  current_price: number
+  price_change_pct: number
+  // Moving averages
+  ema_9: number
+  ema_21: number
+  ema_50: number
+  sma_200: number
+  // Signal metrics
+  has_breakout_potential?: boolean
+  has_breakout_confirmed?: boolean
+  has_breakdown_potential?: boolean
+  has_breakdown_confirmed?: boolean
+  has_bullish_rsi?: boolean
+  has_bearish_rsi?: boolean
 }
 
 export interface ScreenerFilterPreset {
   name: string
-  filters: Array<{ field: string; op: string; value: number }>
+  filters: Array<{ field: string; op: string; value?: number | boolean }>
   logic: 'and' | 'or'
   exchanges?: string[]
   created_at: string
@@ -89,7 +105,7 @@ export interface ApiFilterRequest {
   filters?: Array<{
     field: string
     op: string
-    value: number
+    value?: number | boolean
   }>
   logic?: 'and' | 'or'
   exchanges?: string[]
@@ -116,7 +132,6 @@ export interface ApiTrendlineInfo {
   end_price: number
   start_date: string
   end_date: string
-  current_line_price: number
   slope: number
 }
 
@@ -133,14 +148,19 @@ export interface ApiTrendlineDisplay {
   start_date: string
   end_date: string
   slope: number
-  broken_at?: string  // Optional: date where trendline was broken (crossed)
-  broken_type?: string  // Optional: "cross_below" for support break, "cross_above" for resistance breakout
+}
+
+// Signal from analyze API - contains crossover point for trendline extension
+export interface ApiAnalysisSignal {
+  type: string        // "breakdown_confirmed", "breakout_confirmed", etc.
+  price: number       // Actual price at crossover
+  time: string        // Date of crossover
+  price_line?: number  // Trendline price at crossover (extension point)
 }
 
 export interface ApiTradingSignal {
   id: string
-  type: string // "bounce_confirmed", "breakout_confirmed", etc.
-  signal_level: string // "confirmed", "potential", "watching"
+  type: string // "breakdown_confirmed", "breakdown_potential", "breakout_confirmed", "breakout_potential"
   price: number
   message: string
   source: string
@@ -149,9 +169,21 @@ export interface ApiTradingSignal {
   stop_loss?: number
   trendline?: ApiTrendlineInfo
   interval?: string
+  price_line?: number  // Trendline price at crossover point (from analyze API)
+}
+
+// Helper function to check if a signal is confirmed
+export function isSignalConfirmed(signal: ApiTradingSignal): boolean {
+  return signal.type.endsWith('_confirmed')
+}
+
+// Helper function to check if a signal is potential
+export function isSignalPotential(signal: ApiTradingSignal): boolean {
+  return signal.type.endsWith('_potential')
 }
 
 export interface ApiPriceData {
+  index: number
   date: string
   open: number
   high: number
@@ -160,7 +192,17 @@ export interface ApiPriceData {
   volume: number
 }
 
-// Divergence wrapper for unified response
+// Divergence DTO matching backend DivergenceDTO
+export interface ApiDivergence {
+  type: 'bullish' | 'bearish'
+  is_early: boolean
+  divergence_points: Array<{
+    price: number
+    date: string
+  }>
+}
+
+// Divergence wrapper for unified response (legacy)
 export interface ApiDivergenceWrapper {
   processing_time_ms: number
   timestamp: string
@@ -194,37 +236,37 @@ export interface ApiAnalysisResult {
     interval: string
     current_price: number
   }
-  bullish_divergence: ApiDivergenceWrapper | null
-  bearish_divergence: ApiDivergenceWrapper | null
+  divergences: ApiDivergence[]  // Combined divergences array with type field
   signals: ApiTradingSignal[]
   signals_count: number
-  has_confirmed: boolean
-  has_watching: boolean
   price_history: ApiPriceData[]
   trendlines: ApiTrendlineDisplay[]  // Active trendlines with pre-calculated data points
 }
 
-// Trading config types
+// Trading config types - matches backend TradingConfigResponse
 export interface ApiTradingConfig {
   id: string
   rsi_period: number
-  start_date_offset: number
+  pivot_period: number
+  lookback_day: number
   divergence: {
-    lookback_left: number
-    lookback_right: number
     range_min: number
     range_max: number
-    indices_recent: number
   }
-  early_detection_enabled: boolean
+  trendline: {
+    max_lines: number
+    proximity_percent: number
+  }
+  indices_recent: number
+  bearish_early: boolean | null
   bearish_symbols: string[]
   bullish_symbols: string[]
-  screener_filters?: ScreenerFilterPreset[]
   telegram: {
     enabled: boolean
     bot_token?: string
     chat_id?: string
   }
+  metrics_filter?: ScreenerFilterPreset[]
   created_at: string
   updated_at: string
 }
@@ -245,8 +287,6 @@ export interface ApiSignalAnalysisResult {
   }
   signals: ApiTradingSignal[]
   signals_count: number
-  has_confirmed: boolean
-  has_watching: boolean
   price_history: ApiPriceData[]
 }
 
@@ -315,22 +355,11 @@ class ApiClient {
     return this.request(`/analyze/${encodeURIComponent(symbol)}?${params.toString()}`)
   }
 
-  // Legacy methods for backward compatibility - now use unified endpoint
-  async analyzeBullishDivergence(symbol: string, configId?: string): Promise<ApiDivergenceWrapper> {
-    const result = await this.analyzeSymbol(symbol, { configId })
-    return result.bullish_divergence || this.createEmptyDivergenceResult()
-  }
-
-  async analyzeBearishDivergence(symbol: string, configId?: string): Promise<ApiDivergenceWrapper> {
-    const result = await this.analyzeSymbol(symbol, { configId })
-    return result.bearish_divergence || this.createEmptyDivergenceResult()
-  }
-
   // Legacy signals method - extracts signals from unified response
   async getSignals(
     symbol: string,
     options?: {
-      type?: 'all' | 'bounce' | 'breakout' | 'confirmed' | 'watching'
+      type?: 'all' | 'breakdown' | 'breakout' | 'confirmed' | 'watching'
       configId?: string
       startDate?: string
       endDate?: string
@@ -346,14 +375,14 @@ class ApiClient {
       filteredSignals = result.signals.filter(s => {
         const signalType = s.type
         switch (type) {
-          case 'bounce':
-            return signalType.includes('bounce')
+          case 'breakdown':
+            return signalType.includes('breakdown')
           case 'breakout':
             return signalType.includes('breakout')
           case 'confirmed':
-            return s.signal_level === 'confirmed'
+            return isSignalConfirmed(s)
           case 'watching':
-            return s.signal_level === 'watching' || s.signal_level === 'potential'
+            return isSignalPotential(s)
           default:
             return true
         }
@@ -367,8 +396,6 @@ class ApiClient {
       parameters: result.parameters,
       signals: filteredSignals,
       signals_count: filteredSignals.length,
-      has_confirmed: filteredSignals.some(s => s.signal_level === 'confirmed'),
-      has_watching: filteredSignals.some(s => s.signal_level === 'watching' || s.signal_level === 'potential'),
       price_history: result.price_history,
     }
   }
@@ -393,19 +420,22 @@ class ApiClient {
     const defaultConfig = {
       id,
       rsi_period: 14,
-      start_date_offset: 365,
+      pivot_period: 5,
+      lookback_day: 365,
       divergence: {
-        lookback_left: 5,
-        lookback_right: 5,
         range_min: 30,
         range_max: 70,
-        indices_recent: 3,
       },
-      early_detection_enabled: false,
+      trendline: {
+        max_lines: 5,
+        proximity_percent: 3,
+      },
+      indices_recent: 5,
+      bearish_early: null,
       bearish_symbols: [],
       bullish_symbols: [],
       telegram: { enabled: false },
-      screener_filters: [],
+      metrics_filter: [],
     }
     return this.request('/config', {
       method: 'POST',
@@ -431,53 +461,22 @@ class ApiClient {
     })
   }
 
-  // Helper to create empty divergence result for backward compatibility
-  private createEmptyDivergenceResult(): ApiDivergenceWrapper {
-    return {
-      processing_time_ms: 0,
-      timestamp: new Date().toISOString(),
-      parameters: {
-        start_date: '',
-        end_date: '',
-        interval: '',
-        rsi_period: 14,
-      },
-      divergence: {
-        type: 'none',
-        description: 'No analysis available',
-        divergence_found: false,
-        current_price: 0,
-        current_rsi: 0,
-      },
-    }
+  async removeSymbolsFromWatchlist(
+    configId: string,
+    listType: 'bullish' | 'bearish',
+    symbols: string[]
+  ): Promise<{ message: string; list_type: string; symbols: string[] }> {
+    return this.request(`/config/${encodeURIComponent(configId)}/watchlist`, {
+      method: 'DELETE',
+      body: JSON.stringify({ list_type: listType, symbols }),
+    })
   }
 }
 
 // Singleton instance
 const apiInstance = new ApiClient()
 
-// Helper to convert API metrics to frontend Stock type
-export function apiToStock(api: ApiStockMetrics) {
-  const volumeVsSma = api.volume_sma20 > 0
-    ? ((api.current_volume - api.volume_sma20) / api.volume_sma20 * 100)
-    : 0
-
-  return {
-    symbol: api.symbol,
-    name: api.symbol, // Backend doesn't provide name, use symbol
-    exchange: api.exchange as 'HOSE' | 'HNX' | 'UPCOM',
-    rs1m: api.rs_1m,
-    rs3m: api.rs_3m,
-    rs6m: api.rs_6m,
-    rs9m: api.rs_9m,
-    rs52w: api.rs_52w,
-    currentVolume: api.current_volume,
-    volumeSma20: api.volume_sma20,
-    volume: volumeVsSma > 0 ? `+${volumeVsSma.toFixed(1)}%` : `${volumeVsSma.toFixed(1)}%`,
-    price: 0, // Not provided by backend
-    change: 0, // Not provided by backend
-  }
-}
+export { apiStockMetricsToStock as apiToStock } from './screenerUtils'
 
 // Re-export api instance methods
 export const api = {
@@ -491,12 +490,9 @@ export const api = {
     o?: { configId?: string; startDate?: string; endDate?: string; interval?: string }
   ) => apiInstance.analyzeSymbol(s, o),
 
-  // Legacy methods for backward compatibility
-  analyzeBullishDivergence: (s: string, c?: string) => apiInstance.analyzeBullishDivergence(s, c),
-  analyzeBearishDivergence: (s: string, c?: string) => apiInstance.analyzeBearishDivergence(s, c),
   getSignals: (
     s: string,
-    o?: { type?: 'all' | 'bounce' | 'breakout' | 'confirmed' | 'watching'; configId?: string; startDate?: string; endDate?: string; interval?: string }
+    o?: { type?: 'all' | 'breakdown' | 'breakout' | 'confirmed' | 'watching'; configId?: string; startDate?: string; endDate?: string; interval?: string }
   ) => apiInstance.getSignals(s, o),
   analyzeSignals: (s: string, c?: string, sd?: string, ed?: string, i?: string) =>
     apiInstance.analyzeSignals(s, c, sd, ed, i),
@@ -507,4 +503,6 @@ export const api = {
   updateConfig: (id: string, c: Partial<ApiTradingConfig>) => apiInstance.updateConfig(id, c),
   addSymbolsToWatchlist: (cId: string, lT: 'bullish' | 'bearish', s: string[]) =>
     apiInstance.addSymbolsToWatchlist(cId, lT, s),
+  removeSymbolsFromWatchlist: (cId: string, lT: 'bullish' | 'bearish', s: string[]) =>
+    apiInstance.removeSymbolsFromWatchlist(cId, lT, s),
 }

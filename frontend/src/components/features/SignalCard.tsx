@@ -1,25 +1,32 @@
+import { memo } from 'react'
 import { cn } from '@/lib/utils'
 import { Icons } from '../icons/Icons'
 import type { SignalType } from '../../types'
+
+interface DivergencePoint {
+  price: number
+  date: string
+}
 
 interface SignalCardProps {
   type: SignalType
   title: string
   value: string
-  currentRsi: number
+  currentRsi?: number
   confidence: number
   divergenceType: string
   strength: string
+  points?: DivergencePoint[]
 }
 
-export function SignalCard({
+function SignalCardComponent({
   type,
   title,
   value,
-  currentRsi,
   confidence,
   divergenceType,
-  strength
+  strength,
+  points
 }: SignalCardProps) {
   const Icon = type === 'bullish' ? Icons.TrendUp : Icons.TrendDown
   const isBullish = type === 'bullish'
@@ -64,20 +71,8 @@ export function SignalCard({
       {/* Details Grid */}
       <div className="grid grid-cols-2 gap-3 mt-4">
         <div className="bg-[var(--bg-elevated)] p-3 rounded-md">
-          <div className="text-[11px] text-[var(--text-muted)] uppercase mb-1">Current RSI</div>
-          <div className={cn('font-mono text-sm font-medium', isBullish && 'text-[var(--neon-bull)]')}>
-            {currentRsi}
-          </div>
-        </div>
-        <div className="bg-[var(--bg-elevated)] p-3 rounded-md">
           <div className="text-[11px] text-[var(--text-muted)] uppercase mb-1">Confidence</div>
           <div className="font-mono text-sm font-medium">{confidence}%</div>
-        </div>
-        <div className="bg-[var(--bg-elevated)] p-3 rounded-md">
-          <div className="text-[11px] text-[var(--text-muted)] uppercase mb-1">Divergence Type</div>
-          <div className={cn('font-mono text-sm font-medium', divergenceType === 'N/A' && 'text-[var(--text-muted)]')}>
-            {divergenceType}
-          </div>
         </div>
         <div className="bg-[var(--bg-elevated)] p-3 rounded-md">
           <div className="text-[11px] text-[var(--text-muted)] uppercase mb-1">Strength</div>
@@ -90,7 +85,30 @@ export function SignalCard({
             {strength}
           </div>
         </div>
+        <div className="bg-[var(--bg-elevated)] p-3 rounded-md col-span-2">
+          <div className="text-[11px] text-[var(--text-muted)] uppercase mb-1">Divergence Type</div>
+          <div className={cn('font-mono text-sm font-medium', divergenceType === 'N/A' && 'text-[var(--text-muted)]')}>
+            {divergenceType}
+          </div>
+        </div>
+        {points && points.length > 0 && (
+          <div className="bg-[var(--bg-elevated)] p-3 rounded-md col-span-2">
+            <div className="text-[11px] text-[var(--text-muted)] uppercase mb-1">Divergence Points</div>
+            <div className="text-xs space-y-1">
+              {points.map((point, index) => (
+                <div key={index} className="flex justify-between">
+                  <span className="text-[var(--text-muted)]">{point.date}</span>
+                  <span className={cn('font-mono', isBullish ? 'text-[var(--neon-bull)]' : 'text-[var(--neon-bear)]')}>
+                    {point.price.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
 }
+
+export const SignalCard = memo(SignalCardComponent)

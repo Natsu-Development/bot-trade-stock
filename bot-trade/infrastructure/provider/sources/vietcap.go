@@ -110,7 +110,7 @@ func (p *VietCapProvider) FetchBars(
 	}
 
 	if len(ohlcItems) == 0 {
-		return nil, nil
+		return nil, fmt.Errorf("no data returned from VietCap API")
 	}
 
 	timestamps, err := ParseStringTimestamps(ohlcItems[0].T)

@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import type { ApiTrendlineDisplay, ApiTradingSignal } from '@/lib/api'
+import { isSignalConfirmed, type ApiTrendlineDisplay, ApiTradingSignal } from '@/lib/api'
 
 export interface ChartLegendProps {
   trendlines: ApiTrendlineDisplay[]
@@ -24,8 +24,8 @@ export const ChartLegend = memo(function ChartLegend({
 }: ChartLegendProps) {
   const supportCount = trendlines.filter(t => t.type === 'uptrend_support').length
   const resistanceCount = trendlines.filter(t => t.type === 'downtrend_resistance').length
-  const confirmedSignals = signals.filter(s => s.signal_level === 'confirmed').length
-  const watchingSignals = signals.filter(s => s.signal_level !== 'confirmed').length
+  const confirmedSignals = signals.filter(s => isSignalConfirmed(s)).length
+  const watchingSignals = signals.filter(s => !isSignalConfirmed(s)).length
   const latestRsi = rsiData.length > 0 ? rsiData[rsiData.length - 1]?.value : null
 
   return (

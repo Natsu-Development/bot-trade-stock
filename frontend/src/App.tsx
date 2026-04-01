@@ -3,6 +3,7 @@ import { useNavigation } from './hooks/useNavigation'
 import { useConfigId } from './hooks/useConfigId'
 import { Sidebar } from './components/layout/Sidebar'
 import { UsernameDialog } from './components/pages/UsernameDialog'
+import { TooltipProvider } from './components/ui/tooltip'
 
 // Lazy load pages for code splitting
 const Dashboard = lazy(() => import('./components/pages/Dashboard').then(m => ({ default: m.Dashboard })))
@@ -31,7 +32,7 @@ function App() {
   const showUsernameDialog = !isLoading && configId === null
 
   return (
-    <>
+    <TooltipProvider delayDuration={100}>
       {showUsernameDialog && (
         <UsernameDialog isOpen={showUsernameDialog} setConfigId={setConfigId} />
       )}
@@ -48,7 +49,7 @@ function App() {
           </Suspense>
         </main>
       </div>
-    </>
+    </TooltipProvider>
   )
 }
 

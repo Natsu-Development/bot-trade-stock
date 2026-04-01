@@ -8,6 +8,7 @@ import (
 	metricsagg "bot-trade/domain/metrics/aggregate"
 	periodvo "bot-trade/domain/metrics/valueobject"
 	marketvo "bot-trade/domain/shared/valueobject/market"
+	indicatorsvc "bot-trade/domain/shared/service"
 )
 
 // Calculator calculates stock metrics including RS ratings.
@@ -58,7 +59,7 @@ var periodRankingConfigs = []periodConfig{
 // Returns nil if there is insufficient data (less than MinDataPoints).
 // Calculates partial RS for periods with enough data, sets 0 for periods without enough data.
 // Percentile ratings are assigned later in RankAll based on relative position.
-func (c *Calculator) CalculateForStock(symbol, exchange string, priceHistory []marketvo.MarketData) *metricsagg.StockMetrics {
+func (c *Calculator) CalculateForStock(symbol, exchange, name string, priceHistory []marketvo.MarketData) *metricsagg.StockMetrics {
 	n := len(priceHistory)
 
 	if n < periodvo.MinDataPoints {
@@ -73,6 +74,7 @@ func (c *Calculator) CalculateForStock(symbol, exchange string, priceHistory []m
 
 	metrics := &metricsagg.StockMetrics{
 		Symbol:   marketvo.Symbol(symbol),
+		Name:     name,
 		Exchange: exch,
 	}
 
@@ -108,6 +110,21 @@ func (c *Calculator) CalculateForStock(symbol, exchange string, priceHistory []m
 
 	// Calculate volume metrics
 	metrics.CurrentVolume, metrics.VolumeSMA20 = c.calculateVolumeSMA20(priceHistory)
+
+	// Calculate price metrics
+	metrics.CurrentPrice = priceHistory[n-1].Close
+	if n >= 2 {
+		prevClose := priceHistory[n-2].Close
+		if prevClose > 0 {
+			metrics.PriceChangePct = roundTo4Decimals((metrics.CurrentPrice - prevClose) / prevClose * 100)
+		}
+	}
+
+	// Calculate moving averages
+	metrics.EMA9 = indicatorsvc.CalculateEMA(priceHistory, periodvo.EMA9)
+	metrics.EMA21 = indicatorsvc.CalculateEMA(priceHistory, periodvo.EMA21)
+	metrics.EMA50 = indicatorsvc.CalculateEMA(priceHistory, periodvo.EMA50)
+	metrics.SMA200 = indicatorsvc.CalculateSMA(priceHistory, periodvo.SMA200)
 
 	return metrics
 }
@@ -157,7 +174,7 @@ func (c *Calculator) calculateVolumeSMA20(priceHistory []marketvo.MarketData) (c
 // RankAll assigns percentile ratings (1-99) based on relative position among all stocks.
 // Higher price ratio = better rank = higher percentile.
 // Stocks without enough data for a period (return = 0) get RS = 0 for that period.
-// Returns the metrics sorted by RS52W (best first), then by RS1M for stocks without RS52W.
+// Returns the metrics sorted by RS1M (best first).
 func (c *Calculator) RankAll(metrics []*metricsagg.StockMetrics) []*metricsagg.StockMetrics {
 	if len(metrics) == 0 {
 		return metrics
@@ -168,12 +185,8 @@ func (c *Calculator) RankAll(metrics []*metricsagg.StockMetrics) []*metricsagg.S
 		rankByFieldFiltered(metrics, cfg.getValue, cfg.hasData, cfg.setPercentile)
 	}
 
-	// Sort by RS52W for final output (best first)
-	// For stocks without RS52W (0), sort by RS1M as fallback
+	// Sort by RS1M for final output (best first)
 	sort.Slice(metrics, func(i, j int) bool {
-		if metrics[i].RS52W != metrics[j].RS52W {
-			return metrics[i].RS52W > metrics[j].RS52W
-		}
 		return metrics[i].RS1M > metrics[j].RS1M
 	})
 

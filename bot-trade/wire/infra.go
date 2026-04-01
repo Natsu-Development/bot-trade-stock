@@ -47,7 +47,7 @@ func NewInfra(cfg *config.InfraConfig) (*Infra, error) {
 	appLogger.Info("Connected to MongoDB", zap.String("database", cfg.MongoDBDatabase))
 
 	// HTTP Client with retry
-	httpClient := infraHTTP.NewHTTPClientWithRetry(30 * time.Second)
+	httpClient := infraHTTP.NewHTTPClientWithRetry(60 * time.Second)
 
 	// Provider Pool (market data gateway)
 	providerPool := buildProviderPool(httpClient, cfg)

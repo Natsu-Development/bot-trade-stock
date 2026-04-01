@@ -2,9 +2,9 @@ package trendline
 
 import (
 	"bot-trade/application/dto"
+	appPrep "bot-trade/application/usecase/analyze/prep"
 	analysisservice "bot-trade/domain/analysis/service"
 	analysisvo "bot-trade/domain/analysis/valueobject"
-	appPrep "bot-trade/application/usecase/analyze/prep"
 )
 
 // BreakdownUseCase detects support trendline signals (Bounce).
@@ -34,7 +34,7 @@ func (uc *BreakdownUseCase) Execute(data *appPrep.DataPrepare) ([]dto.TrendlineD
 	signals := analysisservice.GenerateSupportSignals(
 		trendlines,
 		data.DataRecent,
-		data.Config.Trendline.ProximityPercent,
+		data.Config.Trendline.ProximityDecimal(),
 	)
 
 	trendlineDTOs := dto.ToTrendlineDTOs(data.DataRecent, trendlines)
