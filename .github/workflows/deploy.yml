@@ -120,6 +120,10 @@ jobs:
           cp docker-compose.final.yml deployment-package/docker-compose.yml
           cp config/production.env deployment-package/production.env
 
+          # Copy monitoring configs
+          mkdir -p deployment-package/monitoring/promtail
+          cp -r monitoring/promtail/config.yml deployment-package/monitoring/promtail/
+
           # Copy deployment scripts
           cp -r scripts/ deployment-package/scripts/
           chmod +x deployment-package/scripts/*.sh
@@ -195,26 +199,31 @@ jobs:
             -o UserKnownHostsFile=/dev/null \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash << 'ENDSSH'
             set -e
-            
+
             # Extract package
             mkdir -p /tmp/deployment-package
             cd /tmp/deployment-package
             tar xzf /tmp/deployment.tar.gz
             chmod +x scripts/*.sh
-            
+
             # Copy files to expected locations
             cp docker-compose.yml /tmp/docker-compose.yml
             cp production.env /tmp/.env.production
-            
+            mkdir -p /tmp/monitoring/promtail
+            cp monitoring/promtail/config.yml /tmp/monitoring/promtail/config.yml
+
             # Export secrets for deploy script
             export MONGO_ROOT_USERNAME='${{ secrets.MONGO_ROOT_USERNAME }}'
             export MONGO_ROOT_PASSWORD='${{ secrets.MONGO_ROOT_PASSWORD }}'
-            
+            export GRAFANA_CLOUD_LOKI_URL='${{ secrets.GRAFANA_CLOUD_LOKI_URL }}'
+            export GRAFANA_CLOUD_LOKI_USERNAME='${{ secrets.GRAFANA_CLOUD_LOKI_USERNAME }}'
+            export GRAFANA_CLOUD_API_KEY='${{ secrets.GRAFANA_CLOUD_API_KEY }}'
+
             # Run deployment
             ./scripts/deploy-vps.sh
-            
+
             # Cleanup
-            rm -rf /tmp/deployment-package /tmp/deployment.tar.gz /tmp/docker-compose.yml /tmp/.env.production
+            rm -rf /tmp/deployment-package /tmp/deployment.tar.gz /tmp/docker-compose.yml /tmp/.env.production /tmp/monitoring
           ENDSSH
 
   # Notification (runs if Telegram secrets are configured)

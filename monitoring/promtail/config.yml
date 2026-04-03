@@ -1,0 +1,68 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: ${GRAFANA_CLOUD_LOKI_URL}
+    basic_auth:
+      username: ${GRAFANA_CLOUD_LOKI_USERNAME}
+      password: ${GRAFANA_CLOUD_API_KEY}
+
+scrape_configs:
+  # Docker container logs discovery
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 15s
+        filters:
+          - name: label
+            values: ["com.docker.compose.project"]
+
+    relabel_configs:
+      # Extract container name (remove leading /)
+      - source_labels: [__meta_docker_container_name]
+        regex: /(.*)
+        target_label: container
+
+      # Extract service name from compose label
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service
+
+      # Set log path from container ID
+      - source_labels: [__meta_docker_container_id]
+        target_label: __path__
+        replacement: /var/lib/docker/containers/$1/$1-json.log
+
+    pipeline_stages:
+      # Parse Docker JSON wrapper
+      - json:
+          expressions:
+            log: log
+            time: time
+
+      # Parse Zap structured JSON from log field
+      - json:
+          source: log
+          expressions:
+            level: level
+            ts: ts
+            caller: caller
+            msg: msg
+            error: error
+            symbol: symbol
+            name: name
+            duration: duration
+            stacktrace: stacktrace
+
+      # Create indexed labels for efficient queries
+      - labels:
+          level:
+          caller:
+
+      # Use Zap's timestamp for accurate log time
+      - timestamp:
+          source: ts
+          format: RFC3339Nano

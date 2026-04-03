@@ -65,6 +65,22 @@ services:
       retries: 3
       start_period: 10s
 
+  # Promtail - Log collector for Grafana Cloud
+  promtail:
+    image: grafana/promtail:2.9.3
+    container_name: trading-promtail
+    volumes:
+      - ./monitoring/promtail/config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    environment:
+      - GRAFANA_CLOUD_LOKI_URL=${GRAFANA_CLOUD_LOKI_URL}
+      - GRAFANA_CLOUD_LOKI_USERNAME=${GRAFANA_CLOUD_LOKI_USERNAME}
+      - GRAFANA_CLOUD_API_KEY=${GRAFANA_CLOUD_API_KEY}
+    networks:
+      - trading-network
+    restart: unless-stopped
+
 networks:
   trading-network:
     driver: bridge
