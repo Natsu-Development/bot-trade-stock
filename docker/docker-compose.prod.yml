@@ -67,7 +67,7 @@ services:
 
   # Promtail - Log collector for Grafana Cloud
   promtail:
-    image: grafana/promtail:2.9.3
+    image: grafana/promtail:3.3.2
     container_name: trading-promtail
     volumes:
       - ./monitoring/promtail/config.yml:/etc/promtail/config.yml:ro
@@ -80,6 +80,12 @@ services:
     networks:
       - trading-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9080/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 networks:
   trading-network:
