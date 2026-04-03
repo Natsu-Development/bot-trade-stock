@@ -69,6 +69,9 @@ services:
   promtail:
     image: grafana/promtail:3.3.2
     container_name: trading-promtail
+    command:
+      - -config.file=/etc/promtail/config.yml
+      - -config.expand-env=true
     volumes:
       - ./monitoring/promtail/config.yml:/etc/promtail/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
