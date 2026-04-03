@@ -15,12 +15,18 @@ fi
 cp /tmp/docker-compose.yml ./docker-compose.yml
 cp /tmp/.env.production ./.env.production
 
+# Create monitoring directory and copy promtail config
+mkdir -p monitoring/promtail
+if [ -f /tmp/monitoring/promtail/config.yml ]; then
+    cp /tmp/monitoring/promtail/config.yml ./monitoring/promtail/config.yml
+fi
+
 # Validate required secrets
 validate_secrets() {
     local missing=()
     [ -z "$MONGO_ROOT_USERNAME" ] && missing+=("MONGO_ROOT_USERNAME")
     [ -z "$MONGO_ROOT_PASSWORD" ] && missing+=("MONGO_ROOT_PASSWORD")
-    
+
     if [ ${#missing[@]} -gt 0 ]; then
         echo "Error: Missing required secrets: ${missing[*]}"
         return 1
@@ -35,6 +41,17 @@ MONGO_ROOT_USERNAME=$MONGO_ROOT_USERNAME
 MONGO_ROOT_PASSWORD=$MONGO_ROOT_PASSWORD
 MONGODB_URI=mongodb://$MONGO_ROOT_USERNAME:$MONGO_ROOT_PASSWORD@mongo:27017/bot_trade?authSource=admin
 EOF
+
+    # Add Grafana Cloud secrets if provided
+    if [ -n "$GRAFANA_CLOUD_LOKI_URL" ]; then
+        cat >> .env.secrets << EOF
+GRAFANA_CLOUD_LOKI_URL=$GRAFANA_CLOUD_LOKI_URL
+GRAFANA_CLOUD_LOKI_USERNAME=$GRAFANA_CLOUD_LOKI_USERNAME
+GRAFANA_CLOUD_API_KEY=$GRAFANA_CLOUD_API_KEY
+EOF
+        echo "Grafana Cloud credentials added to .env.secrets"
+    fi
+
     chmod 600 .env.secrets
 elif [ ! -f .env.secrets ]; then
     echo "Error: No secrets provided and no existing .env.secrets file!"
