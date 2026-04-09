@@ -121,8 +121,8 @@ jobs:
           cp config/production.env deployment-package/production.env
 
           # Copy monitoring configs
-          mkdir -p deployment-package/monitoring/promtail
-          cp -r monitoring/promtail/config.yml deployment-package/monitoring/promtail/
+          mkdir -p deployment-package/monitoring/alloy
+          cp -r monitoring/alloy/config.alloy deployment-package/monitoring/alloy/
 
           # Copy deployment scripts
           cp -r scripts/ deployment-package/scripts/
@@ -209,15 +209,16 @@ jobs:
             # Copy files to expected locations
             cp docker-compose.yml /tmp/docker-compose.yml
             cp production.env /tmp/.env.production
-            mkdir -p /tmp/monitoring/promtail
-            cp monitoring/promtail/config.yml /tmp/monitoring/promtail/config.yml
+            mkdir -p /tmp/monitoring/alloy
+            cp monitoring/alloy/config.alloy /tmp/monitoring/alloy/config.alloy
 
             # Export secrets for deploy script
             export MONGO_ROOT_USERNAME='${{ secrets.MONGO_ROOT_USERNAME }}'
             export MONGO_ROOT_PASSWORD='${{ secrets.MONGO_ROOT_PASSWORD }}'
-            export GRAFANA_CLOUD_LOKI_URL='${{ secrets.GRAFANA_CLOUD_LOKI_URL }}'
-            export GRAFANA_CLOUD_LOKI_USERNAME='${{ secrets.GRAFANA_CLOUD_LOKI_USERNAME }}'
+            export GRAFANA_CLOUD_USER='${{ secrets.GRAFANA_CLOUD_USER }}'
             export GRAFANA_CLOUD_API_KEY='${{ secrets.GRAFANA_CLOUD_API_KEY }}'
+            export GRAFANA_CLOUD_PROMETHEUS_URL='${{ secrets.GRAFANA_CLOUD_PROMETHEUS_URL }}'
+            export GRAFANA_CLOUD_LOKI_URL='${{ secrets.GRAFANA_CLOUD_LOKI_URL }}'
 
             # Run deployment
             ./scripts/deploy-vps.sh

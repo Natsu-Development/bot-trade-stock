@@ -15,10 +15,10 @@ fi
 cp /tmp/docker-compose.yml ./docker-compose.yml
 cp /tmp/.env.production ./.env.production
 
-# Create monitoring directory and copy promtail config
-mkdir -p monitoring/promtail
-if [ -f /tmp/monitoring/promtail/config.yml ]; then
-    cp /tmp/monitoring/promtail/config.yml ./monitoring/promtail/config.yml
+# Create monitoring directory and copy alloy config
+mkdir -p monitoring/alloy
+if [ -f /tmp/monitoring/alloy/config.alloy ]; then
+    cp /tmp/monitoring/alloy/config.alloy ./monitoring/alloy/config.alloy
 fi
 
 # Validate required secrets
@@ -43,11 +43,12 @@ MONGODB_URI=mongodb://$MONGO_ROOT_USERNAME:$MONGO_ROOT_PASSWORD@mongo:27017/bot_
 EOF
 
     # Add Grafana Cloud secrets if provided
-    if [ -n "$GRAFANA_CLOUD_LOKI_URL" ]; then
+    if [ -n "$GRAFANA_CLOUD_USER" ]; then
         cat >> .env.secrets << EOF
-GRAFANA_CLOUD_LOKI_URL=$GRAFANA_CLOUD_LOKI_URL
-GRAFANA_CLOUD_LOKI_USERNAME=$GRAFANA_CLOUD_LOKI_USERNAME
+GRAFANA_CLOUD_USER=$GRAFANA_CLOUD_USER
 GRAFANA_CLOUD_API_KEY=$GRAFANA_CLOUD_API_KEY
+GRAFANA_CLOUD_PROMETHEUS_URL=$GRAFANA_CLOUD_PROMETHEUS_URL
+GRAFANA_CLOUD_LOKI_URL=$GRAFANA_CLOUD_LOKI_URL
 EOF
         echo "Grafana Cloud credentials added to .env.secrets"
     fi
