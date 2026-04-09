@@ -1,11 +1,9 @@
 // Grafana Alloy - handles both metrics and logs
-// Replaces both Grafana Agent and Promtail
 
 // ============================================================
 // METRICS COLLECTION (Prometheus)
 // ============================================================
 
-// Prometheus remote write to Grafana Cloud
 prometheus.remote_write "grafana_cloud" {
   endpoint {
     url = env("GRAFANA_CLOUD_PROMETHEUS_URL")
@@ -17,7 +15,6 @@ prometheus.remote_write "grafana_cloud" {
   }
 }
 
-// Scrape metrics from bot-trade service
 prometheus.scrape "bot_trade" {
   targets = [{
     __address__ = "bot-trade:8080",
@@ -31,10 +28,9 @@ prometheus.scrape "bot_trade" {
 }
 
 // ============================================================
-// LOGS COLLECTION (Loki)
+// LOGS COLLECTION (Loki) - Docker Discovery
 // ============================================================
 
-// Loki write to Grafana Cloud
 loki.write "grafana_cloud" {
   endpoint {
     url = env("GRAFANA_CLOUD_LOKI_URL")
@@ -46,37 +42,61 @@ loki.write "grafana_cloud" {
   }
 }
 
-// Discover Docker container log files
-local.file_match "docker_logs" {
-  path_targets = [{
-    __path__ = "/var/lib/docker/containers/*/*.log",
-  }]
+// Step 1: Discover all Docker containers
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
 }
 
-// Read and parse Docker logs
-loki.source.file "docker_logs" {
-  targets    = local.file_match.docker_logs.targets
+// Step 2: Relabel to extract container name
+discovery.relabel "logs" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+    replacement   = "$1"
+  }
+}
+
+// Step 3: Tail logs with relabeled targets
+loki.source.docker "all_containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.logs.output
   forward_to = [loki.process.docker_logs.receiver]
 }
 
-// Process and label logs
+// Step 4: Parse Docker JSON wrapper
 loki.process "docker_logs" {
-  // Parse Docker JSON log format
   stage.docker {}
 
-  // Add labels from container metadata
-  stage.labels {
-    values = {
-      container = "container",
-      service   = "com_docker_compose_service",
+  forward_to = [loki.process.zap_logs.receiver]
+}
+
+// Step 5: Parse Zap structured logs
+loki.process "zap_logs" {
+  // Extract Zap fields (only what we need)
+  stage.json {
+    source = "log"
+    expressions = {
+      level = "level",
+      ts    = "ts",
+      msg   = "msg",
+      error = "error",
     }
   }
 
-  // Add static labels
-  stage.static_labels {
+  // Promote level to label (low cardinality: 7 values)
+  stage.labels {
     values = {
-      job = "trading-bot",
+      level = "",
     }
+  }
+
+  // Use Zap's timestamp
+  stage.timestamp {
+    source = "ts"
+    format = "RFC3339Nano"
   }
 
   forward_to = [loki.write.grafana_cloud.receiver]
