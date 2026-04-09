@@ -46,6 +46,20 @@ make setup
 make dev
 ```
 
+## Grafana Metrics Dashboard
+
+Import the standard dashboard JSON from:
+
+- `monitoring/grafana/dashboards/trading-bot-metrics.json`
+
+In Grafana:
+1. Go to **Dashboards** → **Import**
+2. Upload the JSON file
+3. Select your Prometheus datasource
+4. Use dashboard variables (`job`, `instance`, `provider`) to filter views
+
+This dashboard is built for metrics exported at `/metrics` and includes provider-level metrics (`provider_*`) plus Go/process runtime metrics.
+
 ## Deployment
 
 Supported providers:

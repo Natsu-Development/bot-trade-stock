@@ -117,3 +117,10 @@ func (l *RateLimiter) OnRateLimited() {
 		zap.Float64("new_rps", l.currentRPS),
 	)
 }
+
+// CurrentRPS returns the current requests-per-second limit.
+func (l *RateLimiter) CurrentRPS() float64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.currentRPS
+}
