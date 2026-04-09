@@ -31,7 +31,7 @@ prometheus.scrape "bot_trade" {
 }
 
 // ============================================================
-// LOGS COLLECTION (Loki)
+// LOGS COLLECTION (Loki) - Docker Socket Discovery
 // ============================================================
 
 // Loki write to Grafana Cloud
@@ -46,37 +46,77 @@ loki.write "grafana_cloud" {
   }
 }
 
-// Discover Docker container log files
-local.file_match "docker_logs" {
-  path_targets = [{
-    __path__ = "/var/lib/docker/containers/*/*.log",
-  }]
-}
+// Discover ALL Docker containers via socket
+loki.source.docker "all_containers" {
+  host    = "unix:///var/run/docker.sock"
+  targets = [
+    {
+      __address__ = "localhost",
+    },
+  ]
 
-// Read and parse Docker logs
-loki.source.file "docker_logs" {
-  targets    = local.file_match.docker_logs.targets
   forward_to = [loki.process.docker_logs.receiver]
+
+  // Relabel to extract container metadata
+  relabel_rules = [
+    // Extract container name (remove leading /)
+    {
+      source_labels = ["__meta_docker_container_name"]
+      regex         = "/(.*)"
+      target_label  = "container"
+    },
+    // Extract service name from Docker Compose label
+    {
+      source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+      target_label  = "service"
+    },
+    // Set job from service name
+    {
+      source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+      target_label  = "job"
+    },
+  ]
 }
 
-// Process and label logs
+// Process and enrich logs
 loki.process "docker_logs" {
-  // Parse Docker JSON log format
+  // Parse Docker JSON log wrapper
   stage.docker {}
 
-  // Add labels from container metadata
-  stage.labels {
-    values = {
-      container = "container",
-      service   = "com_docker_compose_service",
+  forward_to = [loki.process.zap_logs.receiver]
+}
+
+// Parse Zap structured logs (for bot-trade container)
+// This stage safely handles containers without Zap logs
+loki.process "zap_logs" {
+  // Try to parse JSON from log field
+  stage.json {
+    source = "log"
+    expressions = {
+      level      = "level",
+      ts         = "ts",
+      caller     = "caller",
+      msg        = "msg",
+      error      = "error",
+      symbol     = "symbol",
+      name       = "name",
+      duration   = "duration",
+      stacktrace = "stacktrace",
     }
   }
 
-  // Add static labels
-  stage.static_labels {
+  // Extract level and caller as labels (only if present)
+  stage.labels {
     values = {
-      job = "trading-bot",
+      level  = "",
+      caller = "",
     }
+  }
+
+  // Use Zap's timestamp if available
+  stage.timestamp {
+    source = "ts"
+    format = "RFC3339Nano"
   }
 
   forward_to = [loki.write.grafana_cloud.receiver]
