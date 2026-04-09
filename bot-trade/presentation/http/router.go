@@ -7,6 +7,7 @@ import (
 	"bot-trade/presentation/http/middleware"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // NewRouter creates a new HTTP router with all routes configured
@@ -33,6 +34,9 @@ func NewRouter(
 			"timestamp": time.Now().Format(time.RFC3339),
 		})
 	})
+
+	// Prometheus metrics endpoint - exposes Go runtime metrics (goroutines, GC, memory)
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Configuration CRUD endpoints
 	router.POST("/config", configHandler.CreateConfig)

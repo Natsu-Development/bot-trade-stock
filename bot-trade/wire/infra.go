@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"bot-trade/config"
+	"bot-trade/infrastructure/metrics"
 	infraHTTP "bot-trade/infrastructure/http"
 	"bot-trade/infrastructure/mongodb"
 	"bot-trade/infrastructure/provider"
@@ -26,7 +27,6 @@ type Infra struct {
 
 // NewInfra initializes all infrastructure layer dependencies.
 func NewInfra(cfg *config.InfraConfig) (*Infra, error) {
-	// Logger - set as global so zap.L() works everywhere
 	appLogger, err := logger.SetGlobal(logger.Config{
 		Level:       cfg.LogLevel,
 		Environment: cfg.Environment,
@@ -36,7 +36,6 @@ func NewInfra(cfg *config.InfraConfig) (*Infra, error) {
 	}
 	appLogger.Info("Initializing infrastructure layer")
 
-	// MongoDB
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -46,11 +45,9 @@ func NewInfra(cfg *config.InfraConfig) (*Infra, error) {
 	}
 	appLogger.Info("Connected to MongoDB", zap.String("database", cfg.MongoDBDatabase))
 
-	// HTTP Client with retry
 	httpClient := infraHTTP.NewHTTPClientWithRetry(60 * time.Second)
-
-	// Provider Pool (market data gateway)
-	providerPool := buildProviderPool(httpClient, cfg)
+	providerMetrics := metrics.NewProviderMetrics()
+	providerPool := buildProviderPool(httpClient, cfg, providerMetrics)
 
 	return &Infra{
 		DB:           mongoClient,
@@ -64,23 +61,21 @@ func (i *Infra) Close() {
 	if i.DB != nil {
 		i.DB.Disconnect(context.Background())
 	}
-	// Sync the global logger
 	_ = zap.L().Sync()
 }
 
-// buildProviderPool creates a provider pool from all registered providers.
 func buildProviderPool(
 	httpClient *http.Client,
 	cfg *config.InfraConfig,
+	providerMetrics *metrics.ProviderMetrics,
 ) *provider.ProviderPool {
 	var wrapped []*provider.WrappedProvider
 	initialRPS := float64(cfg.DefaultProviderRPS)
 
-	// Auto-discover all registered providers via factory registry
 	for name, factory := range providerRegistry.GlobalRegistry().AllFactories() {
 		p := factory(httpClient)
 		limiter := provider.NewRateLimiter(initialRPS)
-		wrapped = append(wrapped, provider.NewWrappedProvider(p, limiter))
+		wrapped = append(wrapped, provider.NewWrappedProvider(p, limiter, providerMetrics))
 
 		zap.L().Info("Provider registered",
 			zap.String("name", name),

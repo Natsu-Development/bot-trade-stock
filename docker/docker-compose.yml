@@ -25,15 +25,13 @@ services:
   # Go Trading Bot Service (Direct VietCap API)
   bot-trade:
     build:
-      context: ..
-      dockerfile: ../bot-trade/Dockerfile
+      context: ../bot-trade
+      dockerfile: Dockerfile
     container_name: trading-bot
     expose:
       - "8080"
     environment:
       - NODE_ENV=production
-    env_file:
-      - ../bot-trade/.env
     networks:
       - trading-network
     restart: unless-stopped
@@ -44,7 +42,41 @@ services:
       retries: 3
       start_period: 20s
 
+  # Grafana Alloy - Unified metrics and logs collector
+  alloy:
+    image: grafana/alloy:v1.4.0
+    container_name: trading-alloy
+    volumes:
+      - ../monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - alloy-data:/var/lib/alloy
+    environment:
+      - GRAFANA_CLOUD_USER=${GRAFANA_CLOUD_USER}
+      - GRAFANA_CLOUD_API_KEY=${GRAFANA_CLOUD_API_KEY}
+      - GRAFANA_CLOUD_PROMETHEUS_URL=${GRAFANA_CLOUD_PROMETHEUS_URL}
+      - GRAFANA_CLOUD_LOKI_URL=${GRAFANA_CLOUD_LOKI_URL}
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+    ports:
+      - "12345:12345"
+    networks:
+      - trading-network
+    depends_on:
+      - bot-trade
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:12345/-/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
 networks:
   trading-network:
     driver: bridge
 
+volumes:
+  alloy-data:

@@ -1,0 +1,83 @@
+// Grafana Alloy - handles both metrics and logs
+// Replaces both Grafana Agent and Promtail
+
+// ============================================================
+// METRICS COLLECTION (Prometheus)
+// ============================================================
+
+// Prometheus remote write to Grafana Cloud
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = env("GRAFANA_CLOUD_PROMETHEUS_URL")
+
+    basic_auth {
+      username = env("GRAFANA_CLOUD_USER")
+      password = env("GRAFANA_CLOUD_API_KEY")
+    }
+  }
+}
+
+// Scrape metrics from bot-trade service
+prometheus.scrape "bot_trade" {
+  targets = [{
+    __address__ = "bot-trade:8080",
+    service     = "bot-trade",
+  }]
+
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+  scrape_interval = "15s"
+  scrape_timeout  = "10s"
+  job_name        = "bot-trade"
+}
+
+// ============================================================
+// LOGS COLLECTION (Loki)
+// ============================================================
+
+// Loki write to Grafana Cloud
+loki.write "grafana_cloud" {
+  endpoint {
+    url = env("GRAFANA_CLOUD_LOKI_URL")
+
+    basic_auth {
+      username = env("GRAFANA_CLOUD_USER")
+      password = env("GRAFANA_CLOUD_API_KEY")
+    }
+  }
+}
+
+// Discover Docker container log files
+local.file_match "docker_logs" {
+  path_targets = [{
+    __path__ = "/var/lib/docker/containers/*/*.log",
+  }]
+}
+
+// Read and parse Docker logs
+loki.source.file "docker_logs" {
+  targets    = local.file_match.docker_logs.targets
+  forward_to = [loki.process.docker_logs.receiver]
+}
+
+// Process and label logs
+loki.process "docker_logs" {
+  // Parse Docker JSON log format
+  stage.docker {}
+
+  // Add labels from container metadata
+  stage.labels {
+    values = {
+      container = "container",
+      service   = "com_docker_compose_service",
+    }
+  }
+
+  // Add static labels
+  stage.static_labels {
+    values = {
+      job = "trading-bot",
+    }
+  }
+
+  forward_to = [loki.write.grafana_cloud.receiver]
+}
