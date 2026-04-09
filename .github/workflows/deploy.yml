@@ -215,7 +215,8 @@ jobs:
             # Export secrets for deploy script
             export MONGO_ROOT_USERNAME='${{ secrets.MONGO_ROOT_USERNAME }}'
             export MONGO_ROOT_PASSWORD='${{ secrets.MONGO_ROOT_PASSWORD }}'
-            export GRAFANA_CLOUD_USER='${{ secrets.GRAFANA_CLOUD_USER }}'
+            export GRAFANA_CLOUD_PROMETHEUS_USER='${{ secrets.GRAFANA_CLOUD_PROMETHEUS_USER }}'
+            export GRAFANA_CLOUD_LOKI_USER='${{ secrets.GRAFANA_CLOUD_LOKI_USER }}'
             export GRAFANA_CLOUD_API_KEY='${{ secrets.GRAFANA_CLOUD_API_KEY }}'
             export GRAFANA_CLOUD_PROMETHEUS_URL='${{ secrets.GRAFANA_CLOUD_PROMETHEUS_URL }}'
             export GRAFANA_CLOUD_LOKI_URL='${{ secrets.GRAFANA_CLOUD_LOKI_URL }}'
