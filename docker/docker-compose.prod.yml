@@ -70,7 +70,7 @@ services:
     image: grafana/alloy:v1.4.0
     container_name: trading-alloy
     volumes:
-      - ../monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - alloy-data:/var/lib/alloy
     environment:
