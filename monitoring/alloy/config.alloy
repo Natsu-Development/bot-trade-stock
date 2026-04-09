@@ -46,37 +46,53 @@ loki.write "grafana_cloud" {
   }
 }
 
-// Discover Docker container log files
-local.file_match "docker_logs" {
-  path_targets = [{
-    __path__ = "/var/lib/docker/containers/*/*.log",
-  }]
+// Step 1: Discover Docker containers
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
 }
 
-// Read and parse Docker logs
+// Step 2: Relabel to extract container name only
+discovery.relabel "docker_logs" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+    replacement   = "$1"
+  }
+}
+
+// Step 3: Read log files with container labels
 loki.source.file "docker_logs" {
-  targets    = local.file_match.docker_logs.targets
+  targets    = discovery.relabel.docker_logs.output
   forward_to = [loki.process.docker_logs.receiver]
 }
 
-// Process and label logs
+// Step 4: Process logs - unwrap Docker JSON + parse Zap
 loki.process "docker_logs" {
-  // Parse Docker JSON log format
+  // Parse Docker JSON wrapper (extracts log, stream, time)
   stage.docker {}
 
-  // Add labels from container metadata
-  stage.labels {
-    values = {
-      container = "container",
-      service   = "com_docker_compose_service",
+  // Parse Zap structured JSON logs
+  stage.json {
+    source = "log"
+    expressions = {
+      level = "level",
     }
   }
 
-  // Add static labels
-  stage.static_labels {
+  // Extract level as label (for filtering in Grafana)
+  stage.labels {
     values = {
-      job = "trading-bot",
+      level = "",
     }
+  }
+
+  // Use Zap timestamp
+  stage.timestamp {
+    source = "ts"
+    format = "RFC3339Nano"
   }
 
   forward_to = [loki.write.grafana_cloud.receiver]
