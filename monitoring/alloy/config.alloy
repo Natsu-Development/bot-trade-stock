@@ -46,74 +46,50 @@ loki.write "grafana_cloud" {
   }
 }
 
-// Discover ALL Docker containers via socket
-loki.source.docker "all_containers" {
-  host    = "unix:///var/run/docker.sock"
-  targets = [
-    {
-      __address__ = "localhost",
-    },
-  ]
-
-  forward_to = [loki.process.docker_logs.receiver]
-
-  // Relabel to extract container metadata
-  relabel_rules = [
-    // Extract container name (remove leading /)
-    {
-      source_labels = ["__meta_docker_container_name"]
-      regex         = "/(.*)"
-      target_label  = "container"
-    },
-    // Extract service name from Docker Compose label
-    {
-      source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
-      target_label  = "service"
-    },
-    // Set job from service name
-    {
-      source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
-      target_label  = "job"
-    },
-  ]
+// Step 1: Discover Docker containers
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
 }
 
-// Process and enrich logs
+// Step 2: Relabel to extract container name only
+discovery.relabel "docker_logs" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+    replacement   = "$1"
+  }
+}
+
+// Step 3: Read log files with container labels
+loki.source.file "docker_logs" {
+  targets    = discovery.relabel.docker_logs.output
+  forward_to = [loki.process.docker_logs.receiver]
+}
+
+// Step 4: Process logs - unwrap Docker JSON + parse Zap
 loki.process "docker_logs" {
-  // Parse Docker JSON log wrapper
+  // Parse Docker JSON wrapper (extracts log, stream, time)
   stage.docker {}
 
-  forward_to = [loki.process.zap_logs.receiver]
-}
-
-// Parse Zap structured logs (for bot-trade container)
-// This stage safely handles containers without Zap logs
-loki.process "zap_logs" {
-  // Try to parse JSON from log field
+  // Parse Zap structured JSON logs
   stage.json {
     source = "log"
     expressions = {
-      level      = "level",
-      ts         = "ts",
-      caller     = "caller",
-      msg        = "msg",
-      error      = "error",
-      symbol     = "symbol",
-      name       = "name",
-      duration   = "duration",
-      stacktrace = "stacktrace",
+      level = "level",
     }
   }
 
-  // Extract level and caller as labels (only if present)
+  // Extract level as label (for filtering in Grafana)
   stage.labels {
     values = {
-      level  = "",
-      caller = "",
+      level = "",
     }
   }
 
-  // Use Zap's timestamp if available
+  // Use Zap timestamp
   stage.timestamp {
     source = "ts"
     format = "RFC3339Nano"
