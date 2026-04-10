@@ -51,10 +51,17 @@ discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
 }
 
-// Step 2: Relabel to extract container name only
+// Step 2: Relabel to set log path and extract container name
 discovery.relabel "docker_logs" {
   targets = discovery.docker.containers.targets
 
+  // Set the log file path from Docker metadata
+  rule {
+    source_labels = ["__meta_docker_container_log_path"]
+    target_label  = "__path__"
+  }
+
+  // Extract container name (remove leading slash)
   rule {
     source_labels = ["__meta_docker_container_name"]
     regex         = "/(.*)"
