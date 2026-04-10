@@ -31,7 +31,7 @@ prometheus.scrape "bot_trade" {
 }
 
 // ============================================================
-// LOGS COLLECTION (Loki) - Docker Socket Discovery
+// LOGS COLLECTION (Loki) - Docker API Direct
 // ============================================================
 
 // Loki write to Grafana Cloud
@@ -51,15 +51,9 @@ discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
 }
 
-// Step 2: Relabel to set log path and extract container name
+// Step 2: Relabel to extract container name (remove leading slash)
 discovery.relabel "docker_logs" {
   targets = discovery.docker.containers.targets
-
-  // Set the log file path from Docker metadata
-  rule {
-    source_labels = ["__meta_docker_container_log_path"]
-    target_label  = "__path__"
-  }
 
   // Extract container name (remove leading slash)
   rule {
@@ -70,8 +64,9 @@ discovery.relabel "docker_logs" {
   }
 }
 
-// Step 3: Read log files with container labels
-loki.source.file "docker_logs" {
+// Step 3: Read logs directly from Docker daemon via socket
+loki.source.docker "docker_logs" {
+  host       = "unix:///var/run/docker.sock"
   targets    = discovery.relabel.docker_logs.output
   forward_to = [loki.process.docker_logs.receiver]
 }
