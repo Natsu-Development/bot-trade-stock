@@ -30,6 +30,19 @@ prometheus.scrape "bot_trade" {
   job_name        = "bot-trade"
 }
 
+// Scrape container metrics from cAdvisor
+prometheus.scrape "cadvisor" {
+  targets = [{
+    __address__ = "cadvisor:8080",
+    service     = "cadvisor",
+  }]
+
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+  scrape_interval = "15s"
+  scrape_timeout  = "10s"
+  job_name        = "cadvisor"
+}
+
 // ============================================================
 // LOGS COLLECTION (Loki) - Docker API Direct
 // ============================================================
