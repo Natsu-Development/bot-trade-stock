@@ -110,6 +110,9 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    command:
+      - "--docker_only=true"
+      - "--housekeeping_interval=30s"
     expose:
       - "8080"
     networks:
