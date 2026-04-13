@@ -65,9 +65,9 @@
   "panels": [
     {
       "id": 1,
-      "type": "stat",
-      "title": "Target Up",
-      "description": "Scrape health for selected job and instance (1 = up, 0 = down).",
+      "type": "bargauge",
+      "title": "Provider Health",
+      "description": "Health status per provider (1 = healthy, 0 = unhealthy).",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -84,6 +84,8 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "min": 0,
+          "max": 1,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -102,10 +104,13 @@
         "overrides": []
       },
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "maxVizHeight": 300,
+        "maxVizWidth": 300,
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -113,22 +118,25 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "sort": {
+          "by": "Name",
+          "desc": false
+        }
       },
       "targets": [
         {
-          "expr": "min(up{job=~\"$job\",instance=~\"$instance\"})",
+          "expr": "provider_health_status{job=~\"$job\",instance=~\"$instance\",provider=~\"$provider\"}",
+          "legendFormat": "{{provider}}",
           "instant": true,
-          "legendFormat": "up",
           "refId": "A"
         }
       ]
     },
     {
       "id": 2,
-      "type": "stat",
-      "title": "Total Request Rate",
-      "description": "Current request throughput across selected providers.",
+      "type": "bargauge",
+      "title": "Total Requests",
+      "description": "Total number of requests per provider in the time range.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -145,15 +153,20 @@
             "mode": "palette-classic"
           },
           "mappings": [],
-          "unit": "reqps"
+          "unit": "none",
+          "decimals": 0,
+          "min": 0
         },
         "overrides": []
       },
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "maxVizHeight": 300,
+        "maxVizWidth": 300,
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -161,21 +174,25 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "sort": {
+          "by": "Name",
+          "desc": false
+        }
       },
       "targets": [
         {
-          "expr": "sum(rate(provider_requests_total{job=~\"$job\",instance=~\"$instance\",provider=~\"$provider\"}[$__rate_interval]))",
-          "legendFormat": "rps",
+          "expr": "sum by (provider) (increase(provider_requests_total{job=~\"$job\",instance=~\"$instance\",provider=~\"$provider\"}[$__range]))",
+          "legendFormat": "{{provider}}",
+          "instant": true,
           "refId": "A"
         }
       ]
     },
     {
       "id": 3,
-      "type": "stat",
-      "title": "Total Error Rate",
-      "description": "Error events per second across selected providers.",
+      "type": "bargauge",
+      "title": "Total Errors",
+      "description": "Total number of errors per provider in the time range.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -189,18 +206,40 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
           "mappings": [],
-          "unit": "reqps"
+          "unit": "none",
+          "decimals": 0,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "maxVizHeight": 300,
+        "maxVizWidth": 300,
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -208,21 +247,25 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "sort": {
+          "by": "Name",
+          "desc": false
+        }
       },
       "targets": [
         {
-          "expr": "sum(rate(provider_errors_total{job=~\"$job\",instance=~\"$instance\",provider=~\"$provider\"}[$__rate_interval]))",
-          "legendFormat": "eps",
+          "expr": "sum by (provider) (increase(provider_errors_total{job=~\"$job\",instance=~\"$instance\",provider=~\"$provider\"}[$__range]))",
+          "legendFormat": "{{provider}}",
+          "instant": true,
           "refId": "A"
         }
       ]
     },
     {
       "id": 4,
-      "type": "stat",
+      "type": "bargauge",
       "title": "Error Percentage",
-      "description": "Errors divided by requests (percentage).",
+      "description": "Errors as percentage of total requests per provider in the time range.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -239,6 +282,7 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -256,15 +300,19 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "percent",
+          "decimals": 2
         },
         "overrides": []
       },
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "maxVizHeight": 300,
+        "maxVizWidth": 300,
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -272,12 +320,16 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "sort": {
+          "by": "Name",
+          "desc": false
+        }
       },
       "targets": [
         {
-          "expr": "100 * sum(rate(provider_errors_total{job=~\"$job\",instance=~\"$instance\",provider=~\"$provider\"}[$__rate_interval])) / clamp_min(sum(rate(provider_requests_total{job=~\"$job\",instance=~\"$instance\",provider=~\"$provider\"}[$__rate_interval])), 1e-9)",
-          "legendFormat": "error %",
+          "expr": "100 * sum by (provider) (increase(provider_errors_total{job=~\"$job\",instance=~\"$instance\",provider=~\"$provider\"}[$__range])) / clamp_min(sum by (provider) (increase(provider_requests_total{job=~\"$job\",instance=~\"$instance\",provider=~\"$provider\"}[$__range])), 1)",
+          "legendFormat": "{{provider}}",
+          "instant": true,
           "refId": "A"
         }
       ]
@@ -788,6 +840,226 @@
           "expr": "go_gc_duration_seconds{job=~\"$job\",instance=~\"$instance\",quantile=\"0.99\"}",
           "legendFormat": "{{instance}}",
           "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "row",
+      "title": "Container Metrics (cAdvisor)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      }
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Container Memory Usage",
+      "description": "Memory usage percentage per container. Alert: >80% warning, >90% critical.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 45
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "100 * container_memory_working_set_bytes{name=~\"trading.*\"} / container_spec_memory_limit_bytes{name=~\"trading.*\"}",
+          "legendFormat": "{{name}}",
+          "instant": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Container Memory Usage Over Time",
+      "description": "Memory usage (working set) per container with limit reference.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 6,
+        "y": 45
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "container_memory_working_set_bytes{name=~\"trading.*\"}",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        },
+        {
+          "expr": "container_spec_memory_limit_bytes{name=~\"trading.*\"}",
+          "legendFormat": "{{name}} limit",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Container CPU Usage",
+      "description": "CPU usage per container as percentage of one core.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 53
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 * rate(container_cpu_usage_seconds_total{name=~\"trading.*\"}[5m])",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Container Network I/O",
+      "description": "Network traffic per container (receive/transmit).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 53
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(container_network_receive_bytes_total{name=~\"trading.*\"}[5m])",
+          "legendFormat": "{{name}} RX",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(container_network_transmit_bytes_total{name=~\"trading.*\"}[5m])",
+          "legendFormat": "{{name}} TX",
+          "refId": "B"
         }
       ]
     }
