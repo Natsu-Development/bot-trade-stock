@@ -109,7 +109,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
-      - /cgroup:/cgroup:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
     expose:
       - "8080"
     networks:

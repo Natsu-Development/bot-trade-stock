@@ -138,7 +138,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
-      - /cgroup:/cgroup:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
     expose:
       - "8080"
     networks:
@@ -148,10 +148,10 @@ services:
       resources:
         limits:
           cpus: '0.25'
-          memory: 64M
+          memory: 128M
         reservations:
           cpus: '0.1'
-          memory: 32M
+          memory: 64M
 
 networks:
   trading-network:
