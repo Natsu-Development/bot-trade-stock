@@ -101,18 +101,22 @@ services:
 
   # cAdvisor - Container metrics collector
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.51.0
+    image: ghcr.io/google/cadvisor:v0.56.1
     container_name: trading-cadvisor
     privileged: true
+    devices:
+    - /dev/kmsg
     volumes:
       - /:/rootfs:ro
-      - /var/run:/var/run/:ro
+      - /var/run:/var/run:ro
       - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     command:
       - "--docker_only=true"
       - "--housekeeping_interval=30s"
+      - "--storage_driver=overlay2"
     expose:
       - "8080"
     networks:
@@ -121,8 +125,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 256M
+          cpus: '0.25'
+          memory: 128M
         reservations:
           cpus: '0.1'
           memory: 64M
