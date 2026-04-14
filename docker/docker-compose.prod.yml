@@ -135,9 +135,11 @@ services:
     privileged: true
     volumes:
       - /:/rootfs:ro
-      - /var/run:/var/run/:ro
+      - /var/run:/var/run:ro
       - /sys:/sys:ro
-      - /var/lib/docker:/rootfs/var/lib/docker:ro
+      - /var/lib/docker:/var/lib/docker:ro             # <-- 1. MUST HAVE THIS (Primary Docker path)
+      - /var/lib/docker:/rootfs/var/lib/docker:ro      # <-- 2. MUST HAVE THIS (Fallback for cAdvisor path resolution)
+      - /dev/disk:/dev/disk:ro                         # <-- 3. MUST HAVE THIS (For disk metrics)
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     command:
       - "--docker_only=true"
