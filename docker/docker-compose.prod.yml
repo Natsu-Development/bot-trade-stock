@@ -130,20 +130,22 @@ services:
 
   # cAdvisor - Container metrics collector
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.51.0
+    image: ghcr.io/google/cadvisor:v0.56.1
     container_name: trading-cadvisor
     privileged: true
+    devices:
+    - /dev/kmsg
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
-      - /var/lib/docker:/var/lib/docker:ro             # <-- 1. MUST HAVE THIS (Primary Docker path)
-      - /var/lib/docker:/rootfs/var/lib/docker:ro      # <-- 2. MUST HAVE THIS (Fallback for cAdvisor path resolution)
-      - /dev/disk:/dev/disk:ro                         # <-- 3. MUST HAVE THIS (For disk metrics)
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     command:
       - "--docker_only=true"
       - "--housekeeping_interval=30s"
+      - "--storage_driver=overlay2"
     expose:
       - "8080"
     networks:
