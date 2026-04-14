@@ -145,7 +145,6 @@ services:
     command:
       - "--docker_only=true"
       - "--housekeeping_interval=30s"
-      - "--storage_driver=overlay2"
     expose:
       - "8080"
     networks:
