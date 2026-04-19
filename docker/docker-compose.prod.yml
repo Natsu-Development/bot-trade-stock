@@ -1,10 +1,14 @@
 services:
-  # Nginx Reverse Proxy - Single entry point
+  # Nginx Reverse Proxy - Single entry point with HTTPS
   nginx:
     image: ${DOCKER_REGISTRY}/trading-frontend:${IMAGE_TAG:-latest}
     container_name: trading-nginx
     ports:
       - "80:80"
+      - "443:443"
+    volumes:
+      # Mount Cloudflare Origin CA certificates from VPS
+      - /etc/ssl/cloudflare:/etc/nginx/ssl:ro
     depends_on:
       bot-trade:
         condition: service_healthy
@@ -12,7 +16,7 @@ services:
       - trading-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "--no-check-certificate", "https://localhost/"]
       interval: 30s
       timeout: 10s
       retries: 3

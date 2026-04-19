@@ -30,12 +30,15 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf
 
-# Expose port 80
-EXPOSE 80
+# Create SSL directory for mounting certificates
+RUN mkdir -p /etc/nginx/ssl
 
-# Health check
+# Expose HTTP (80) and HTTPS (443)
+EXPOSE 80 443
+
+# Health check via HTTPS (--no-check-certificate for self-signed Origin CA)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
+  CMD wget --quiet --tries=1 --spider --no-check-certificate https://localhost/ || exit 1
 
 # Start nginx
 CMD ["nginx", "-g", "daemon off;"]
