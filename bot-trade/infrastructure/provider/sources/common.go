@@ -11,11 +11,15 @@ import (
 )
 
 // HandleHTTPError checks for common HTTP errors and returns appropriate errors.
-// Returns ErrRateLimited for 429, or a generic error with status and body for other non-200 responses.
+// Returns ErrRateLimited for 429, ErrForbidden for 403, or a generic error with status and body for other non-200 responses.
 // Returns nil if status is 200 OK.
 func HandleHTTPError(resp *http.Response, body []byte, providerName string) error {
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return fmt.Errorf("%s: %w", providerName, contract.ErrRateLimited)
+	}
+
+	if resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("%s: %w", providerName, contract.ErrForbidden)
 	}
 
 	if resp.StatusCode != http.StatusOK {

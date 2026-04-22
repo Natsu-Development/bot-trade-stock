@@ -12,8 +12,6 @@ import (
 	marketvo "bot-trade/domain/shared/valueobject/market"
 	"bot-trade/infrastructure/provider/contract"
 	"bot-trade/infrastructure/provider/registry"
-
-	"go.uber.org/zap"
 )
 
 const (
@@ -108,7 +106,7 @@ func (p *VPSProvider) FetchBars(
 	}
 
 	if chartResp.Status != "ok" {
-		return nil, fmt.Errorf("VPS API returned error: status=%s", chartResp.Status)
+		return nil, fmt.Errorf("vps: %w", contract.ErrNoData)
 	}
 
 	result := TransformOHLCV(OHLCVData{
@@ -119,13 +117,6 @@ func (p *VPSProvider) FetchBars(
 		Closes:     chartResp.Closes,
 		Volumes:    chartResp.Volumes,
 	})
-
-	zap.L().Debug("FetchBars data",
-		zap.String("provider", vpsName),
-		zap.String("symbol", string(q.Symbol)),
-		zap.String("interval", string(q.Interval)),
-		zap.Int("bars", len(result)),
-	)
 
 	return result, nil
 }
