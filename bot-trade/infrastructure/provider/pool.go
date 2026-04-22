@@ -2,10 +2,12 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 
 	"bot-trade/application/port/outbound"
+	"bot-trade/infrastructure/provider/contract"
 	_ "bot-trade/infrastructure/provider/sources"
 
 	marketvo "bot-trade/domain/shared/valueobject/market"
@@ -58,11 +60,13 @@ func (p *ProviderPool) FetchData(ctx context.Context, q marketvo.MarketDataQuery
 
 		result, err := p.providers[idx].FetchObserved(ctx, q)
 		if err != nil {
-			zap.L().Warn("Provider failed",
-				zap.String("provider", p.providers[idx].Name()),
-				zap.String("symbol", string(q.Symbol)),
-				zap.Error(err),
-			)
+			if !errors.Is(err, contract.ErrNoData) {                                                                                         
+				zap.L().Error("Provider failed",
+					zap.String("provider", p.providers[idx].Name()),
+					zap.String("symbol", string(q.Symbol)),
+					zap.Error(err),
+				) 
+			}
 			continue
 		}
 

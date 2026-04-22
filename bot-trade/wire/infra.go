@@ -71,15 +71,17 @@ func buildProviderPool(
 ) *provider.ProviderPool {
 	var wrapped []*provider.WrappedProvider
 	initialRPS := float64(cfg.DefaultProviderRPS)
+	maxRPS := float64(cfg.MaxProviderRPS)
 
 	for name, factory := range providerRegistry.GlobalRegistry().AllFactories() {
 		p := factory(httpClient)
-		limiter := provider.NewRateLimiter(initialRPS)
-		wrapped = append(wrapped, provider.NewWrappedProvider(p, limiter, providerMetrics))
+		bucket := provider.NewTokenBucket(name, initialRPS, maxRPS)
+		wrapped = append(wrapped, provider.NewWrappedProvider(p, bucket, providerMetrics))
 
 		zap.L().Info("Provider registered",
 			zap.String("name", name),
 			zap.Float64("initial_rps", initialRPS),
+			zap.Float64("max_rps", maxRPS),
 		)
 	}
 

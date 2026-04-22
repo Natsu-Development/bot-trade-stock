@@ -108,7 +108,7 @@ func (p *SSIProvider) FetchBars(
 	}
 
 	if len(chartResp.Data.Timestamps) == 0 {
-		return nil, fmt.Errorf("SSI API returned empty data")
+		return nil, fmt.Errorf("SSI: %w", contract.ErrNoData)
 	}
 
 	result := TransformOHLCV(OHLCVData{

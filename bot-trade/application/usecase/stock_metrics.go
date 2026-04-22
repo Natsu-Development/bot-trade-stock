@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +21,17 @@ import (
 	marketvo "bot-trade/domain/shared/valueobject/market"
 
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 )
+
+// equitySymbolRe matches symbols that can reasonably be fetched as OHLCV:
+//   - 3-4 letter cash equity tickers (VIC, VCB, HPG, VJC, FRT, ...)
+//   - ETF tickers with the E1/FUE prefix (E1VFVN30, FUEVFVND, ...)
+//
+// Warrants (CFPT2311), bonds (BVBS17094), TD-codes, and other derivatives
+// contain digits or exceed 4 chars and are excluded — no provider serves them.
+var equitySymbolRe = regexp.MustCompile(`^([A-Z]{3,4}|E1[A-Z0-9]+|FUE[A-Z0-9]+)$`)
 
 // Note: Retry logic for rate-limited requests (429) is handled at the HTTP transport layer
 // via infrastructure/http.RetryTransport. This keeps the usecase clean and focused on
@@ -38,10 +49,16 @@ type StockMetricsUseCase struct {
 	// Signal threshold (days a signal is considered valid)
 	signalDaysThreshold int
 
+	// Concurrency limit for batch fetching
+	concurrency int
+
 	// RAM cache
 	cachedMetrics []*metricsagg.StockMetrics
 	cachedAt      time.Time
 	cacheMu       sync.RWMutex
+
+	// Ensures only one Refresh runs at a time; concurrent callers piggyback.
+	refreshGroup singleflight.Group
 }
 
 // NewStockMetricsUseCase creates a new stock metrics use case.
@@ -50,6 +67,7 @@ func NewStockMetricsUseCase(
 	repository outbound.StockMetricsRepository,
 	configRepo outbound.ConfigRepository,
 	signalDaysThreshold int,
+	concurrency int,
 ) *StockMetricsUseCase {
 	return &StockMetricsUseCase{
 		gateway:             gateway,
@@ -57,11 +75,28 @@ func NewStockMetricsUseCase(
 		calculator:          metricsservice.NewCalculator(),
 		configRepo:          configRepo,
 		signalDaysThreshold: signalDaysThreshold,
+		concurrency:         concurrency,
 	}
 }
 
 // Refresh fetches ALL stocks from HOSE, HNX, UPCOM, calculates metrics, and caches in RAM.
+// Concurrent callers share a single in-flight run via singleflight.
 func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*dto.StockMetricsResult, error) {
+	v, err, shared := uc.refreshGroup.Do("refresh", func() (any, error) {
+		return uc.refresh(ctx)
+	})
+	if shared {
+		zap.L().Info("Refresh request joined an in-flight run")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return v.(*dto.StockMetricsResult), nil
+}
+
+// refresh is the actual refresh implementation. Must only be invoked via the
+// singleflight wrapper in Refresh.
+func (uc *StockMetricsUseCase) refresh(ctx context.Context) (*dto.StockMetricsResult, error) {
 	startTime := time.Now()
 	zap.L().Info("Starting stock metrics refresh for all exchanges")
 
@@ -88,16 +123,32 @@ func (uc *StockMetricsUseCase) Refresh(ctx context.Context) (*dto.StockMetricsRe
 	totalStocks := len(allStocks)
 	zap.L().Info("Listed all stocks from all exchanges", zap.Int("total_stocks", totalStocks))
 
-	// Step 2: Build queries (usecase logic - no exchange field needed)
+	// Step 2: Build queries, filtering out non-equity symbols (warrants, bonds, TD-codes).
 	queries := make([]marketvo.MarketDataQuery, 0, len(allStocks))
+	droppedCount := 0
 	for _, stock := range allStocks {
-		query, err := marketvo.NewMarketDataQueryFromStrings(string(stock.Symbol), "", "1D", marketvo.LookbackDay(systemConfig.LookbackDay))
+		sym := string(stock.Symbol)
+		if !equitySymbolRe.MatchString(sym) {
+			droppedCount++
+			continue
+		}
+		query, err := marketvo.NewMarketDataQueryFromStrings(sym, "", "1D", marketvo.LookbackDay(systemConfig.LookbackDay))
 		if err != nil {
-			zap.L().Warn("Invalid query", zap.String("symbol", string(stock.Symbol)), zap.Error(err))
+			zap.L().Warn("Invalid query", zap.String("symbol", sym), zap.Error(err))
 			continue
 		}
 		queries = append(queries, query)
 	}
+	if droppedCount > 0 {
+		zap.L().Info("Filtered non-equity symbols",
+			zap.Int("dropped", droppedCount),
+			zap.Int("kept", len(queries)),
+		)
+	}
+
+	// After filtering, totalStocks reflects the attempted universe so that
+	// successfully_analyzed + failed_count == total_stocks in the summary.
+	totalStocks = len(queries)
 
 	// Step 3: Fetch batch (concurrency handled by usecase)
 	successData, failedData := uc.fetchBatch(ctx, queries)
@@ -285,29 +336,31 @@ func (uc *StockMetricsUseCase) fetchBatch(
 	ctx context.Context,
 	queries []marketvo.MarketDataQuery,
 ) (map[string][]marketvo.MarketData, map[string]string) {
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(uc.concurrency)
+
 	successData := make(map[string][]marketvo.MarketData)
 	failedData := make(map[string]string)
 	var mu sync.Mutex
 
-	var wg sync.WaitGroup
 	for _, query := range queries {
-		wg.Add(1)
-		go func(q marketvo.MarketDataQuery) {
-			defer wg.Done()
-			data, err := uc.gateway.FetchData(ctx, q)
+		query := query
+		g.Go(func() error {
+			data, err := uc.gateway.FetchData(gctx, query)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
-				failedData[string(q.Symbol)] = err.Error()
+				failedData[string(query.Symbol)] = err.Error()
 			} else if len(data) > 0 {
-				successData[string(q.Symbol)] = data
+				successData[string(query.Symbol)] = data
 			} else {
-				failedData[string(q.Symbol)] = "empty data returned"
+				failedData[string(query.Symbol)] = "empty data returned"
 			}
-		}(query)
+			return nil
+		})
 	}
 
-	wg.Wait()
+	g.Wait()
 	return successData, failedData
 }
 

@@ -33,7 +33,8 @@ type InfraConfig struct {
 	HTTPShutdownTimeout int
 
 	// Provider Configuration
-	DefaultProviderRPS int    // Default requests per second for adaptive rate limiters
+	DefaultProviderRPS int    // Initial requests per second for adaptive token bucket
+	MaxProviderRPS     int    // Hard ceiling for adaptive token bucket
 	PrimaryProvider    string // Primary provider name (e.g., "vietcap")
 
 	// MongoDB Configuration
@@ -78,6 +79,7 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 
 	// Provider Configuration
 	cfg.DefaultProviderRPS = getNumberEnv("DEFAULT_PROVIDER_RPS", &errors)
+	cfg.MaxProviderRPS = getNumberEnv("MAX_PROVIDER_RPS", &errors)
 	cfg.PrimaryProvider = getStringEnv("PRIMARY_PROVIDER", &errors)
 
 	// MongoDB Configuration
@@ -132,7 +134,8 @@ func loadIntervalConfig(prefix, interval string, errors *[]string) IntervalConfi
 // loadStockRefreshConfig loads stock refresh job configuration.
 func loadStockRefreshConfig(errors *[]string) JobConfig {
 	return JobConfig{
-		Timeout: time.Duration(getNumberEnv("STOCK_REFRESH_TIMEOUT_MINUTES", errors)) * time.Minute,
+		Timeout:     time.Duration(getNumberEnv("STOCK_REFRESH_TIMEOUT_MINUTES", errors)) * time.Minute,
+		Concurrency: getNumberEnv("STOCK_REFRESH_CONCURRENCY", errors),
 		Intervals: map[string]IntervalConfig{
 			"default": {
 				Enabled:  getBoolEnv("STOCK_REFRESH_ENABLED", errors),

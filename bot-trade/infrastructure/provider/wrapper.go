@@ -13,22 +13,22 @@ import (
 // WrappedProvider wraps a Provider with rate limiting, health tracking, and metrics.
 type WrappedProvider struct {
 	source  contract.Provider
-	limiter *RateLimiter
+	bucket  *TokenBucket
 	healthy atomic.Bool
 	metrics *metrics.ProviderMetrics
 }
 
 // NewWrappedProvider creates a new wrapped provider with metrics.
-func NewWrappedProvider(p contract.Provider, limiter *RateLimiter, m *metrics.ProviderMetrics) *WrappedProvider {
+func NewWrappedProvider(p contract.Provider, bucket *TokenBucket, m *metrics.ProviderMetrics) *WrappedProvider {
 	w := &WrappedProvider{
 		source:  p,
-		limiter: limiter,
+		bucket:  bucket,
 		metrics: m,
 	}
 	w.healthy.Store(true)
 
 	if m != nil {
-		m.InitProvider(p.Name(), limiter.CurrentRPS())
+		m.InitProvider(p.Name(), bucket.CurrentRPS())
 	}
 
 	return w
@@ -46,27 +46,34 @@ func (w *WrappedProvider) FetchObserved(ctx context.Context, q marketvo.MarketDa
 	// Start metrics tracking
 	tracker := w.metrics.BeginRequest(providerName)
 
-	// Wait for rate limiter
-	if err := w.limiter.Wait(ctx); err != nil {
-		tracker.EndRequest(err, false, w.limiter.CurrentRPS())
+	// Wait for token bucket
+	if err := w.bucket.Wait(ctx); err != nil {
+		tracker.EndRequest(err, false, w.bucket.CurrentRPS())
 		return nil, err
 	}
 
 	// Execute request
 	result, err := w.source.FetchBars(ctx, q)
 
-	// Handle rate limit specially
 	isRateLimited := errors.Is(err, contract.ErrRateLimited)
-	if isRateLimited {
-		w.limiter.OnRateLimited()
-		w.healthy.Store(false)
-	} else if err == nil {
-		w.limiter.OnSuccess()
+	isForbidden := errors.Is(err, contract.ErrForbidden)
+	isNoData := errors.Is(err, contract.ErrNoData)
+
+	switch {
+	case err == nil:
+		w.bucket.OnSuccess()
 		w.healthy.Store(true)
+	case isNoData:
+		// Provider is healthy — symbol just has no data. Let the pool failover
+		// to the next provider without adjusting RPS.
+	default:
+		w.bucket.OnFailure()
+		if isRateLimited || isForbidden {
+			w.healthy.Store(false)
+		}
 	}
 
-	// Record metrics (all logic in metrics package)
-	tracker.EndRequest(err, isRateLimited, w.limiter.CurrentRPS())
+	tracker.EndRequest(err, isRateLimited || isForbidden, w.bucket.CurrentRPS())
 
 	return result, err
 }
