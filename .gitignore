@@ -42,6 +42,8 @@ x``
 .cursor/
 .kiro/
 .claude/
+.omc/
+.gitnexus/
 CLAUDE.md
 .review/
 bot-trade/review/

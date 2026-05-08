@@ -24,11 +24,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
-          memory: 64M
+          cpus: '0.05'
+          memory: 16M
         reservations:
-          cpus: '0.1'
-          memory: 32M
+          cpus: '0.05'
+          memory: 16M
 
   # Go Trading Bot Service
   bot-trade:
@@ -56,7 +56,7 @@ services:
       resources:
         limits:
           cpus: '0.5'
-          memory: 256M
+          memory: 128M
         reservations:
           cpus: '0.25'
           memory: 64M
@@ -87,11 +87,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
+          cpus: '0.25'
           memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
 
   # Grafana Alloy - Unified metrics and logs collector
   alloy:
@@ -126,11 +126,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 256M
-        reservations:
           cpus: '0.1'
           memory: 64M
+        reservations:
+          cpus: '0.1'
+          memory: 32M
 
   # cAdvisor - Container metrics collector
   cadvisor:
@@ -157,11 +157,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
-          memory: 128M
-        reservations:
           cpus: '0.1'
           memory: 64M
+        reservations:
+          cpus: '0.1'
+          memory: 32M
 
 networks:
   trading-network:
