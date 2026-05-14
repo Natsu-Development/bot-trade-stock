@@ -3,12 +3,17 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"bot-trade/application/port/inbound"
 	"bot-trade/application/port/outbound"
 
 	"go.uber.org/zap"
 )
+
+// cronFieldCount is the number of whitespace-separated fields required by the
+// 6-field (with-seconds) cron schedule format.
+const cronFieldCount = 6
 
 // JobScheduler is a generic scheduler that runs jobs implementing the Job interface.
 // It uses a CronAdapter to abstract the cron implementation details.
@@ -26,6 +31,13 @@ func NewJobScheduler(adapter outbound.CronAdapter) *JobScheduler {
 // Register registers a job with the scheduler.
 func (s *JobScheduler) Register(job inbound.Job) error {
 	meta := job.Metadata()
+
+	if got := len(strings.Fields(meta.Schedule)); got != cronFieldCount {
+		return fmt.Errorf(
+			"job %q has %d-field schedule %q; 6-field (sec min hour dom month dow) is required — prepend `0 ` to legacy 5-field schedules",
+			meta.Name, got, meta.Schedule,
+		)
+	}
 
 	if err := s.adapter.AddFunc(meta.Schedule, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), meta.Timeout)

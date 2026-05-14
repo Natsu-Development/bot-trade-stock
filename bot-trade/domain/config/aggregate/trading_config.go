@@ -31,8 +31,11 @@ type TradingConfig struct {
 	// MetricsFilter holds user-saved screener filter configurations.
 	// Nil = not set, empty array = user cleared their filters.
 	MetricsFilter []valueobject.MetricsFilter `bson:"metrics_filter,omitempty"`
-	CreatedAt   time.Time                 `bson:"created_at"`
-	UpdatedAt   time.Time                 `bson:"updated_at"`
+	// Alerts holds user-configured price/volume alerts.
+	// Nil = not set, empty array = user cleared their alerts.
+	Alerts      []valueobject.StockAlertConfig `bson:"alerts,omitempty"`
+	CreatedAt   time.Time                      `bson:"created_at"`
+	UpdatedAt   time.Time                      `bson:"updated_at"`
 }
 
 // NewTradingConfig creates a new TradingConfig with validation.
@@ -134,6 +137,11 @@ func (c *TradingConfig) Merge(update *TradingConfig) (*TradingConfig, error) {
 	// Always merge metrics_filter if provided (even if empty, to allow clearing)
 	if update.MetricsFilter != nil {
 		merged.MetricsFilter = update.MetricsFilter
+	}
+
+	// Always merge alerts if provided (even if empty, to allow clearing)
+	if update.Alerts != nil {
+		merged.Alerts = update.Alerts
 	}
 
 	merged.UpdatedAt = time.Now()
@@ -239,9 +247,47 @@ func (c *TradingConfig) Validate() error {
 		errs = append(errs, err.Error())
 	}
 
+	for _, alert := range c.Alerts {
+		if err := alert.Validate(); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+
 	if len(errs) > 0 {
 		return shared.NewValidationError(errs...)
 	}
 
+	return nil
+}
+
+// AddAlert appends or replaces an alert for the given symbol.
+// If an alert for the same symbol already exists, it is replaced.
+func (c *TradingConfig) AddAlert(alert valueobject.StockAlertConfig) error {
+	if err := alert.Validate(); err != nil {
+		return err
+	}
+
+	for i, existing := range c.Alerts {
+		if existing.Symbol == alert.Symbol {
+			c.Alerts[i] = alert
+			c.UpdatedAt = time.Now()
+			return nil
+		}
+	}
+	c.Alerts = append(c.Alerts, alert)
+	c.UpdatedAt = time.Now()
+	return nil
+}
+
+// RemoveAlert removes an alert for the given symbol.
+// Idempotent: returns nil if no alert exists for the symbol.
+func (c *TradingConfig) RemoveAlert(symbol market.Symbol) error {
+	for i, existing := range c.Alerts {
+		if existing.Symbol == symbol {
+			c.Alerts = append(c.Alerts[:i], c.Alerts[i+1:]...)
+			c.UpdatedAt = time.Now()
+			return nil
+		}
+	}
 	return nil
 }

@@ -243,6 +243,24 @@ export interface ApiAnalysisResult {
   trendlines: ApiTrendlineDisplay[]  // Active trendlines with pre-calculated data points
 }
 
+// Stock alert types - mirrors backend dto.ConfigStockAlert
+export type AlertConditionType =
+  | 'price_above'
+  | 'price_below'
+  | 'volume_spike'
+  | 'transaction_volume_spike'
+
+export interface ApiAlertCondition {
+  type: AlertConditionType
+  threshold: number
+  enabled: boolean
+}
+
+export interface ApiStockAlert {
+  symbol: string
+  conditions: ApiAlertCondition[]
+}
+
 // Trading config types - matches backend TradingConfigResponse
 export interface ApiTradingConfig {
   id: string
@@ -267,6 +285,7 @@ export interface ApiTradingConfig {
     chat_id?: string
   }
   metrics_filter?: ScreenerFilterPreset[]
+  alerts?: ApiStockAlert[]
   created_at: string
   updated_at: string
 }
@@ -436,6 +455,7 @@ class ApiClient {
       bullish_symbols: [],
       telegram: { enabled: false },
       metrics_filter: [],
+      alerts: [],
     }
     return this.request('/config', {
       method: 'POST',

@@ -47,6 +47,7 @@ type InfraConfig struct {
 	BreakoutJob  JobConfig
 	BreakdownJob JobConfig
 	StockRefresh JobConfig
+	StockAlert   JobConfig
 
 	// Logging Configuration
 	LogLevel    string
@@ -92,6 +93,7 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	cfg.BreakoutJob = loadJobTypeConfig("BREAKOUT", &errors)
 	cfg.BreakdownJob = loadJobTypeConfig("BREAKDOWN", &errors)
 	cfg.StockRefresh = loadStockRefreshConfig(&errors)
+	cfg.StockAlert = loadStockAlertConfig(&errors)
 
 	// Logging Configuration
 	cfg.LogLevel = getLogLevelEnv("LOG_LEVEL", &errors)
@@ -140,6 +142,19 @@ func loadStockRefreshConfig(errors *[]string) JobConfig {
 			"default": {
 				Enabled:  getBoolEnv("STOCK_REFRESH_ENABLED", errors),
 				Schedule: getStringEnv("STOCK_REFRESH_SCHEDULE", errors),
+			},
+		},
+	}
+}
+
+// loadStockAlertConfig loads stock alert job configuration.
+func loadStockAlertConfig(errors *[]string) JobConfig {
+	return JobConfig{
+		Timeout: time.Duration(getNumberEnv("STOCK_ALERT_TIMEOUT_MINUTES", errors)) * time.Minute,
+		Intervals: map[string]IntervalConfig{
+			"default": {
+				Enabled:  getBoolEnv("STOCK_ALERT_ENABLED", errors),
+				Schedule: getStringEnv("STOCK_ALERT_SCHEDULE", errors),
 			},
 		},
 	}

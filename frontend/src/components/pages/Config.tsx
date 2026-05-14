@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Icons } from '../icons/Icons'
 import { SymbolTag } from '../features/SymbolTag'
 import { MetricsFilterSection } from '../features/MetricsFilterSection'
+import { StockAlertsSection } from '../features/StockAlertsSection'
 import { NumberInput } from '@/components/ui/NumberInput'
-import { api, getConfigId, type ApiTradingConfig, type ScreenerFilterPreset } from '@/lib/api'
+import { api, getConfigId, type ApiTradingConfig, type ApiStockAlert, type ScreenerFilterPreset } from '@/lib/api'
 import { isValidFilterOperator } from '@/lib/screenerFilterOptions'
 
 export function Config() {
@@ -68,6 +69,20 @@ export function Config() {
           ...preset,
           filters: preset.filters.filter(f => f.op && isValidFilterOperator(f.op)),
         })).filter(preset => preset.filters.length > 0),
+        alerts: (config.alerts || [])
+          .filter(a =>
+            a.symbol.trim().length > 0 &&
+            a.conditions.length > 0 &&
+            a.conditions.every(c => Number.isFinite(c.threshold) && c.threshold > 0)
+          )
+          .map(a => ({
+            symbol: a.symbol,
+            conditions: a.conditions.map(c => ({
+              type: c.type,
+              threshold: c.threshold,
+              enabled: c.enabled !== false, // default true for any stale payload
+            })),
+          })),
       }
       const updated = await api.updateConfig(configId, sanitizedConfig)
       setConfig(updated)
@@ -172,6 +187,12 @@ export function Config() {
   const handleUpdateMetricsFilter = (filters: ScreenerFilterPreset[]) => {
     if (config) {
       setConfig({ ...config, metrics_filter: filters })
+    }
+  }
+
+  const handleUpdateAlerts = (alerts: ApiStockAlert[]) => {
+    if (config) {
+      setConfig({ ...config, alerts })
     }
   }
 
@@ -452,6 +473,13 @@ export function Config() {
       <MetricsFilterSection
         filters={config.metrics_filter || []}
         onUpdate={handleUpdateMetricsFilter}
+      />
+
+      {/* Stock Alerts - Full width section */}
+      <StockAlertsSection
+        alerts={config.alerts || []}
+        originalAlerts={originalConfig?.alerts || []}
+        onUpdate={handleUpdateAlerts}
       />
     </div>
   )

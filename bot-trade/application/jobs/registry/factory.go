@@ -7,6 +7,7 @@ import (
 	appRsi "bot-trade/application/usecase/analyze/rsi"
 	appTrendline "bot-trade/application/usecase/analyze/trendline"
 	"bot-trade/config"
+	alertservice "bot-trade/domain/config/service"
 )
 
 // Global registry instance
@@ -29,9 +30,11 @@ type JobDependencies struct {
 	StockMetricsManager inbound.StockMetricsManager
 
 	// Shared dependencies
-	Notifier   outbound.Notifier
-	ConfigRepo outbound.ConfigRepository
-	Config     *config.InfraConfig
+	Notifier       outbound.Notifier
+	ConfigRepo     outbound.ConfigRepository
+	QuoteProvider  outbound.QuoteProvider
+	AlertEvaluator *alertservice.AlertEvaluator
+	Config         *config.InfraConfig
 }
 
 // JobFactory creates one or more job instances from dependencies.

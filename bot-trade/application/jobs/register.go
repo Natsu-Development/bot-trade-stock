@@ -4,6 +4,7 @@ package jobs
 
 import (
 	// Blank imports trigger init() in each job package
+	_ "bot-trade/application/jobs/alert"
 	_ "bot-trade/application/jobs/analyze"
 	_ "bot-trade/application/jobs/refresh"
 )
