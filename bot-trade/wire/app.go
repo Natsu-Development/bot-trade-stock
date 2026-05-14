@@ -15,8 +15,10 @@ import (
 	appRsi "bot-trade/application/usecase/analyze/rsi"
 	appTrendline "bot-trade/application/usecase/analyze/trendline"
 	"bot-trade/config"
+	alertservice "bot-trade/domain/config/service"
 	infraCron "bot-trade/infrastructure/cron"
 	"bot-trade/infrastructure/mongodb"
+	"bot-trade/infrastructure/provider/sources"
 	"bot-trade/infrastructure/telegram"
 
 	"go.uber.org/zap"
@@ -49,6 +51,16 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 
 	// Notifier
 	notifier := telegram.NewNotifier()
+
+	// SSI iboard-query adapter for real-time quotes (alert job). Observed via
+	// ProviderMetrics under {provider="ssi-quote"} but NOT joined to the pool.
+	quoteProvider, err := sources.NewSSIQueryProvider(infra.HTTPClient, infra.ProviderMetrics)
+	if err != nil {
+		return nil, fmt.Errorf("init ssi-quote provider: %w", err)
+	}
+
+	// Stateless domain service that owns alert fire/no-fire + value formatting.
+	alertEvaluator := alertservice.NewAlertEvaluator()
 
 	// Use Cases
 	configUC := usecase.NewConfigUseCase(configRepo)
@@ -92,6 +104,8 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 		StockMetricsManager: stockMetricsUC,
 		Notifier:            notifier,
 		ConfigRepo:          configRepo,
+		QuoteProvider:       quoteProvider,
+		AlertEvaluator:      alertEvaluator,
 		Config:              cfg,
 	}
 

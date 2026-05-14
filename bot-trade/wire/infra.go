@@ -20,9 +20,10 @@ import (
 
 // Infra holds all infrastructure layer dependencies.
 type Infra struct {
-	DB           *mongo.Client
-	HTTPClient   *http.Client
-	ProviderPool *provider.ProviderPool
+	DB              *mongo.Client
+	HTTPClient      *http.Client
+	ProviderPool    *provider.ProviderPool
+	ProviderMetrics *metrics.ProviderMetrics
 }
 
 // NewInfra initializes all infrastructure layer dependencies.
@@ -50,9 +51,10 @@ func NewInfra(cfg *config.InfraConfig) (*Infra, error) {
 	providerPool := buildProviderPool(httpClient, cfg, providerMetrics)
 
 	return &Infra{
-		DB:           mongoClient,
-		HTTPClient:   httpClient,
-		ProviderPool: providerPool,
+		DB:              mongoClient,
+		HTTPClient:      httpClient,
+		ProviderPool:    providerPool,
+		ProviderMetrics: providerMetrics,
 	}, nil
 }
 

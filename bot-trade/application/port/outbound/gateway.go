@@ -17,3 +17,9 @@ type MarketGateway interface {
 type StockLister interface {
 	ListAllStocks(ctx context.Context) ([]marketvo.StockInfo, error)
 }
+
+// QuoteProvider fetches real-time market quotes for all symbols.
+// Implementations should return a map keyed by symbol to enable O(1) lookup.
+type QuoteProvider interface {
+	FetchAllQuotes(ctx context.Context) (map[string]marketvo.MarketQuote, error)
+}

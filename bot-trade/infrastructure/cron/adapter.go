@@ -23,7 +23,7 @@ func NewAdapter(timezone *time.Location) *Adapter {
 		timezone = time.UTC
 	}
 	return &Adapter{
-		cron: cron.New(cron.WithLocation(timezone)),
+		cron: cron.New(cron.WithLocation(timezone), cron.WithSeconds()),
 	}
 }
 

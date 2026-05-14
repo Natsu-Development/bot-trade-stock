@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"bot-trade/application/dto"
@@ -57,8 +58,23 @@ type StockMetricsUseCase struct {
 	cachedAt      time.Time
 	cacheMu       sync.RWMutex
 
+	// metricsBySymbol is rebuilt in lock-step with cachedMetrics and published
+	// atomically so the alert job (every 15s) reads without locking. The pointed-to
+	// map is immutable post-publish — callers MUST treat it as read-only.
+	metricsBySymbol atomic.Pointer[map[string]*metricsagg.StockMetrics]
+
 	// Ensures only one Refresh runs at a time; concurrent callers piggyback.
 	refreshGroup singleflight.Group
+}
+
+// buildMetricsMap returns a freshly-allocated symbol→metrics lookup table.
+// Returns a pointer so it can be stored in atomic.Pointer.
+func buildMetricsMap(metrics []*metricsagg.StockMetrics) *map[string]*metricsagg.StockMetrics {
+	m := make(map[string]*metricsagg.StockMetrics, len(metrics))
+	for _, sm := range metrics {
+		m[string(sm.Symbol)] = sm
+	}
+	return &m
 }
 
 // NewStockMetricsUseCase creates a new stock metrics use case.
@@ -210,6 +226,8 @@ func (uc *StockMetricsUseCase) refresh(ctx context.Context) (*dto.StockMetricsRe
 	uc.cachedMetrics = rankedMetrics
 	uc.cachedAt = calculatedAt
 	uc.cacheMu.Unlock()
+	// Publish lock-free lookup map for hot consumers (e.g., stock-alert job).
+	uc.metricsBySymbol.Store(buildMetricsMap(rankedMetrics))
 
 	totalDuration := time.Since(startTime)
 
@@ -264,6 +282,17 @@ func (uc *StockMetricsUseCase) Filter(ctx context.Context, filter *filtervo.Stoc
 	}, nil
 }
 
+// MetricsBySymbol returns the lock-free symbol→metrics lookup map published
+// at the last cache write. Returns nil before the cache is loaded. The returned
+// map is shared across all readers and MUST NOT be mutated by callers — each
+// cache write swaps in a fresh map.
+func (uc *StockMetricsUseCase) MetricsBySymbol() map[string]*metricsagg.StockMetrics {
+	if p := uc.metricsBySymbol.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
+
 // GetCacheInfo returns information about the current cache state.
 func (uc *StockMetricsUseCase) GetCacheInfo() (cachedAt time.Time, totalStocks int, ok bool) {
 	uc.cacheMu.RLock()
@@ -293,6 +322,8 @@ func (uc *StockMetricsUseCase) LoadFromDB(ctx context.Context) (bool, error) {
 	uc.cachedMetrics = metrics
 	uc.cachedAt = calculatedAt
 	uc.cacheMu.Unlock()
+	// Publish lock-free lookup map for hot consumers (e.g., stock-alert job).
+	uc.metricsBySymbol.Store(buildMetricsMap(metrics))
 
 	zap.L().Info("Stock metrics loaded from database into cache",
 		zap.Int("metrics_count", len(metrics)),

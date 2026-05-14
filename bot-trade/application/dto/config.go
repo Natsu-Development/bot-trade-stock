@@ -13,36 +13,38 @@ import (
 
 // TradingConfigRequest is the DTO for creating/updating trading configuration.
 type TradingConfigRequest struct {
-	ID             string                 `json:"id,omitempty"`
-	RSIPeriod      int                    `json:"rsi_period"`
-	PivotPeriod    int                    `json:"pivot_period"`
-	LookbackDay    int                    `json:"lookback_day"`
-	Divergence     ConfigDivergence       `json:"divergence"`
-	Trendline      ConfigTrendline        `json:"trendline"`
-	IndicesRecent  int                    `json:"indices_recent"`
-	BearishEarly   *bool                  `json:"bearish_early,omitempty"`
-	BearishSymbols []string               `json:"bearish_symbols"`
-	BullishSymbols []string               `json:"bullish_symbols"`
-	Telegram       ConfigTelegram         `json:"telegram"`
-	MetricsFilter  []ConfigMetricsFilter  `json:"metrics_filter,omitempty"`
+	ID             string                `json:"id,omitempty"`
+	RSIPeriod      int                   `json:"rsi_period"`
+	PivotPeriod    int                   `json:"pivot_period"`
+	LookbackDay    int                   `json:"lookback_day"`
+	Divergence     ConfigDivergence      `json:"divergence"`
+	Trendline      ConfigTrendline       `json:"trendline"`
+	IndicesRecent  int                   `json:"indices_recent"`
+	BearishEarly   *bool                 `json:"bearish_early,omitempty"`
+	BearishSymbols []string              `json:"bearish_symbols"`
+	BullishSymbols []string              `json:"bullish_symbols"`
+	Telegram       ConfigTelegram        `json:"telegram"`
+	MetricsFilter  []ConfigMetricsFilter `json:"metrics_filter,omitempty"`
+	Alerts         []ConfigStockAlert    `json:"alerts,omitempty"`
 }
 
 // TradingConfigResponse is the DTO for trading configuration responses.
 type TradingConfigResponse struct {
-	ID             string                 `json:"id"`
-	RSIPeriod      int                    `json:"rsi_period"`
-	PivotPeriod    int                    `json:"pivot_period"`
-	LookbackDay    int                    `json:"lookback_day"`
-	Divergence     ConfigDivergence       `json:"divergence"`
-	Trendline      ConfigTrendline        `json:"trendline"`
-	IndicesRecent  int                    `json:"indices_recent"`
-	BearishEarly   *bool                  `json:"bearish_early,omitempty"`
-	BearishSymbols []string               `json:"bearish_symbols"`
-	BullishSymbols []string               `json:"bullish_symbols"`
-	Telegram       ConfigTelegram         `json:"telegram"`
-	MetricsFilter  []ConfigMetricsFilter  `json:"metrics_filter,omitempty"`
-	CreatedAt      string                 `json:"created_at"`
-	UpdatedAt      string                 `json:"updated_at"`
+	ID             string                `json:"id"`
+	RSIPeriod      int                   `json:"rsi_period"`
+	PivotPeriod    int                   `json:"pivot_period"`
+	LookbackDay    int                   `json:"lookback_day"`
+	Divergence     ConfigDivergence      `json:"divergence"`
+	Trendline      ConfigTrendline       `json:"trendline"`
+	IndicesRecent  int                   `json:"indices_recent"`
+	BearishEarly   *bool                 `json:"bearish_early,omitempty"`
+	BearishSymbols []string              `json:"bearish_symbols"`
+	BullishSymbols []string              `json:"bullish_symbols"`
+	Telegram       ConfigTelegram        `json:"telegram"`
+	MetricsFilter  []ConfigMetricsFilter `json:"metrics_filter,omitempty"`
+	Alerts         []ConfigStockAlert    `json:"alerts,omitempty"`
+	CreatedAt      string                `json:"created_at"`
+	UpdatedAt      string                `json:"updated_at"`
 }
 
 // ConfigDivergence represents divergence detection parameters for config.
@@ -71,6 +73,19 @@ type ConfigMetricsFilter struct {
 	Logic      string                   `json:"logic"`
 	Exchanges  []string                 `json:"exchanges,omitempty"`
 	CreatedAt  string                   `json:"created_at"`
+}
+
+// ConfigStockAlert represents a single stock alert configuration for a symbol.
+type ConfigStockAlert struct {
+	Symbol     string                 `json:"symbol"`
+	Conditions []ConfigAlertCondition `json:"conditions"`
+}
+
+// ConfigAlertCondition represents one alert condition (type + threshold + enabled flag).
+type ConfigAlertCondition struct {
+	Type      string  `json:"type"`
+	Threshold float64 `json:"threshold"`
+	Enabled   bool    `json:"enabled"`
 }
 
 // ConfigFilterCondition represents a single filter condition for config.
@@ -159,6 +174,14 @@ func ToTradingConfigResponse(cfg *configagg.TradingConfig) *TradingConfigRespons
 		}
 	}
 
+	// Convert alerts
+	if len(cfg.Alerts) > 0 {
+		resp.Alerts = make([]ConfigStockAlert, len(cfg.Alerts))
+		for i, a := range cfg.Alerts {
+			resp.Alerts[i] = toConfigStockAlert(a)
+		}
+	}
+
 	return resp
 }
 
@@ -239,6 +262,23 @@ func ToTradingConfigAggregate(req TradingConfigRequest) (*configagg.TradingConfi
 		metricsFilter = []configvo.MetricsFilter{}
 	}
 
+	// Convert alerts
+	// Use Alerts != nil to distinguish "not provided" from "explicitly empty"
+	// so that sending alerts: [] can clear all alerts.
+	var alerts []configvo.StockAlertConfig
+	if req.Alerts != nil && len(req.Alerts) > 0 {
+		alerts = make([]configvo.StockAlertConfig, len(req.Alerts))
+		for i, a := range req.Alerts {
+			converted, err := toStockAlertConfigVO(a)
+			if err != nil {
+				return nil, err
+			}
+			alerts[i] = converted
+		}
+	} else if req.Alerts != nil {
+		alerts = []configvo.StockAlertConfig{}
+	}
+
 	cfg := &configagg.TradingConfig{
 		RSIPeriod:      rsiPeriod,
 		PivotPeriod:    pivotPeriod,
@@ -251,6 +291,7 @@ func ToTradingConfigAggregate(req TradingConfigRequest) (*configagg.TradingConfi
 		BullishSymbols: bullishSymbols,
 		Telegram:       telegram,
 		MetricsFilter:  metricsFilter,
+		Alerts:         alerts,
 	}
 
 	// Set ID if provided
@@ -331,4 +372,39 @@ func toConfigMetricsFilterVO(dto ConfigMetricsFilter) (configvo.MetricsFilter, e
 		Exchanges:  exchanges,
 		CreatedAt:  time.Now(),
 	}, nil
+}
+
+// toConfigStockAlert converts a domain StockAlertConfig to DTO.
+func toConfigStockAlert(a configvo.StockAlertConfig) ConfigStockAlert {
+	conditions := make([]ConfigAlertCondition, len(a.Conditions))
+	for i, c := range a.Conditions {
+		conditions[i] = ConfigAlertCondition{
+			Type:      string(c.Type),
+			Threshold: c.Threshold,
+			Enabled:   c.Enabled,
+		}
+	}
+	return ConfigStockAlert{
+		Symbol:     string(a.Symbol),
+		Conditions: conditions,
+	}
+}
+
+// toStockAlertConfigVO converts a DTO to domain StockAlertConfig with validation.
+func toStockAlertConfigVO(dto ConfigStockAlert) (configvo.StockAlertConfig, error) {
+	symbol, err := marketvo.NewSymbol(dto.Symbol)
+	if err != nil {
+		return configvo.StockAlertConfig{}, err
+	}
+
+	conditions := make([]configvo.AlertCondition, len(dto.Conditions))
+	for i, c := range dto.Conditions {
+		cond, err := configvo.NewAlertCondition(c.Type, c.Threshold, c.Enabled)
+		if err != nil {
+			return configvo.StockAlertConfig{}, err
+		}
+		conditions[i] = cond
+	}
+
+	return configvo.NewStockAlertConfig(symbol, conditions)
 }
