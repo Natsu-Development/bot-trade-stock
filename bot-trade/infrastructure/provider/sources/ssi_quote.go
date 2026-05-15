@@ -166,7 +166,7 @@ func (p *SSIQueryProvider) fetchExchange(ctx context.Context, exchange, path str
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("Cache-Control", "max-age=0")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36")
-	req.Header.Set("Cookie", "cf_clearance=HnnXPuFcMpgU0RpjGIA37E9ZLgFavY7_FhiLyZDMvIs-1778815413-1.2.1.1-UVh2Nm123zPtVBbdsj4hdYjPHEJAuFS030oBCS_vX50Ov93JY4OLSv1voUcgYm0qIATX0AomsUs4tcJLQEBdoMzS19J2SzKndObI2MjrJO5J0MrVVcyrCJ6zonDi1A7DWqK6vlhZ_b8vdT3gfeLnty6P3BiNWF4GkS8PlzvXaMuxKDq7KBdxgjyea_sGAbAbD1092M9uIQwauhGbkrOCBie0dLopt6uwOCIaMdODIdF..7N_e2562SBh3DJY0DmcqFTJyubQc5mYuC_PG5jsJZxYHmml4Q8kznHzD4nvto6Sls8VLM7vpNJuf.aaUsKuwUHhXsIIQ5Cg4HIdwxA9q2aNTUj5eWiJ9nSO7PqLdCyz9mzACRm8Iz3OI1wiiOvVdah2R6gwF23XD_GpQ4fp7DherWbTlvY_zSwmpdVVtKs")
+	req.Header.Set("Cookie", "cf_clearance=QNChFLMM7yp3df7d8sQiP8UBK_2gsFqkvTdTuSGdqcE-1778826411-1.2.1.1-lv2OxU.clmM1lovkYrGMgdsGiwGgdnij4hpApjDLtFkDTGO1U5_4JLJcf5Wx3uqEa1oJOwk5hZYlgBNmzxZJjTo.5Y31CQkUNKuvfggQym_UN.axaNtOP1NMGJhfMzpd.M8.j3rALnmDRfVDdYCdXBIfIkiexpbRuUS82VdDCFNRZIpKqHE3lnXB1yphADrsfsuRKRHyoNm35WmW5ybwjeEyDpV96PFWyrk_LFdIs7VZG5m0kr_l9qDJNTKPaDKKBViLMsRsPMKpRaK919LbC.QuRsZxMNaHGIchQB4skfz1Q2xWD2isBQfUoUCdjJyWZkaDNO83zKpip9j0jQ7vcLr.7srVFSS5ZxvT5oDS8rmLWwpBkbRqGllYf88J72be90fRc9bbTSKVRathyFbqx6OCroBrY1FT8JHEFqKhdB0")
 
 	resp, err := p.client.Do(req)
 	if err != nil {
