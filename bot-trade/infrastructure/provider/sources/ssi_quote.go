@@ -158,10 +158,15 @@ func (p *SSIQueryProvider) fetchExchange(ctx context.Context, exchange, path str
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Origin", "https://iboard.ssi.com.vn")
-	req.Header.Set("Referer", "https://iboard.ssi.com.vn/")
+	// Cloudflare binds cf_clearance to the exact request fingerprint that minted it
+	// (browser top-level navigation: text/html Accept, no Origin/Referer). Any
+	// deviation triggers 403 even with a valid token. Refresh cookie by repeating
+	// a browser navigation to this URL and re-pasting the cf_clearance value.
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Cache-Control", "max-age=0")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36")
+	req.Header.Set("Cookie", "cf_clearance=HnnXPuFcMpgU0RpjGIA37E9ZLgFavY7_FhiLyZDMvIs-1778815413-1.2.1.1-UVh2Nm123zPtVBbdsj4hdYjPHEJAuFS030oBCS_vX50Ov93JY4OLSv1voUcgYm0qIATX0AomsUs4tcJLQEBdoMzS19J2SzKndObI2MjrJO5J0MrVVcyrCJ6zonDi1A7DWqK6vlhZ_b8vdT3gfeLnty6P3BiNWF4GkS8PlzvXaMuxKDq7KBdxgjyea_sGAbAbD1092M9uIQwauhGbkrOCBie0dLopt6uwOCIaMdODIdF..7N_e2562SBh3DJY0DmcqFTJyubQc5mYuC_PG5jsJZxYHmml4Q8kznHzD4nvto6Sls8VLM7vpNJuf.aaUsKuwUHhXsIIQ5Cg4HIdwxA9q2aNTUj5eWiJ9nSO7PqLdCyz9mzACRm8Iz3OI1wiiOvVdah2R6gwF23XD_GpQ4fp7DherWbTlvY_zSwmpdVVtKs")
 
 	resp, err := p.client.Do(req)
 	if err != nil {
