@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 
 	"bot-trade/infrastructure/metrics"
 	"bot-trade/infrastructure/provider/contract"
@@ -21,12 +23,25 @@ import (
 	marketvo "bot-trade/domain/shared/valueobject/market"
 
 	"go.uber.org/zap"
+	"golang.org/x/net/publicsuffix"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
 	ssiQuoteName    = "ssi-quote"
 	ssiQuoteBaseURL = "https://iboard-query.ssi.com.vn"
+	ssiCookieDomain = ".ssi.com.vn"
+
+	ssiUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
+
+	// Cloudflare session cookies. Capture all three from the same VNC
+	// browser session in DevTools → Application → Cookies → ssi.com.vn.
+	// The jar auto-rotates __cf_bm and _cfuvid from each response's
+	// Set-Cookie, so manual refresh = re-paste cf_clearance plus the
+	// companion pair from the same capture.
+	ssiCFClearance = "z11gcZnMxZ6ZYFxdlvBXtAGAlOsG.h5lwYp2PhpvLdo-1778903597-1.2.1.1-uDfnZxFoYT2uNN0oGhMLcS.THYgKa.SLJmL.z2ho7AblmnU9pYFJmE8PxtAyCP4G5KFrlTdbnl9qFRfguIusUzL5NlAF_6rvB1D7oPDuWyftXVOTcMiYt6oWJMuIswd9m3VcEp37hZV3BgaWP9LGVJcD77hxiG38n2y1kqtz146EjZmtKjw4R87ApsVJM8DLgKVcHCKvxXzYxVMiGNbKJdQ7qpSK87yCyQlbxktnxB4bF8_bXwPX6K5JXo0_5PpcYg9QK1GVsVNoOLE0Gd4JPOHbR6illa3K_qUPfn2JpLlfITThJ_cA9oybGPw32khihGwbTXEhJhV9PDL4qkmO7_OK4rT5nWllEna9rjbzv_Uy5NvQiCWHwKkLRo8kUXMBq7pwZXkk7t64HttA.OpMyCj670V2tTutwNd9XoXfIp4"
+	ssiCFBm        = "Bj7wN9SQTsuuNZVyr5EKIXEzgxkTheYlJbLcaT0Zflw-1778903596.9944515-1.0.1.1-jIpUu_Vu7bpM0Bv2jmqSb_jULTO7SRQk0ScxEIlrGG4ocMmtEYGnSws8iu0cdWkDllE0TKbckhQbGuRZI6aI6w707D_CIrz4fefbRYpFeGtVKxWoTnXvyDvrAD5mqz_M"
+	ssiCFUvid      = "fpoRDKk4Fl8wBSq5PR2eM6KAbWZbAzK5GbrmsezndHE-1778815413.341835-1.0.1.1-1xfahiOZ96hLlBqRzXOTOCaN8l0vZrc3f7u7c2x1tfQ"
 )
 
 // ssiQuoteEndpoints maps exchange code to the iboard-query group endpoint path.
@@ -93,12 +108,50 @@ func NewSSIQueryProvider(client *http.Client, m *metrics.ProviderMetrics) (*SSIQ
 	if m == nil {
 		return nil, fmt.Errorf("ssi-quote: provider metrics is required")
 	}
+
+	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+	if err != nil {
+		return nil, fmt.Errorf("ssi-quote: build cookie jar: %w", err)
+	}
+	if err := seedSSICookies(jar); err != nil {
+		return nil, fmt.Errorf("ssi-quote: seed cookies: %w", err)
+	}
+
+	// Shallow-copy the shared client to attach a private jar without
+	// leaking SSI cookies into other providers that share the transport.
+	clientCopy := *client
+	clientCopy.Jar = jar
+
 	m.InitProvider(ssiQuoteName, 0)
 	return &SSIQueryProvider{
-		client:  client,
+		client:  &clientCopy,
 		baseURL: ssiQuoteBaseURL,
 		metrics: m,
 	}, nil
+}
+
+// seedSSICookies installs the captured Cloudflare session into the jar.
+// Empty values are skipped so the bot can run with only cf_clearance until
+// the companion cookies are pasted from the same VNC capture.
+func seedSSICookies(jar http.CookieJar) error {
+	u, err := url.Parse(ssiQuoteBaseURL)
+	if err != nil {
+		return fmt.Errorf("parse base url: %w", err)
+	}
+	seeds := []*http.Cookie{
+		{Name: "cf_clearance", Value: ssiCFClearance, Domain: ssiCookieDomain, Path: "/", Secure: true, HttpOnly: true},
+		{Name: "__cf_bm", Value: ssiCFBm, Domain: ssiCookieDomain, Path: "/", Secure: true, HttpOnly: true},
+		{Name: "_cfuvid", Value: ssiCFUvid, Domain: ssiCookieDomain, Path: "/", Secure: true, HttpOnly: true},
+	}
+	cookies := make([]*http.Cookie, 0, len(seeds))
+	for _, c := range seeds {
+		if c.Value == "" {
+			continue
+		}
+		cookies = append(cookies, c)
+	}
+	jar.SetCookies(u, cookies)
+	return nil
 }
 
 // FetchAllQuotes fetches HOSE, HNX, and UPCOM quotes in parallel and returns a
@@ -160,13 +213,13 @@ func (p *SSIQueryProvider) fetchExchange(ctx context.Context, exchange, path str
 	}
 	// Cloudflare binds cf_clearance to the exact request fingerprint that minted it
 	// (browser top-level navigation: text/html Accept, no Origin/Referer). Any
-	// deviation triggers 403 even with a valid token. Refresh cookie by repeating
-	// a browser navigation to this URL and re-pasting the cf_clearance value.
+	// deviation triggers 403 even with a valid token. The client's cookie jar
+	// (seeded in NewSSIQueryProvider) attaches cf_clearance on send and persists
+	// __cf_bm / _cfuvid rotations from each response's Set-Cookie.
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("Cache-Control", "max-age=0")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36")
-	req.Header.Set("Cookie", "cf_clearance=QNChFLMM7yp3df7d8sQiP8UBK_2gsFqkvTdTuSGdqcE-1778826411-1.2.1.1-lv2OxU.clmM1lovkYrGMgdsGiwGgdnij4hpApjDLtFkDTGO1U5_4JLJcf5Wx3uqEa1oJOwk5hZYlgBNmzxZJjTo.5Y31CQkUNKuvfggQym_UN.axaNtOP1NMGJhfMzpd.M8.j3rALnmDRfVDdYCdXBIfIkiexpbRuUS82VdDCFNRZIpKqHE3lnXB1yphADrsfsuRKRHyoNm35WmW5ybwjeEyDpV96PFWyrk_LFdIs7VZG5m0kr_l9qDJNTKPaDKKBViLMsRsPMKpRaK919LbC.QuRsZxMNaHGIchQB4skfz1Q2xWD2isBQfUoUCdjJyWZkaDNO83zKpip9j0jQ7vcLr.7srVFSS5ZxvT5oDS8rmLWwpBkbRqGllYf88J72be90fRc9bbTSKVRathyFbqx6OCroBrY1FT8JHEFqKhdB0")
+	req.Header.Set("User-Agent", ssiUserAgent)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
