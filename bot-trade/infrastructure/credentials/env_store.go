@@ -76,7 +76,7 @@ var requiredKeys = []string{
 	"SSI_USER_AGENT",
 	"SSI_CF_CLEARANCE",
 	"SSI_CF_BM",
-	"SSI_CF_UVID",
+	// "SSI_CF_UVID",
 	"SSI_COOKIES_MINTED_AT",
 }
 
