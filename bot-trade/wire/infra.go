@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"bot-trade/config"
-	"bot-trade/infrastructure/metrics"
+	"bot-trade/infrastructure/credentials"
 	infraHTTP "bot-trade/infrastructure/http"
+	"bot-trade/infrastructure/metrics"
 	"bot-trade/infrastructure/mongodb"
 	"bot-trade/infrastructure/provider"
 	providerRegistry "bot-trade/infrastructure/provider/registry"
@@ -24,6 +25,7 @@ type Infra struct {
 	HTTPClient      *http.Client
 	ProviderPool    *provider.ProviderPool
 	ProviderMetrics *metrics.ProviderMetrics
+	CredStore       *credentials.EnvCredentialStore
 }
 
 // NewInfra initializes all infrastructure layer dependencies.
@@ -50,11 +52,17 @@ func NewInfra(cfg *config.InfraConfig) (*Infra, error) {
 	providerMetrics := metrics.NewProviderMetrics()
 	providerPool := buildProviderPool(httpClient, cfg, providerMetrics)
 
+	credStore, err := credentials.NewEnvCredentialStore(cfg.SSICredentialsEnvPath)
+	if err != nil {
+		return nil, fmt.Errorf("init credential store: %w", err)
+	}
+
 	return &Infra{
 		DB:              mongoClient,
 		HTTPClient:      httpClient,
 		ProviderPool:    providerPool,
 		ProviderMetrics: providerMetrics,
+		CredStore:       credStore,
 	}, nil
 }
 

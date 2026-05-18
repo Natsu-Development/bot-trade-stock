@@ -1,0 +1,22 @@
+[Unit]
+Description=Mint fresh SSI Cloudflare cookies via FlareSolverr and SIGHUP the bot
+Documentation=file:///opt/bot-trade/scripts/ssi-bypass/README.md
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/bot-trade/scripts/ssi-bypass/refresh-cookies.sh /etc/bot-trade/ssi.env --reload-target=docker
+Environment="DOCKER_BOT_CONTAINER=trading-bot"
+Environment="FLARESOLVERR_URL=http://127.0.0.1:8191/v1"
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bot-trade-cookie-refresh
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths=/etc/bot-trade
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

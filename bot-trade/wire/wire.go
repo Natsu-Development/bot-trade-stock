@@ -3,6 +3,7 @@ package wire
 
 import (
 	"net/http"
+	"time"
 
 	"bot-trade/config"
 
@@ -58,6 +59,19 @@ func (a *App) StartSchedulers() {
 func (a *App) StopSchedulers() {
 	a.services.Scheduler.Stop()
 	zap.L().Info("Job scheduler stopped")
+}
+
+// ReloadCredentials reloads the SSI credentials from the env file.
+// Called by the SIGHUP handler in cmd/server/main.go; non-fatal on error —
+// the prior credential snapshot is preserved on parse failure.
+func (a *App) ReloadCredentials() error {
+	return a.infra.CredStore.Reload()
+}
+
+// CurrentCredentialMintedAt returns the MintedAt timestamp of the current SSI
+// credential snapshot. Used by the SIGHUP handler to log reload events.
+func (a *App) CurrentCredentialMintedAt() time.Time {
+	return a.infra.CredStore.Current().MintedAt
 }
 
 // Close releases all application resources.
