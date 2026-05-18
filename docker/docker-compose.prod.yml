@@ -40,6 +40,12 @@ services:
     env_file:
       - .env.secrets      # MongoDB credentials and URI
       - .env.production   # All non-sensitive config
+    volumes:
+      # Mount the parent directory, not the single file. refresh-cookies.sh writes
+      # the env file via `mv tmp $ENV_OUT`, which replaces the inode. Bind-mounting
+      # a single file pins the container to the original inode and SIGHUP reloads
+      # would re-read the stale file. Mounting the directory makes the rename visible.
+      - /etc/bot-trade:/etc/bot-trade:ro
     depends_on:
       mongo:
         condition: service_healthy
@@ -60,6 +66,34 @@ services:
         reservations:
           cpus: '0.25'
           memory: 64M
+
+  # FlareSolverr - Cloudflare challenge solver for SSI cookie refresh
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: info
+      LOG_HTML: "false"
+      CAPTCHA_SOLVER: none
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "127.0.0.1:8191:8191"   # localhost-only; refresh-cookies.sh hits 127.0.0.1
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8191/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 100M
 
   # MongoDB Database
   mongo:

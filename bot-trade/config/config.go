@@ -58,6 +58,9 @@ type InfraConfig struct {
 
 	// Cron Configuration
 	CronTimezone string // Cron scheduler timezone (e.g., "Asia/Ho_Chi_Minh")
+
+	// SSI Configuration
+	SSICredentialsEnvPath string // Path to the SSI credentials env file (SSI_CREDENTIALS_ENV_PATH)
 }
 
 // LoadInfraFromEnv loads and validates infrastructure configuration from .env file.
@@ -104,6 +107,9 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 
 	// Cron Configuration
 	cfg.CronTimezone = getStringEnv("CRON_TIMEZONE", &errors)
+
+	// SSI Configuration
+	cfg.SSICredentialsEnvPath = getStringEnv("SSI_CREDENTIALS_ENV_PATH", &errors)
 
 	if len(errors) > 0 {
 		return nil, fmt.Errorf("configuration validation failed:\n%s", strings.Join(errors, "\n"))

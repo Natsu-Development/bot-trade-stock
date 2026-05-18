@@ -16,7 +16,10 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"sync/atomic"
+	"time"
 
+	"bot-trade/infrastructure/credentials"
 	"bot-trade/infrastructure/metrics"
 	"bot-trade/infrastructure/provider/contract"
 
@@ -31,17 +34,6 @@ const (
 	ssiQuoteName    = "ssi-quote"
 	ssiQuoteBaseURL = "https://iboard-query.ssi.com.vn"
 	ssiCookieDomain = ".ssi.com.vn"
-
-	ssiUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
-
-	// Cloudflare session cookies. Capture all three from the same VNC
-	// browser session in DevTools → Application → Cookies → ssi.com.vn.
-	// The jar auto-rotates __cf_bm and _cfuvid from each response's
-	// Set-Cookie, so manual refresh = re-paste cf_clearance plus the
-	// companion pair from the same capture.
-	ssiCFClearance = "z11gcZnMxZ6ZYFxdlvBXtAGAlOsG.h5lwYp2PhpvLdo-1778903597-1.2.1.1-uDfnZxFoYT2uNN0oGhMLcS.THYgKa.SLJmL.z2ho7AblmnU9pYFJmE8PxtAyCP4G5KFrlTdbnl9qFRfguIusUzL5NlAF_6rvB1D7oPDuWyftXVOTcMiYt6oWJMuIswd9m3VcEp37hZV3BgaWP9LGVJcD77hxiG38n2y1kqtz146EjZmtKjw4R87ApsVJM8DLgKVcHCKvxXzYxVMiGNbKJdQ7qpSK87yCyQlbxktnxB4bF8_bXwPX6K5JXo0_5PpcYg9QK1GVsVNoOLE0Gd4JPOHbR6illa3K_qUPfn2JpLlfITThJ_cA9oybGPw32khihGwbTXEhJhV9PDL4qkmO7_OK4rT5nWllEna9rjbzv_Uy5NvQiCWHwKkLRo8kUXMBq7pwZXkk7t64HttA.OpMyCj670V2tTutwNd9XoXfIp4"
-	ssiCFBm        = "Bj7wN9SQTsuuNZVyr5EKIXEzgxkTheYlJbLcaT0Zflw-1778903596.9944515-1.0.1.1-jIpUu_Vu7bpM0Bv2jmqSb_jULTO7SRQk0ScxEIlrGG4ocMmtEYGnSws8iu0cdWkDllE0TKbckhQbGuRZI6aI6w707D_CIrz4fefbRYpFeGtVKxWoTnXvyDvrAD5mqz_M"
-	ssiCFUvid      = "fpoRDKk4Fl8wBSq5PR2eM6KAbWZbAzK5GbrmsezndHE-1778815413.341835-1.0.1.1-1xfahiOZ96hLlBqRzXOTOCaN8l0vZrc3f7u7c2x1tfQ"
 )
 
 // ssiQuoteEndpoints maps exchange code to the iboard-query group endpoint path.
@@ -88,70 +80,61 @@ type ssiQuoteItem struct {
 	Exchange            string  `json:"exchange"`
 }
 
+// credentialStore is a consumer-side interface — the SSI provider only needs the
+// current snapshot, nothing else. Kept narrow here (in the consumer package) so
+// the credentials package owns its API surface and tests can stub easily.
+type credentialStore interface {
+	Current() credentials.SSICredentials
+}
+
 // SSIQueryProvider fetches real-time quotes from SSI iboard-query API.
 // Standalone — does NOT implement contract.Provider (which serves OHLCV charts).
 // Observed via ProviderMetrics so dashboards see request rate / latency / errors
 // for quote-fetches under {provider="ssi-quote"}.
+//
+// lastForbiddenAt is set atomically (Unix seconds) whenever fetchExchange
+// observes a 403. Zero means no 403 has been observed in this process lifetime.
+// Safe for concurrent reads from multiple goroutines.
 type SSIQueryProvider struct {
-	client  *http.Client
-	baseURL string
-	metrics *metrics.ProviderMetrics
+	client          *http.Client
+	baseURL         string
+	metrics         *metrics.ProviderMetrics
+	credStore       credentialStore
+	lastForbiddenAt atomic.Int64
 }
 
 // NewSSIQueryProvider creates a new SSI iboard-query adapter.
-// Metrics are required so the alert-job's data path is observable; passing nil
-// returns an error rather than silently dropping observability.
-func NewSSIQueryProvider(client *http.Client, m *metrics.ProviderMetrics) (*SSIQueryProvider, error) {
+// All three arguments are required; passing nil returns an error rather than
+// silently dropping observability or serving stale/empty credentials.
+func NewSSIQueryProvider(client *http.Client, m *metrics.ProviderMetrics, store credentialStore) (*SSIQueryProvider, error) {
 	if client == nil {
 		return nil, fmt.Errorf("ssi-quote: http client is required")
 	}
 	if m == nil {
 		return nil, fmt.Errorf("ssi-quote: provider metrics is required")
 	}
-
-	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
-	if err != nil {
-		return nil, fmt.Errorf("ssi-quote: build cookie jar: %w", err)
+	if store == nil {
+		return nil, fmt.Errorf("ssi-quote: credential store is required")
 	}
-	if err := seedSSICookies(jar); err != nil {
-		return nil, fmt.Errorf("ssi-quote: seed cookies: %w", err)
-	}
-
-	// Shallow-copy the shared client to attach a private jar without
-	// leaking SSI cookies into other providers that share the transport.
-	clientCopy := *client
-	clientCopy.Jar = jar
 
 	m.InitProvider(ssiQuoteName, 0)
 	return &SSIQueryProvider{
-		client:  &clientCopy,
-		baseURL: ssiQuoteBaseURL,
-		metrics: m,
+		client:    client,
+		baseURL:   ssiQuoteBaseURL,
+		metrics:   m,
+		credStore: store,
 	}, nil
 }
 
-// seedSSICookies installs the captured Cloudflare session into the jar.
-// Empty values are skipped so the bot can run with only cf_clearance until
-// the companion cookies are pasted from the same VNC capture.
-func seedSSICookies(jar http.CookieJar) error {
-	u, err := url.Parse(ssiQuoteBaseURL)
-	if err != nil {
-		return fmt.Errorf("parse base url: %w", err)
+// LastForbiddenAt returns the time of the most recent 403 observed by this
+// provider. Returns the zero time if no 403 has been observed in this process
+// lifetime. Safe to call from multiple goroutines concurrently.
+func (p *SSIQueryProvider) LastForbiddenAt() time.Time {
+	v := p.lastForbiddenAt.Load()
+	if v == 0 {
+		return time.Time{}
 	}
-	seeds := []*http.Cookie{
-		{Name: "cf_clearance", Value: ssiCFClearance, Domain: ssiCookieDomain, Path: "/", Secure: true, HttpOnly: true},
-		{Name: "__cf_bm", Value: ssiCFBm, Domain: ssiCookieDomain, Path: "/", Secure: true, HttpOnly: true},
-		{Name: "_cfuvid", Value: ssiCFUvid, Domain: ssiCookieDomain, Path: "/", Secure: true, HttpOnly: true},
-	}
-	cookies := make([]*http.Cookie, 0, len(seeds))
-	for _, c := range seeds {
-		if c.Value == "" {
-			continue
-		}
-		cookies = append(cookies, c)
-	}
-	jar.SetCookies(u, cookies)
-	return nil
+	return time.Unix(v, 0)
 }
 
 // FetchAllQuotes fetches HOSE, HNX, and UPCOM quotes in parallel and returns a
@@ -199,29 +182,75 @@ func (p *SSIQueryProvider) FetchAllQuotes(ctx context.Context) (map[string]marke
 }
 
 // fetchExchange fetches quotes for a single exchange path.
+// A fresh cookiejar.Jar is built on every call so the 3 parallel exchange
+// goroutines do not share mutable jar state, and each call picks up the
+// latest credentials from the atomic credStore snapshot.
 func (p *SSIQueryProvider) fetchExchange(ctx context.Context, exchange, path string) (out map[string]marketvo.MarketQuote, err error) {
 	tracker := p.metrics.BeginRequest(ssiQuoteName)
 	defer func() {
+		if errors.Is(err, contract.ErrForbidden) {
+			p.lastForbiddenAt.Store(time.Now().Unix())
+		}
 		tracker.EndRequest(err, errors.Is(err, contract.ErrRateLimited), 0)
 	}()
 
-	url := p.baseURL + path
+	// Snapshot credentials once; all header/cookie writes use this value.
+	creds := p.credStore.Current()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	// Build a per-call jar so concurrent goroutines cannot observe each
+	// other's Set-Cookie rotations, and each call starts from the live snapshot.
+	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+	if err != nil {
+		return nil, fmt.Errorf("build cookie jar: %w", err)
+	}
+	u, err := url.Parse(ssiQuoteBaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse base url: %w", err)
+	}
+	seeds := []*http.Cookie{
+		{Name: "cf_clearance", Value: creds.CFClearance, Domain: ssiCookieDomain, Path: "/", Secure: true, HttpOnly: true},
+		{Name: "__cf_bm", Value: creds.CFBm, Domain: ssiCookieDomain, Path: "/", Secure: true, HttpOnly: true},
+		{Name: "_cfuvid", Value: creds.CFUvid, Domain: ssiCookieDomain, Path: "/", Secure: true, HttpOnly: true},
+	}
+	nonEmpty := make([]*http.Cookie, 0, len(seeds))
+	for _, c := range seeds {
+		if c.Value != "" {
+			nonEmpty = append(nonEmpty, c)
+		}
+	}
+	jar.SetCookies(u, nonEmpty)
+
+	// Shallow-copy the shared client to attach the per-call jar while
+	// preserving the retry transport and its 429 back-off behaviour.
+	callClient := *p.client
+	callClient.Jar = jar
+
+	reqURL := p.baseURL + path
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	// Cloudflare binds cf_clearance to the exact request fingerprint that minted it
 	// (browser top-level navigation: text/html Accept, no Origin/Referer). Any
-	// deviation triggers 403 even with a valid token. The client's cookie jar
-	// (seeded in NewSSIQueryProvider) attaches cf_clearance on send and persists
-	// __cf_bm / _cfuvid rotations from each response's Set-Cookie.
+	// deviation triggers 403 even with a valid token. The jar above attaches
+	// cf_clearance on send and persists __cf_bm / _cfuvid from each Set-Cookie.
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("Cache-Control", "max-age=0")
-	req.Header.Set("User-Agent", ssiUserAgent)
+	req.Header.Set("User-Agent", creds.UserAgent)
+	// Browser client hints + fetch metadata. CF accumulates samples on requests
+	// missing these and flags after a few hours of identical traffic. Values
+	// must match the User-Agent (Chrome 148, Linux, desktop, navigation context).
+	req.Header.Set("Sec-Ch-Ua", `"Not.A/Brand";v="99", "Chromium";v="148", "Google Chrome";v="148"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Linux"`)
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
 
-	resp, err := p.client.Do(req)
+	resp, err := callClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("http request: %w", err)
 	}

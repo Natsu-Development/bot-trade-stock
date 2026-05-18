@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh SSI Cloudflare cookies before each VN trading session
+Documentation=file:///opt/bot-trade/scripts/ssi-bypass/README.md
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 08:50:00 Asia/Ho_Chi_Minh
+OnCalendar=Mon..Fri *-*-* 12:50:00 Asia/Ho_Chi_Minh
+Persistent=true
+Unit=bot-trade-cookie-refresh.service
+
+[Install]
+WantedBy=timers.target

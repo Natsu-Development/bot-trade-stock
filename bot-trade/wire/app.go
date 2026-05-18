@@ -33,6 +33,9 @@ type AppServices struct {
 
 	// Scheduler
 	Scheduler *appService.JobScheduler
+
+	// SSI quote provider — exposed for the health handler's LastForbiddenAt view.
+	SSIProvider *sources.SSIQueryProvider
 }
 
 // NewAppServices initializes all application layer dependencies.
@@ -54,7 +57,7 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 
 	// SSI iboard-query adapter for real-time quotes (alert job). Observed via
 	// ProviderMetrics under {provider="ssi-quote"} but NOT joined to the pool.
-	quoteProvider, err := sources.NewSSIQueryProvider(infra.HTTPClient, infra.ProviderMetrics)
+	quoteProvider, err := sources.NewSSIQueryProvider(infra.HTTPClient, infra.ProviderMetrics, infra.CredStore)
 	if err != nil {
 		return nil, fmt.Errorf("init ssi-quote provider: %w", err)
 	}
@@ -125,5 +128,6 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 		StockMetrics: stockMetricsUC,
 		Analyzer:     analyzer,
 		Scheduler:    scheduler,
+		SSIProvider:  quoteProvider,
 	}, nil
 }

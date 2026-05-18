@@ -44,7 +44,7 @@ func main() {
 		}
 	}()
 
-	waitForShutdown()
+	waitForShutdown(app)
 
 	zap.L().Info("Shutting down...")
 	if err := srv.Shutdown(); err != nil {
@@ -52,8 +52,36 @@ func main() {
 	}
 }
 
-func waitForShutdown() {
+// waitForShutdown blocks until SIGINT or SIGTERM is received.
+// SIGHUP is scoped exclusively to SSI credential reload and does not trigger shutdown.
+func waitForShutdown(app *wire.App) {
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	<-sigChan
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+
+	for sig := range sigChan {
+		if sig == syscall.SIGHUP {
+			start := time.Now()
+			err := app.ReloadCredentials()
+			durationMs := time.Since(start).Milliseconds()
+			if err != nil {
+				zap.L().Warn("ssi credentials reloaded",
+					zap.String("event", "ssi credentials reloaded"),
+					zap.Int64("duration_ms", durationMs),
+					zap.String("result", "failure"),
+					zap.String("error", err.Error()),
+				)
+			} else {
+				zap.L().Info("ssi credentials reloaded",
+					zap.String("event", "ssi credentials reloaded"),
+					zap.Int64("duration_ms", durationMs),
+					zap.String("result", "success"),
+					zap.String("minted_at", app.CurrentCredentialMintedAt().Format(time.RFC3339)),
+				)
+			}
+			continue
+		}
+		// SIGINT or SIGTERM — exit the loop and proceed with graceful shutdown.
+		zap.L().Info("shutdown signal received", zap.String("signal", sig.String()))
+		return
+	}
 }
