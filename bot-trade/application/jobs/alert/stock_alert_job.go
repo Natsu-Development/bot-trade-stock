@@ -225,7 +225,7 @@ func buildMessage(symbol marketvo.Symbol, quote marketvo.MarketQuote, matches []
 	fields := make([]outbound.Field, 0, 2+len(matches))
 	fields = append(fields,
 		outbound.Field{Label: "Symbol", Value: string(symbol)},
-		outbound.Field{Label: "Price", Value: fmt.Sprintf("%.0f", quote.MatchedPrice)},
+		outbound.Field{Label: "Price", Value: fmt.Sprintf("%.2f", quote.MatchedPrice)},
 	)
 	fields = append(fields, matches...)
 	return outbound.Message{

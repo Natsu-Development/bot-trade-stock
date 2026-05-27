@@ -45,14 +45,14 @@ func (e *AlertEvaluator) Evaluate(
 		if quote.MatchedPrice > cond.Threshold {
 			return EvaluationResult{
 				Label: configvo.LabelPriceAbove,
-				Value: fmt.Sprintf("%.0f > %.0f", quote.MatchedPrice, cond.Threshold),
+				Value: fmt.Sprintf("%.2f > %.2f", quote.MatchedPrice, cond.Threshold),
 			}, true
 		}
 	case configvo.AlertTypePriceBelow:
 		if quote.MatchedPrice < cond.Threshold {
 			return EvaluationResult{
 				Label: configvo.LabelPriceBelow,
-				Value: fmt.Sprintf("%.0f < %.0f", quote.MatchedPrice, cond.Threshold),
+				Value: fmt.Sprintf("%.2f < %.2f", quote.MatchedPrice, cond.Threshold),
 			}, true
 		}
 	case configvo.AlertTypeVolumeSpike:
@@ -94,7 +94,7 @@ func (e *AlertEvaluator) Evaluate(
 		if quote.MatchedPrice >= lower && quote.MatchedPrice <= level {
 			return EvaluationResult{
 				Label: configvo.LabelTrendlineBreakout,
-				Value: fmt.Sprintf("%.0f approaching resistance %.0f", quote.MatchedPrice, level),
+				Value: fmt.Sprintf("%.2f approaching resistance %.2f", quote.MatchedPrice, level),
 			}, true
 		}
 	case configvo.AlertTypeTrendlineBreakdown:
@@ -108,7 +108,7 @@ func (e *AlertEvaluator) Evaluate(
 		if quote.MatchedPrice <= upper && quote.MatchedPrice >= level {
 			return EvaluationResult{
 				Label: configvo.LabelTrendlineBreakdown,
-				Value: fmt.Sprintf("%.0f approaching support %.0f", quote.MatchedPrice, level),
+				Value: fmt.Sprintf("%.2f approaching support %.2f", quote.MatchedPrice, level),
 			}, true
 		}
 	case configvo.AlertTypePriceCrossAbove:
@@ -119,7 +119,7 @@ func (e *AlertEvaluator) Evaluate(
 		if prevQuote.MatchedPrice <= ma && quote.MatchedPrice > ma {
 			return EvaluationResult{
 				Label: configvo.LabelPriceCrossAbove,
-				Value: fmt.Sprintf("%s %.0f: %.0f → %.0f", cond.Reference, ma, prevQuote.MatchedPrice, quote.MatchedPrice),
+				Value: fmt.Sprintf("%s %.2f: %.2f → %.2f", cond.Reference, ma, prevQuote.MatchedPrice, quote.MatchedPrice),
 			}, true
 		}
 	case configvo.AlertTypePriceCrossBelow:
@@ -130,7 +130,7 @@ func (e *AlertEvaluator) Evaluate(
 		if prevQuote.MatchedPrice >= ma && quote.MatchedPrice < ma {
 			return EvaluationResult{
 				Label: configvo.LabelPriceCrossBelow,
-				Value: fmt.Sprintf("%s %.0f: %.0f → %.0f", cond.Reference, ma, prevQuote.MatchedPrice, quote.MatchedPrice),
+				Value: fmt.Sprintf("%s %.2f: %.2f → %.2f", cond.Reference, ma, prevQuote.MatchedPrice, quote.MatchedPrice),
 			}, true
 		}
 	}

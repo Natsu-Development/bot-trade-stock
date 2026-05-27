@@ -25,7 +25,13 @@ type Infra struct {
 	HTTPClient      *http.Client
 	ProviderPool    *provider.ProviderPool
 	ProviderMetrics *metrics.ProviderMetrics
-	CredStore       *credentials.EnvCredentialStore
+	// CredStore is the interface (not a concrete *EnvCredentialStore) so that
+	// non-production leaves it as a genuinely nil interface — comparisons like
+	// `if infra.CredStore != nil` and `if p.credStore != nil` then behave
+	// correctly. A concrete-typed-nil pointer here would silently wrap into a
+	// typed-nil interface at every interface-typed call site and panic on
+	// method dispatch (Go FAQ: "Why is my nil error value not equal to nil?").
+	CredStore credentials.Store
 }
 
 // NewInfra initializes all infrastructure layer dependencies.
@@ -53,9 +59,10 @@ func NewInfra(cfg *config.InfraConfig) (*Infra, error) {
 	providerPool := buildProviderPool(httpClient, cfg, providerMetrics)
 
 	// SSI credentials are only loaded + fail-fast verified in production, where the
-	// quote API sits behind a Cloudflare challenge. Non-production deliberately
-	// leaves CredStore nil so dev startup does not instantiate cookie-refresh code.
-	var credStore *credentials.EnvCredentialStore
+	// quote API sits behind a Cloudflare challenge. Non-production leaves
+	// credStore as a nil interface — see the Infra.CredStore doc above for why
+	// the variable type is the interface, not the concrete pointer.
+	var credStore credentials.Store
 	if cfg.Environment == "production" {
 		credStore, err = credentials.NewEnvCredentialStore(cfg.SSICredentialsEnvPath)
 		if err != nil {

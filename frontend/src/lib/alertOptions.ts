@@ -23,9 +23,9 @@ export const ALERT_CONDITION_TYPES: AlertConditionTypeOption[] = [
   {
     value: 'price_above',
     label: 'Price above',
-    unit: 'VND',
-    placeholder: '150000',
-    helper: 'Trigger when last matched price ≥ this value',
+    unit: 'kVND',
+    placeholder: '18.5',
+    helper: 'Trigger when last matched price ≥ this value. Enter in thousands of VND (e.g. 18.5 = 18,500 VND).',
     hasThreshold: true,
     category: 'price',
     sentiment: 'bull',
@@ -33,9 +33,9 @@ export const ALERT_CONDITION_TYPES: AlertConditionTypeOption[] = [
   {
     value: 'price_below',
     label: 'Price below',
-    unit: 'VND',
-    placeholder: '90000',
-    helper: 'Trigger when last matched price ≤ this value',
+    unit: 'kVND',
+    placeholder: '17.0',
+    helper: 'Trigger when last matched price ≤ this value. Enter in thousands of VND (e.g. 17.0 = 17,000 VND).',
     hasThreshold: true,
     category: 'price',
     sentiment: 'bear',
@@ -227,9 +227,9 @@ export function describeCondition(cond: ApiAlertCondition, symbol: string): stri
   const ma = getMAReferenceLabel(cond.reference)
   switch (cond.type) {
     case 'price_above':
-      return `${sym} price rises to or above ${formatThreshold(cond.type, cond.threshold)} VND`
+      return `${sym} price rises to or above ${formatThreshold(cond.type, cond.threshold)} kVND`
     case 'price_below':
-      return `${sym} price falls to or below ${formatThreshold(cond.type, cond.threshold)} VND`
+      return `${sym} price falls to or below ${formatThreshold(cond.type, cond.threshold)} kVND`
     case 'volume_spike':
       return `${sym} volume reaches ${cond.threshold}% of its 20-day average`
     case 'transaction_volume_spike':
@@ -291,6 +291,11 @@ export function formatThreshold(type: AlertConditionType, threshold: number): st
   if (type === 'volume_spike') {
     return `${threshold}%`
   }
+  if (type === 'price_above' || type === 'price_below') {
+    // Canonical thousand-VND scale: user enters 18.5 meaning 18,500 VND.
+    // Two decimals preserve the precision actually configured.
+    return threshold.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
   return threshold.toLocaleString('en-US')
 }
 
@@ -316,7 +321,7 @@ export function formatConditionPill(condition: ApiAlertCondition): string {
   if (condition.type === 'trendline_breakout_mtf') return 'trendline breakout (all timeframes)'
   if (condition.type === 'trendline_breakdown_mtf') return 'trendline breakdown (all timeframes)'
   const glyph = condition.type === 'price_above' ? '>' : '<'
-  return `price ${glyph} ${formatThreshold(condition.type, condition.threshold)} VND`
+  return `price ${glyph} ${formatThreshold(condition.type, condition.threshold)} kVND`
 }
 
 export function isAlertActive(alert: ApiStockAlert): boolean {

@@ -54,8 +54,6 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 
 	// SSI iboard-query adapter for real-time quotes (alert job). Observed via
 	// ProviderMetrics under {provider="ssi-quote"} but NOT joined to the pool.
-	// CredStore is optional — the constructor accepts nil (non-production wiring
-	// runs without Cloudflare cookies), so no branch on infra.CredStore needed.
 	quoteProvider, err := sources.NewSSIQueryProvider(infra.HTTPClient, infra.ProviderMetrics, infra.CredStore)
 	if err != nil {
 		return nil, fmt.Errorf("init ssi-quote provider: %w", err)

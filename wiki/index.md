@@ -1,6 +1,6 @@
 # Wiki Index
 
-> 8 project-knowledge pages | Last updated: 2026-05-22 | Folder: `wiki/`.
+> 9 project-knowledge pages | Last updated: 2026-05-27 | Folder: `wiki/`.
 
 ## architecture
 
@@ -13,6 +13,7 @@
 ## ADRs
 
 - [ADR 0001: Use host-side SSI cookie refresh](adr/0001-use-host-side-ssi-cookie-refresh.md)
+- [ADR 0002: Two-track alert + analyze job architecture](adr/0002-two-track-alert-and-analyze-architecture.md)
 
 ## debugging
 

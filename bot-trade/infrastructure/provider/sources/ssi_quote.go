@@ -155,12 +155,58 @@ func (p *SSIQueryProvider) FetchAllQuotes(ctx context.Context) (map[string]marke
 		}
 	}
 
+	// Normalize to the canonical "thousands of VND" scale used by the OHLCV
+	// pipeline (common.go:TransformOHLCV → normalizePrices). Without this,
+	// alert comparisons against metrics-derived levels — which are in
+	// thousands — silently never match the raw-VND quote prices.
+	normalizeQuotePrices(combined)
+
 	zap.L().Debug("SSI quotes fetched",
 		zap.String("provider", ssiQuoteName),
 		zap.Int("total_symbols", len(combined)),
 	)
 
 	return combined, nil
+}
+
+// normalizeQuotePrices rescales every per-share price field on every quote
+// to "thousands of VND" when the iboard-query response came back in raw VND.
+// Detection mirrors common.go:needsPriceNormalization (sample > 10000 ⇒ raw).
+// All quotes are scaled together so a batch never produces mixed-scale output.
+//
+// Volume fields and PriceChangePct are NOT scaled. TotalTradedValue is left
+// raw because it is cumulative money, not a per-share price.
+func normalizeQuotePrices(quotes map[string]marketvo.MarketQuote) {
+	if len(quotes) == 0 {
+		return
+	}
+	var sample float64
+	for _, q := range quotes {
+		if q.MatchedPrice > 0 {
+			sample = q.MatchedPrice
+			break
+		}
+	}
+	if sample <= priceNormalizationThreshold {
+		return
+	}
+	for sym, q := range quotes {
+		q.MatchedPrice /= 1000.0
+		q.PriceChange /= 1000.0
+		q.RefPrice /= 1000.0
+		q.Ceiling /= 1000.0
+		q.Floor /= 1000.0
+		q.Highest /= 1000.0
+		q.Lowest /= 1000.0
+		q.AvgPrice /= 1000.0
+		q.Best1Bid /= 1000.0
+		q.Best1Offer /= 1000.0
+		q.Best2Bid /= 1000.0
+		q.Best2Offer /= 1000.0
+		q.Best3Bid /= 1000.0
+		q.Best3Offer /= 1000.0
+		quotes[sym] = q
+	}
 }
 
 // fetchExchange fetches quotes for a single exchange path.
