@@ -24,7 +24,7 @@ set -euo pipefail
 
 : "${FLARESOLVERR_URL:=http://127.0.0.1:8191/v1}"
 : "${SEED_URL:=https://iboard.ssi.com.vn/}"
-: "${MAX_TIMEOUT_MS:=300000}"
+: "${MAX_TIMEOUT_MS:=500000}"
 
 # --- argument parsing -------------------------------------------------------
 ENV_OUT=""
