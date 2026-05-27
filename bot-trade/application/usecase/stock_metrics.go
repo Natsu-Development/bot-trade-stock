@@ -480,14 +480,27 @@ func (uc *StockMetricsUseCase) computeSignals(
 	// 8. Extract the trendline level nearest the latest close per direction for
 	// tick-time trendline-POTENTIAL alerts. The resistance/support input lists
 	// from BuildResistanceTrendlines/BuildSupportTrendlines contain every line
-	// derivable from pivot history — including lines that latestClose has
-	// already broken through (which would generate *_Confirmed signals, not
-	// *_Potential ones). The alert evaluator's approach-zone band is one-sided
-	// (below resistance, above support), so a broken-through line picked as
-	// "nearest" would put the band on the wrong side of price and make the
-	// alert silently dead. The two helpers below filter to the potential side
-	// before picking the nearest. Uses the same currentIndex pattern as
-	// signal_generator.go (line.PriceAt(latestIndex)).
+	// derivable from pivot history — including lines latestClose has already
+	// broken through. The alert evaluator's approach-zone band is one-sided
+	// (below resistance, above support), so a broken line picked as "nearest"
+	// would put the band on the wrong side of price and make the alert
+	// silently dead.
+	//
+	// FilterIntactTrendlines pre-filters against recentData using the same
+	// Close-based crossing predicate GenerateSupportSignals /
+	// GenerateResistanceSignals use to emit *_Confirmed. This drops any line
+	// whose Close pierced its projection in the post-EndPivot window — the
+	// "broken then pulled back" case where latestClose is back inside the
+	// band but the line was crossed earlier. The `level < latestClose` /
+	// `level > latestClose` guard inside the nearestPotential* helpers is
+	// kept as defense-in-depth.
+	//
+	// The Confirmed-signal emission path above (GenerateSupportSignals /
+	// GenerateResistanceSignals at step 6) is UNCHANGED — broken lines still
+	// emit *_Confirmed at their breakout bar.
+	resistanceTrendlines = analysissvc.FilterIntactTrendlines(resistanceTrendlines, recentData)
+	supportTrendlines = analysissvc.FilterIntactTrendlines(supportTrendlines, recentData)
+
 	latestIndex := recentData[len(recentData)-1].Index
 	latestClose := recentData[len(recentData)-1].Close
 	metrics.ResistanceLevel = nearestPotentialResistanceLevel(resistanceTrendlines, latestIndex, latestClose)

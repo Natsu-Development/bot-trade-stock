@@ -1,8 +1,8 @@
 ---
 title: "ADR 0002: Two-track alert + analyze job architecture"
-tags: ["alert", "analyze", "stock-alert", "rsi-divergence", "trendline", "session-gate", "auto-disable", "arrayfilter", "job-registry", "alert-evaluator"]
+tags: ["alert", "analyze", "stock-alert", "rsi-divergence", "trendline", "session-gate", "auto-disable", "arrayfilter", "job-registry", "alert-evaluator", "intact-filter"]
 created: 2026-05-27T00:00:00.000Z
-updated: 2026-05-27T00:00:00.000Z
+updated: 2026-05-27T14:55:00.000Z
 sources:
   - "bot-trade/application/jobs/alert/stock_alert_job.go"
   - "bot-trade/application/jobs/analyze/base.go"
@@ -12,6 +12,9 @@ sources:
   - "bot-trade/application/jobs/analyze/breakdown_job.go"
   - "bot-trade/application/jobs/registry/factory.go"
   - "bot-trade/application/service/condition_disabler.go"
+  - "bot-trade/application/usecase/stock_metrics.go"
+  - "bot-trade/domain/analysis/service/signal_generator.go"
+  - "bot-trade/domain/analysis/service/trendline_filter.go"
   - "bot-trade/domain/config/aggregate/trading_config.go"
   - "bot-trade/domain/config/service/alert_evaluator.go"
   - "bot-trade/domain/config/valueobject/stock_alert_config.go"
@@ -155,6 +158,16 @@ and a shared scoped-write seam:
   fresh OHLCV. The screener uses `HasBreakoutPotential` /
   `HasBreakoutConfirmed` booleans (independent path through
   `signal_generator.go`).
+- **Lifespan-intact filter precedes the nearest-level pick.** Before
+  `nearestPotential{Resistance,Support}Level` runs, the refresh job calls
+  `analysissvc.FilterIntactTrendlines(lines, recentData)`. A line is dropped
+  if `bar.Close` ever crossed `line.PriceAt(bar.Index)` on its breakage side
+  between `EndPivot.Index+1` and the latest bar — the same predicate
+  `findCrossingPoint{Above,Below}` already use to emit `*_Confirmed`
+  signals. Without this filter a broken-then-pulled-back line would
+  re-qualify as nearest once `latestClose` drifted back inside the band,
+  firing a phantom POTENTIAL alert. The Confirmed-signal emission path is
+  unchanged — broken lines still emit `*_Confirmed` at the breakout bar.
 - **HoSE session gate is a hard skip**. Outside the gate the alert job
   returns `nil` early; no fetch, no evaluator call, no disable. The
   refresh job and analyze jobs continue running on their own schedules
@@ -268,9 +281,20 @@ Adding a new interval is config-only.
     `JobRegistry`, `RegisterFactory`, `GlobalRegistry`.
 - **Bridge metrics** (refresh-job-produced, tick-evaluator-consumed)
   - `bot-trade/application/usecase/stock_metrics.go` —
-    `nearestPotentialResistanceLevel` / `nearestPotentialSupportLevel`
-    filter to "not yet broken" lines so the evaluator's approach-zone
-    band lands on the correct side of price.
+    `computeSignals` runs `FilterIntactTrendlines` against `recentData` to
+    drop lines pierced by `Close` since their `EndPivot`, then calls
+    `nearestPotentialResistanceLevel` / `nearestPotentialSupportLevel` on
+    the surviving set. The single-bar guards inside the nearest-helpers
+    (`level < latestClose` / `level > latestClose`) remain as
+    defense-in-depth.
+  - `bot-trade/domain/analysis/service/trendline_filter.go` —
+    `IsIntact(line, bars)` boolean predicate and `FilterIntactTrendlines`
+    slice wrapper. Delegates to the unexported `findCrossingPoint{Above,
+    Below}` in `signal_generator.go` so the "broken vs intact" predicate
+    has one source of truth across the Confirmed-signal path and the
+    level-extraction path. Detection is Close-based (symmetric); line
+    construction is asymmetric (`priceFor` reads Low for support pivots,
+    High for resistance pivots).
   - `bot-trade/domain/metrics/aggregate/stock_metrics.go` — `ResistanceLevel`,
     `SupportLevel`, `TrendlineProximity`. Response-only, NOT in the screener
     filter whitelist.
@@ -297,7 +321,9 @@ Adding a new interval is config-only.
   line" signal — the evaluator suppresses the alert (lines 89 and 103 of
   `alert_evaluator.go`). After a clean breakout-through-all-known-resistance,
   ResistanceLevel is intentionally zero until the next refresh discovers
-  new pivots above the new high.
+  new pivots above the new high. Zero is also the result when every
+  candidate line was broken along its post-`EndPivot` lifespan; see the
+  lifespan-intact filter bullet in *Consequences* for the predicate.
 - **Analyze jobs use their own per-interval trendlines**, not the tick
   evaluator's bridge metrics. Do not unify the two — they answer different
   questions (single-timeframe approach band vs multi-timeframe break-confirm).
