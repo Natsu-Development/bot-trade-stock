@@ -10,6 +10,7 @@ import (
 	"bot-trade/application/jobs/registry"
 	"bot-trade/application/port/inbound"
 	"bot-trade/application/port/outbound"
+	appService "bot-trade/application/service"
 	configagg "bot-trade/domain/config/aggregate"
 	alertservice "bot-trade/domain/config/service"
 	configvo "bot-trade/domain/config/valueobject"
@@ -33,6 +34,16 @@ type StockAlertJob struct {
 	metricsManager inbound.StockMetricsManager
 	notifier       outbound.Notifier
 	evaluator      *alertservice.AlertEvaluator
+	disabler       *appService.ConditionDisabler
+
+	// marketTz is HoSE-local (injected from JobDependencies.MarketTimezone)
+	// for the IsHoSEActiveQuoteWindow gate.
+	marketTz *time.Location
+	// ignoreSessionGate, when true, runs Execute on every tick regardless of
+	// the HoSE intraday session window. Dev/demo only.
+	ignoreSessionGate bool
+	// now is a clock seam: defaults to time.Now; tests override it.
+	now func() time.Time
 
 	// Last tick's full quotes map. Reference-swapped each tick.
 	// Multi-condition consistency: every condition in a tick reads the same prev.
@@ -55,16 +66,26 @@ func NewStockAlertJobFromDeps(deps registry.JobDependencies) ([]inbound.Job, err
 	if deps.AlertEvaluator == nil {
 		return nil, fmt.Errorf("stock alert job requires an alert evaluator")
 	}
+	if deps.ConditionDisabler == nil {
+		return nil, fmt.Errorf("stock alert job requires a condition disabler")
+	}
+	if deps.MarketTimezone == nil {
+		return nil, fmt.Errorf("stock alert job requires a market timezone")
+	}
 
 	return []inbound.Job{&StockAlertJob{
-		schedule:       ic.Schedule,
-		timeout:        cfg.Timeout,
-		configRepo:     deps.ConfigRepo,
-		quoteProvider:  deps.QuoteProvider,
-		metricsManager: deps.StockMetricsManager,
-		notifier:       deps.Notifier,
-		evaluator:      deps.AlertEvaluator,
-		prevQuotes:     map[string]marketvo.MarketQuote{},
+		schedule:          ic.Schedule,
+		timeout:           cfg.Timeout,
+		configRepo:        deps.ConfigRepo,
+		quoteProvider:     deps.QuoteProvider,
+		metricsManager:    deps.StockMetricsManager,
+		notifier:          deps.Notifier,
+		evaluator:         deps.AlertEvaluator,
+		disabler:          deps.ConditionDisabler,
+		marketTz:          deps.MarketTimezone,
+		ignoreSessionGate: cfg.IgnoreSessionGate,
+		now:               time.Now,
+		prevQuotes:        map[string]marketvo.MarketQuote{},
 	}}, nil
 }
 
@@ -80,6 +101,14 @@ func (j *StockAlertJob) Metadata() inbound.JobMetadata {
 // Execute fetches quotes + configs and fires matching alerts.
 // Stock metrics are read lock-free from the manager's shared lookup map.
 func (j *StockAlertJob) Execute(ctx context.Context) error {
+	// Skip ticks outside the HoSE intraday quote window (ATO and lunch are
+	// no-data periods; the provider would return stale data). Weekday gating
+	// stays the cron's responsibility (STOCK_ALERT_SCHEDULE field-6 = "1-5").
+	if !j.ignoreSessionGate && !marketvo.IsHoSEActiveQuoteWindow(j.now(), j.marketTz) {
+		zap.L().Debug("stock alert job skipped: outside HoSE active quote window")
+		return nil
+	}
+
 	quotes, err := j.quoteProvider.FetchAllQuotes(ctx)
 	if err != nil {
 		return fmt.Errorf("fetch quotes: %w", err)
@@ -121,7 +150,6 @@ func (j *StockAlertJob) processConfig(
 		return
 	}
 
-	var updated bool
 	for i := range cfg.Alerts {
 		alert := &cfg.Alerts[i]
 		quote, ok := quotes[string(alert.Symbol)]
@@ -131,23 +159,25 @@ func (j *StockAlertJob) processConfig(
 		prev := prevQuotes[string(alert.Symbol)] // zero-value if first observation
 
 		var matched []outbound.Field
+		var firedConds []configvo.AlertCondition
 		for ci := range alert.Conditions {
-			cond := &alert.Conditions[ci]
-			if !cond.Enabled {
+			cond := alert.Conditions[ci]
+			if !cond.Enabled || cond.Type.IsAnalyzeOnly() {
+				// Analyze-only types (RSI divergence + multi-timeframe trendline) are
+				// owned by the analyze jobs; never fire them on the tick path.
 				continue
 			}
-			field, fired := j.evaluateCondition(*cond, quote, prev, metricsBySymbol[string(alert.Symbol)])
+			field, fired := j.evaluateCondition(cond, quote, prev, metricsBySymbol[string(alert.Symbol)])
 			if !fired {
 				continue
 			}
 			matched = append(matched, field)
-			cond.Enabled = false // per-condition auto-disable
+			firedConds = append(firedConds, cond)
 		}
 
 		if len(matched) == 0 {
 			continue
 		}
-		updated = true
 
 		msg := buildMessage(alert.Symbol, quote, matched)
 		if err := j.notifier.Send(ctx, cfg.Telegram, msg); err != nil {
@@ -156,15 +186,20 @@ func (j *StockAlertJob) processConfig(
 				zap.String("config_id", string(cfg.ID)),
 				zap.Error(err),
 			)
+			continue
 		}
-	}
 
-	if updated {
-		if err := j.configRepo.Update(ctx, cfg); err != nil {
-			zap.L().Error("Failed to persist alert auto-disable",
-				zap.String("config_id", string(cfg.ID)),
-				zap.Error(err),
-			)
+		// Auto-disable every fired condition via the scoped per-condition write so a
+		// stale whole-doc snapshot never reverts the analyze jobs' concurrent disables.
+		for _, cond := range firedConds {
+			if err := j.disabler.Disable(ctx, string(cfg.ID), string(alert.Symbol), cond); err != nil {
+				zap.L().Error("Failed to persist alert auto-disable",
+					zap.String("symbol", string(alert.Symbol)),
+					zap.String("config_id", string(cfg.ID)),
+					zap.String("type", string(cond.Type)),
+					zap.Error(err),
+				)
+			}
 		}
 	}
 }

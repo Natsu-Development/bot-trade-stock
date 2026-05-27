@@ -10,10 +10,11 @@
         "format:json": "prettier --write '**/*.json'"
     },
     "devDependencies": {
+        "@playwright/mcp": "^0.0.75",
+        "gitnexus": "^1.6.5",
         "prettier": "^3.1.0"
     },
     "engines": {
         "node": ">=16.0.0"
     }
 }
-

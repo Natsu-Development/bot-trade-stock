@@ -57,6 +57,15 @@ func main() {
 func waitForShutdown(app *wire.App) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	// Emit pid + the signal set so on-call can verify SIGHUP delivery path:
+	// `docker logs trading-bot | grep 'signal handler registered'` must show pid=1
+	// and SIGHUP in the list — otherwise the Dockerfile entrypoint is wrapping
+	// the binary without exec and SIGHUPs from the cookie-refresh service will
+	// be silently swallowed at the wrapper instead of reaching this handler.
+	zap.L().Info("signal handler registered",
+		zap.Strings("signals", []string{"SIGINT", "SIGTERM", "SIGHUP"}),
+		zap.Int("pid", os.Getpid()),
+	)
 
 	for sig := range sigChan {
 		if sig == syscall.SIGHUP {

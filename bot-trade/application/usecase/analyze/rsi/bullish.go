@@ -2,9 +2,9 @@ package rsi
 
 import (
 	"bot-trade/application/dto"
+	appPrep "bot-trade/application/usecase/analyze/prep"
 	analysisservice "bot-trade/domain/analysis/service"
 	analysisvo "bot-trade/domain/analysis/valueobject"
-	appPrep "bot-trade/application/usecase/analyze/prep"
 )
 
 // BullishRSIUseCase detects bullish RSI divergences.
@@ -28,4 +28,20 @@ func (uc *BullishRSIUseCase) Execute(data *appPrep.DataPrepare) ([]dto.Divergenc
 		data.Config.Divergence.RangeMax,
 	)
 	return dto.ToDivergenceDTOs(divergences), nil
+}
+
+// ExecuteEarly performs EARLY (forming) bullish divergence analysis using the current
+// bar. Returns an empty slice when no early divergence is forming, so the caller does
+// not fire. Independent of Execute (the confirmed path).
+func (uc *BullishRSIUseCase) ExecuteEarly(data *appPrep.DataPrepare) ([]dto.DivergenceDTO, error) {
+	if len(data.DataRecent) == 0 {
+		return nil, nil
+	}
+	pivotPeriod := int(data.Config.PivotPeriod)
+	pivots := analysisservice.FindLowPivots(data.DataRecent, analysisvo.FieldRSI, pivotPeriod)
+	early := analysisservice.FindEarlyBullishDivergence(pivots, data.DataRecent[len(data.DataRecent)-1])
+	if early.Type == "" {
+		return nil, nil
+	}
+	return dto.ToDivergenceDTOs([]analysisvo.Divergence{early}), nil
 }

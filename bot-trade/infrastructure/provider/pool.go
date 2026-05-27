@@ -60,12 +60,12 @@ func (p *ProviderPool) FetchData(ctx context.Context, q marketvo.MarketDataQuery
 
 		result, err := p.providers[idx].FetchObserved(ctx, q)
 		if err != nil {
-			if !errors.Is(err, contract.ErrNoData) {                                                                                         
+			if !errors.Is(err, contract.ErrNoData) {
 				zap.L().Error("Provider failed",
 					zap.String("provider", p.providers[idx].Name()),
 					zap.String("symbol", string(q.Symbol)),
 					zap.Error(err),
-				) 
+				)
 			}
 			continue
 		}

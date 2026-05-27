@@ -17,10 +17,10 @@ const (
 // Signal is a value object representing a trading signal.
 // This contains signal information without presentation details.
 type Signal struct {
-	Type   SignalType
-	Price  float64
-	Time   string
-	PriceLine   float64
+	Type      SignalType
+	Price     float64
+	Time      string
+	PriceLine float64
 }
 
 // CrossingPoint represents the point where price crossed a trendline.

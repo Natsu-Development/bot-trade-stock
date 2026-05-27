@@ -9,6 +9,11 @@ import (
 	"bot-trade/domain/shared/valueobject/market"
 )
 
+const (
+	MinSignalDaysThreshold = 1
+	MaxSignalDaysThreshold = 365
+)
+
 // TradingConfig represents a user's trading configuration.
 // This is the aggregate root for the trading configuration bounded context.
 type TradingConfig struct {
@@ -22,20 +27,19 @@ type TradingConfig struct {
 	Trendline   valueobject.Trendline  `bson:"trendline"`
 	// IndicesRecent specifies the number of recent indices to track.
 	IndicesRecent valueobject.IndicesRecent `bson:"indices_recent"`
-	// BearishEarly enables early/unconfirmed bearish divergence detection.
-	// Only applies to bearish divergence analysis; nil = disabled.
-	BearishEarly   *bool                `bson:"bearish_early,omitempty"`
-	BearishSymbols []market.Symbol      `bson:"bearish_symbols"`
-	BullishSymbols []market.Symbol      `bson:"bullish_symbols"`
-	Telegram       valueobject.Telegram `bson:"telegram"`
+	// SignalDaysThreshold is the configured recency window (in days): a
+	// trendline/RSI-divergence signal only counts when its most recent point falls
+	// within this many days, not across the whole analyzed range.
+	SignalDaysThreshold int                  `bson:"signal_days_threshold"`
+	Telegram            valueobject.Telegram `bson:"telegram"`
 	// MetricsFilter holds user-saved screener filter configurations.
 	// Nil = not set, empty array = user cleared their filters.
 	MetricsFilter []valueobject.MetricsFilter `bson:"metrics_filter,omitempty"`
 	// Alerts holds user-configured price/volume alerts.
 	// Nil = not set, empty array = user cleared their alerts.
-	Alerts      []valueobject.StockAlertConfig `bson:"alerts,omitempty"`
-	CreatedAt   time.Time                      `bson:"created_at"`
-	UpdatedAt   time.Time                      `bson:"updated_at"`
+	Alerts    []valueobject.StockAlertConfig `bson:"alerts,omitempty"`
+	CreatedAt time.Time                      `bson:"created_at"`
+	UpdatedAt time.Time                      `bson:"updated_at"`
 }
 
 // NewTradingConfig creates a new TradingConfig with validation.
@@ -48,20 +52,20 @@ func NewTradingConfig(
 	divergence valueobject.Divergence,
 	trendline valueobject.Trendline,
 	indicesRecent valueobject.IndicesRecent,
+	signalDaysThreshold int,
 ) (*TradingConfig, error) {
 	cfg := &TradingConfig{
-		ID:             id,
-		RSIPeriod:      rsiPeriod,
-		PivotPeriod:    pivotPeriod,
-		LookbackDay:    lookbackDay,
-		Divergence:     divergence,
-		Trendline:      trendline,
-		IndicesRecent:  indicesRecent,
-		BearishSymbols: []market.Symbol{},
-		BullishSymbols: []market.Symbol{},
-		Telegram:       valueobject.Telegram{Enabled: false},
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
+		ID:                  id,
+		RSIPeriod:           rsiPeriod,
+		PivotPeriod:         pivotPeriod,
+		LookbackDay:         lookbackDay,
+		Divergence:          divergence,
+		Trendline:           trendline,
+		IndicesRecent:       indicesRecent,
+		SignalDaysThreshold: signalDaysThreshold,
+		Telegram:            valueobject.Telegram{Enabled: false},
+		CreatedAt:           time.Now(),
+		UpdatedAt:           time.Now(),
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -95,8 +99,13 @@ func (c *TradingConfig) Merge(update *TradingConfig) (*TradingConfig, error) {
 	if update.IndicesRecent != emptyIndices {
 		merged.IndicesRecent = update.IndicesRecent
 	}
-	if update.BearishEarly != nil {
-		merged.BearishEarly = update.BearishEarly
+	// Zero is the sentinel for "not provided" — matches the pattern used for
+	// every sibling VO above and preserves the partial-PUT semantics promised
+	// by this method's doc comment. An explicit zero would be invalid anyway
+	// (Validate rejects anything outside [MinSignalDaysThreshold, Max]), so
+	// treating it as "absent" loses no legal input.
+	if update.SignalDaysThreshold != 0 {
+		merged.SignalDaysThreshold = update.SignalDaysThreshold
 	}
 
 	// Merge divergence config
@@ -113,14 +122,6 @@ func (c *TradingConfig) Merge(update *TradingConfig) (*TradingConfig, error) {
 	}
 	if update.Trendline.ProximityPercent > 0 {
 		merged.Trendline.ProximityPercent = update.Trendline.ProximityPercent
-	}
-
-	// Override symbol lists if provided (non-empty)
-	if len(update.BearishSymbols) > 0 {
-		merged.BearishSymbols = update.BearishSymbols
-	}
-	if len(update.BullishSymbols) > 0 {
-		merged.BullishSymbols = update.BullishSymbols
 	}
 
 	// Merge telegram config - update if any telegram field is set
@@ -153,66 +154,20 @@ func (c *TradingConfig) Merge(update *TradingConfig) (*TradingConfig, error) {
 	return &merged, nil
 }
 
-// AddSymbol adds a symbol to the specified list (bullish/bearish).
-// Idempotent: no error if the symbol already exists in the target list.
-func (c *TradingConfig) AddSymbol(listType valueobject.WatchlistType, symbol market.Symbol) error {
-	switch listType {
-	case valueobject.WatchlistBullish:
-		for _, s := range c.BullishSymbols {
-			if s == symbol {
-				return nil // Already exists, idempotent
-			}
-		}
-		c.BullishSymbols = append(c.BullishSymbols, symbol)
-	case valueobject.WatchlistBearish:
-		for _, s := range c.BearishSymbols {
-			if s == symbol {
-				return nil // Already exists, idempotent
-			}
-		}
-		c.BearishSymbols = append(c.BearishSymbols, symbol)
-	default:
-		return valueobject.ErrInvalidWatchlistType
-	}
-
-	c.UpdatedAt = time.Now()
-	return nil
-}
-
-// RemoveSymbol removes a symbol from the specified list.
-// Idempotent: no error if the symbol is not found in the target list.
-func (c *TradingConfig) RemoveSymbol(listType valueobject.WatchlistType, symbol market.Symbol) error {
-	switch listType {
-	case valueobject.WatchlistBullish:
-		found := false
-		for i, s := range c.BullishSymbols {
-			if s == symbol {
-				c.BullishSymbols = append(c.BullishSymbols[:i], c.BullishSymbols[i+1:]...)
-				found = true
+// SymbolsWithEnabledCondition returns the symbols whose Alerts contain an enabled
+// condition of the given type. Used by the analyze-job factories to derive their
+// symbol set from divergence conditions (wrap in a SymbolSelector closure).
+func (c *TradingConfig) SymbolsWithEnabledCondition(t valueobject.AlertType) []market.Symbol {
+	var symbols []market.Symbol
+	for _, alert := range c.Alerts {
+		for _, cond := range alert.Conditions {
+			if cond.Enabled && cond.Type == t {
+				symbols = append(symbols, alert.Symbol)
 				break
 			}
 		}
-		if !found {
-			return nil // Not found, idempotent
-		}
-	case valueobject.WatchlistBearish:
-		found := false
-		for i, s := range c.BearishSymbols {
-			if s == symbol {
-				c.BearishSymbols = append(c.BearishSymbols[:i], c.BearishSymbols[i+1:]...)
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil // Not found, idempotent
-		}
-	default:
-		return valueobject.ErrInvalidWatchlistType
 	}
-
-	c.UpdatedAt = time.Now()
-	return nil
+	return symbols
 }
 
 // Validate checks all trading config invariants.
@@ -234,6 +189,9 @@ func (c *TradingConfig) Validate() error {
 	var emptyIndices valueobject.IndicesRecent
 	if c.IndicesRecent != emptyIndices && c.IndicesRecent < 1 {
 		errs = append(errs, "indices_recent must be a positive integer")
+	}
+	if c.SignalDaysThreshold < MinSignalDaysThreshold || c.SignalDaysThreshold > MaxSignalDaysThreshold {
+		errs = append(errs, "signal_days_threshold must be between 1 and 365")
 	}
 
 	// Accumulate errors for nested object validations (may have multiple issues)

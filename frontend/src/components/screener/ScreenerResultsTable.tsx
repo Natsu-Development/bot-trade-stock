@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { formatPrice, getBadgeVariantFromExchange } from '@/lib/utils'
+import { formatPrice, getBadgeVariantFromExchange, cn } from '@/lib/utils'
 import type { Stock } from '@/types'
 
 /** Signal configuration with style, label and description */
@@ -98,6 +98,12 @@ export interface ScreenerResultsTableProps {
   visibleColumns?: ReadonlySet<string>
   /** Show checkbox column for selection */
   showCheckbox?: boolean
+  /** Active sort column id (omit to disable sorting UI) */
+  sortField?: string
+  /** Active sort direction */
+  sortDir?: 'asc' | 'desc'
+  /** Called with a column id when a sortable header is clicked */
+  onSort?: (columnId: string) => void
 }
 
 /**
@@ -112,9 +118,39 @@ export const ScreenerResultsTable = memo(function ScreenerResultsTable({
   noRowsMessage = 'No stocks found matching your filters.',
   visibleColumns,
   showCheckbox = true,
+  sortField,
+  sortDir,
+  onSort,
 }: ScreenerResultsTableProps) {
   // Default: show all columns if not specified
   const isVisible = (columnId: string) => !visibleColumns || visibleColumns.has(columnId)
+
+  // Sortable column header: clickable + keyboard-accessible with a direction
+  // indicator. Falls back to a plain header when no onSort handler is provided.
+  const sortableHead = (columnId: string, label: string) => {
+    if (!onSort) return <TableHead>{label}</TableHead>
+    const active = sortField === columnId
+    return (
+      <TableHead aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+        <button
+          type="button"
+          onClick={() => onSort(columnId)}
+          className="inline-flex items-center gap-1 uppercase tracking-wider cursor-pointer select-none hover:text-[var(--neon-cyan)] transition-colors"
+        >
+          {label}
+          <span
+            className={cn(
+              'text-[9px] leading-none',
+              active ? 'text-[var(--neon-cyan)]' : 'text-[var(--text-muted)] opacity-40'
+            )}
+            aria-hidden="true"
+          >
+            {active ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
+          </span>
+        </button>
+      </TableHead>
+    )
+  }
 
   if (loading) {
     return (
@@ -150,21 +186,21 @@ export const ScreenerResultsTable = memo(function ScreenerResultsTable({
               </label>
             </TableHead>
           )}
-          {isVisible('symbol') && <TableHead>Symbol</TableHead>}
-          {isVisible('exchange') && <TableHead>Exchange</TableHead>}
-          {isVisible('rs1m') && <TableHead>RS 1M</TableHead>}
-          {isVisible('rs3m') && <TableHead>RS 3M</TableHead>}
-          {isVisible('rs6m') && <TableHead>RS 6M</TableHead>}
-          {isVisible('rs9m') && <TableHead>RS 9M</TableHead>}
-          {isVisible('rs52w') && <TableHead>RS 52W</TableHead>}
-          {isVisible('volumeVsSma') && <TableHead>Vol/SMA</TableHead>}
-          {isVisible('currentVolume') && <TableHead>Volume</TableHead>}
-          {isVisible('price') && <TableHead>Price</TableHead>}
-          {isVisible('change') && <TableHead>Chg%</TableHead>}
-          {isVisible('ema9') && <TableHead>EMA9</TableHead>}
-          {isVisible('ema21') && <TableHead>EMA21</TableHead>}
-          {isVisible('ema50') && <TableHead>EMA50</TableHead>}
-          {isVisible('sma200') && <TableHead>SMA200</TableHead>}
+          {isVisible('symbol') && sortableHead('symbol', 'Symbol')}
+          {isVisible('exchange') && sortableHead('exchange', 'Exchange')}
+          {isVisible('rs1m') && sortableHead('rs1m', 'RS 1M')}
+          {isVisible('rs3m') && sortableHead('rs3m', 'RS 3M')}
+          {isVisible('rs6m') && sortableHead('rs6m', 'RS 6M')}
+          {isVisible('rs9m') && sortableHead('rs9m', 'RS 9M')}
+          {isVisible('rs52w') && sortableHead('rs52w', 'RS 52W')}
+          {isVisible('volumeVsSma') && sortableHead('volumeVsSma', 'Vol/SMA')}
+          {isVisible('currentVolume') && sortableHead('currentVolume', 'Volume')}
+          {isVisible('price') && sortableHead('price', 'Price')}
+          {isVisible('change') && sortableHead('change', 'Chg%')}
+          {isVisible('ema9') && sortableHead('ema9', 'EMA9')}
+          {isVisible('ema21') && sortableHead('ema21', 'EMA21')}
+          {isVisible('ema50') && sortableHead('ema50', 'EMA50')}
+          {isVisible('sma200') && sortableHead('sma200', 'SMA200')}
           {isVisible('signals') && <TableHead>Signals</TableHead>}
         </TableRow>
       </TableHeader>

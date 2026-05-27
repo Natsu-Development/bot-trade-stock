@@ -47,9 +47,6 @@ type StockMetricsUseCase struct {
 	calculator *metricsservice.Calculator
 	configRepo outbound.ConfigRepository
 
-	// Signal threshold (days a signal is considered valid)
-	signalDaysThreshold int
-
 	// Concurrency limit for batch fetching
 	concurrency int
 
@@ -82,16 +79,14 @@ func NewStockMetricsUseCase(
 	gateway outbound.MarketGateway,
 	repository outbound.StockMetricsRepository,
 	configRepo outbound.ConfigRepository,
-	signalDaysThreshold int,
 	concurrency int,
 ) *StockMetricsUseCase {
 	return &StockMetricsUseCase{
-		gateway:             gateway,
-		repository:          repository,
-		calculator:          metricsservice.NewCalculator(),
-		configRepo:          configRepo,
-		signalDaysThreshold: signalDaysThreshold,
-		concurrency:         concurrency,
+		gateway:     gateway,
+		repository:  repository,
+		calculator:  metricsservice.NewCalculator(),
+		configRepo:  configRepo,
+		concurrency: concurrency,
 	}
 }
 
@@ -197,7 +192,7 @@ func (uc *StockMetricsUseCase) refresh(ctx context.Context) (*dto.StockMetricsRe
 		info := stockInfoLookup[symbol]
 		metrics := uc.calculator.CalculateForStock(symbol, info.exchange, info.name, data)
 		if metrics != nil {
-			// Compute signals using system config if available
+			// Compute signals using the system config if available.
 			if systemConfig != nil {
 				uc.computeSignals(metrics, data, systemConfig)
 			}
@@ -408,7 +403,7 @@ func (uc *StockMetricsUseCase) computeSignals(
 	rangeMin := cfg.Divergence.RangeMin
 	rangeMax := cfg.Divergence.RangeMax
 	maxLines := cfg.Trendline.MaxLines
-	signalThreshold := time.Now().AddDate(0, 0, -uc.signalDaysThreshold)
+	signalThreshold := time.Now().AddDate(0, 0, -cfg.SignalDaysThreshold)
 
 	if len(priceHistory) < rsiPeriod+1 {
 		return
@@ -481,6 +476,71 @@ func (uc *StockMetricsUseCase) computeSignals(
 			}
 		}
 	}
+
+	// 8. Extract the trendline level nearest the latest close per direction for
+	// tick-time trendline-POTENTIAL alerts. The resistance/support input lists
+	// from BuildResistanceTrendlines/BuildSupportTrendlines contain every line
+	// derivable from pivot history — including lines that latestClose has
+	// already broken through (which would generate *_Confirmed signals, not
+	// *_Potential ones). The alert evaluator's approach-zone band is one-sided
+	// (below resistance, above support), so a broken-through line picked as
+	// "nearest" would put the band on the wrong side of price and make the
+	// alert silently dead. The two helpers below filter to the potential side
+	// before picking the nearest. Uses the same currentIndex pattern as
+	// signal_generator.go (line.PriceAt(latestIndex)).
+	latestIndex := recentData[len(recentData)-1].Index
+	latestClose := recentData[len(recentData)-1].Close
+	metrics.ResistanceLevel = nearestPotentialResistanceLevel(resistanceTrendlines, latestIndex, latestClose)
+	metrics.SupportLevel = nearestPotentialSupportLevel(supportTrendlines, latestIndex, latestClose)
+	metrics.TrendlineProximity = proximityPct
+}
+
+// nearestPotentialResistanceLevel returns the level (PriceAt(latestIndex)) of
+// the resistance trendline nearest latestClose AMONG THOSE NOT YET BROKEN —
+// lines whose level is at or above latestClose, i.e., would generate a
+// *_Potential signal rather than *_Confirmed. Skips lines with a non-positive
+// PriceAt(latestIndex). Returns 0 when no qualifying line exists, which the
+// alert evaluator interprets as "no above-price resistance to approach" and
+// suppresses the alert.
+func nearestPotentialResistanceLevel(lines []analysisvo.Trendline, latestIndex int, latestClose float64) float64 {
+	best := 0.0
+	bestDist := -1.0
+	for i := range lines {
+		level := lines[i].PriceAt(latestIndex)
+		// Skip non-positive levels AND already-broken-through lines (level
+		// strictly below latestClose). Equality keeps a line exactly at the
+		// close — degenerate but valid; the alert band collapses to a point.
+		if level <= 0 || level < latestClose {
+			continue
+		}
+		dist := level - latestClose
+		if bestDist < 0 || dist < bestDist {
+			bestDist = dist
+			best = level
+		}
+	}
+	return best
+}
+
+// nearestPotentialSupportLevel is the symmetric helper for support — picks the
+// nearest support trendline still below latestClose (would generate a
+// *_Potential signal, not *_Confirmed-broken-down). See the resistance variant
+// for the full rationale; mirrored side filter.
+func nearestPotentialSupportLevel(lines []analysisvo.Trendline, latestIndex int, latestClose float64) float64 {
+	best := 0.0
+	bestDist := -1.0
+	for i := range lines {
+		level := lines[i].PriceAt(latestIndex)
+		if level <= 0 || level > latestClose {
+			continue
+		}
+		dist := latestClose - level
+		if bestDist < 0 || dist < bestDist {
+			bestDist = dist
+			best = level
+		}
+	}
+	return best
 }
 
 // isSignalWithinDays checks if a date string (YYYY-MM-DD) is within threshold.

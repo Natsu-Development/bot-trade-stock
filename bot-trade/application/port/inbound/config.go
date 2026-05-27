@@ -13,6 +13,4 @@ type ConfigManager interface {
 	GetConfig(ctx context.Context, id string) (*configagg.TradingConfig, error)
 	UpdateConfig(ctx context.Context, id string, cfg *configagg.TradingConfig) (*configagg.TradingConfig, error)
 	DeleteConfig(ctx context.Context, id string) error
-	AddSymbols(ctx context.Context, configID string, listType string, symbols []string) error
-	RemoveSymbols(ctx context.Context, configID string, listType string, symbols []string) error
 }

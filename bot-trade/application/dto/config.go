@@ -13,38 +13,34 @@ import (
 
 // TradingConfigRequest is the DTO for creating/updating trading configuration.
 type TradingConfigRequest struct {
-	ID             string                `json:"id,omitempty"`
-	RSIPeriod      int                   `json:"rsi_period"`
-	PivotPeriod    int                   `json:"pivot_period"`
-	LookbackDay    int                   `json:"lookback_day"`
-	Divergence     ConfigDivergence      `json:"divergence"`
-	Trendline      ConfigTrendline       `json:"trendline"`
-	IndicesRecent  int                   `json:"indices_recent"`
-	BearishEarly   *bool                 `json:"bearish_early,omitempty"`
-	BearishSymbols []string              `json:"bearish_symbols"`
-	BullishSymbols []string              `json:"bullish_symbols"`
-	Telegram       ConfigTelegram        `json:"telegram"`
-	MetricsFilter  []ConfigMetricsFilter `json:"metrics_filter,omitempty"`
-	Alerts         []ConfigStockAlert    `json:"alerts,omitempty"`
+	ID                  string                `json:"id,omitempty"`
+	RSIPeriod           int                   `json:"rsi_period"`
+	PivotPeriod         int                   `json:"pivot_period"`
+	LookbackDay         int                   `json:"lookback_day"`
+	Divergence          ConfigDivergence      `json:"divergence"`
+	Trendline           ConfigTrendline       `json:"trendline"`
+	IndicesRecent       int                   `json:"indices_recent"`
+	SignalDaysThreshold int                   `json:"signal_days_threshold"`
+	Telegram            ConfigTelegram        `json:"telegram"`
+	MetricsFilter       []ConfigMetricsFilter `json:"metrics_filter,omitempty"`
+	Alerts              []ConfigStockAlert    `json:"alerts,omitempty"`
 }
 
 // TradingConfigResponse is the DTO for trading configuration responses.
 type TradingConfigResponse struct {
-	ID             string                `json:"id"`
-	RSIPeriod      int                   `json:"rsi_period"`
-	PivotPeriod    int                   `json:"pivot_period"`
-	LookbackDay    int                   `json:"lookback_day"`
-	Divergence     ConfigDivergence      `json:"divergence"`
-	Trendline      ConfigTrendline       `json:"trendline"`
-	IndicesRecent  int                   `json:"indices_recent"`
-	BearishEarly   *bool                 `json:"bearish_early,omitempty"`
-	BearishSymbols []string              `json:"bearish_symbols"`
-	BullishSymbols []string              `json:"bullish_symbols"`
-	Telegram       ConfigTelegram        `json:"telegram"`
-	MetricsFilter  []ConfigMetricsFilter `json:"metrics_filter,omitempty"`
-	Alerts         []ConfigStockAlert    `json:"alerts,omitempty"`
-	CreatedAt      string                `json:"created_at"`
-	UpdatedAt      string                `json:"updated_at"`
+	ID                  string                `json:"id"`
+	RSIPeriod           int                   `json:"rsi_period"`
+	PivotPeriod         int                   `json:"pivot_period"`
+	LookbackDay         int                   `json:"lookback_day"`
+	Divergence          ConfigDivergence      `json:"divergence"`
+	Trendline           ConfigTrendline       `json:"trendline"`
+	IndicesRecent       int                   `json:"indices_recent"`
+	SignalDaysThreshold int                   `json:"signal_days_threshold"`
+	Telegram            ConfigTelegram        `json:"telegram"`
+	MetricsFilter       []ConfigMetricsFilter `json:"metrics_filter,omitempty"`
+	Alerts              []ConfigStockAlert    `json:"alerts,omitempty"`
+	CreatedAt           string                `json:"created_at"`
+	UpdatedAt           string                `json:"updated_at"`
 }
 
 // ConfigDivergence represents divergence detection parameters for config.
@@ -68,11 +64,11 @@ type ConfigTelegram struct {
 
 // ConfigMetricsFilter represents saved screener filter presets for config.
 type ConfigMetricsFilter struct {
-	Name       string                   `json:"name"`
-	Conditions []ConfigFilterCondition  `json:"filters"`
-	Logic      string                   `json:"logic"`
-	Exchanges  []string                 `json:"exchanges,omitempty"`
-	CreatedAt  string                   `json:"created_at"`
+	Name       string                  `json:"name"`
+	Conditions []ConfigFilterCondition `json:"filters"`
+	Logic      string                  `json:"logic"`
+	Exchanges  []string                `json:"exchanges,omitempty"`
+	CreatedAt  string                  `json:"created_at"`
 }
 
 // ConfigStockAlert represents a single stock alert configuration for a symbol.
@@ -81,10 +77,11 @@ type ConfigStockAlert struct {
 	Conditions []ConfigAlertCondition `json:"conditions"`
 }
 
-// ConfigAlertCondition represents one alert condition (type + threshold + enabled flag).
+// ConfigAlertCondition represents one alert condition (type + threshold + reference + enabled flag).
 type ConfigAlertCondition struct {
 	Type      string  `json:"type"`
 	Threshold float64 `json:"threshold"`
+	Reference string  `json:"reference,omitempty"`
 	Enabled   bool    `json:"enabled"`
 }
 
@@ -133,12 +130,12 @@ func ToTradingConfigResponse(cfg *configagg.TradingConfig) *TradingConfigRespons
 	}
 
 	resp := &TradingConfigResponse{
-		ID:            string(cfg.ID),
-		RSIPeriod:     int(cfg.RSIPeriod),
-		PivotPeriod:   int(cfg.PivotPeriod),
-		LookbackDay:   int(cfg.LookbackDay),
-		IndicesRecent: int(cfg.IndicesRecent),
-		BearishEarly:  cfg.BearishEarly,
+		ID:                  string(cfg.ID),
+		RSIPeriod:           int(cfg.RSIPeriod),
+		PivotPeriod:         int(cfg.PivotPeriod),
+		LookbackDay:         int(cfg.LookbackDay),
+		IndicesRecent:       int(cfg.IndicesRecent),
+		SignalDaysThreshold: cfg.SignalDaysThreshold,
 		Divergence: ConfigDivergence{
 			RangeMin: cfg.Divergence.RangeMin,
 			RangeMax: cfg.Divergence.RangeMax,
@@ -154,16 +151,6 @@ func ToTradingConfigResponse(cfg *configagg.TradingConfig) *TradingConfigRespons
 		},
 		CreatedAt: cfg.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: cfg.UpdatedAt.Format(time.RFC3339),
-	}
-
-	// Convert symbols
-	resp.BearishSymbols = make([]string, len(cfg.BearishSymbols))
-	for i, s := range cfg.BearishSymbols {
-		resp.BearishSymbols[i] = string(s)
-	}
-	resp.BullishSymbols = make([]string, len(cfg.BullishSymbols))
-	for i, s := range cfg.BullishSymbols {
-		resp.BullishSymbols[i] = string(s)
 	}
 
 	// Convert metrics filters
@@ -225,25 +212,6 @@ func ToTradingConfigAggregate(req TradingConfigRequest) (*configagg.TradingConfi
 		ChatID:   req.Telegram.ChatID,
 	}
 
-	// Convert symbols
-	bearishSymbols := make([]marketvo.Symbol, len(req.BearishSymbols))
-	for i, s := range req.BearishSymbols {
-		symbol, err := marketvo.NewSymbol(s)
-		if err != nil {
-			return nil, err
-		}
-		bearishSymbols[i] = symbol
-	}
-
-	bullishSymbols := make([]marketvo.Symbol, len(req.BullishSymbols))
-	for i, s := range req.BullishSymbols {
-		symbol, err := marketvo.NewSymbol(s)
-		if err != nil {
-			return nil, err
-		}
-		bullishSymbols[i] = symbol
-	}
-
 	// Convert metrics filters
 	// Use MetricsFilter != nil to distinguish between "not provided" (nil) and "explicitly empty" ([]).
 	// When user sends metrics_filter: [], it means "clear all filters".
@@ -280,18 +248,16 @@ func ToTradingConfigAggregate(req TradingConfigRequest) (*configagg.TradingConfi
 	}
 
 	cfg := &configagg.TradingConfig{
-		RSIPeriod:      rsiPeriod,
-		PivotPeriod:    pivotPeriod,
-		LookbackDay:    lookbackDay,
-		Divergence:     divergence,
-		Trendline:      trendline,
-		IndicesRecent:  indicesRecent,
-		BearishEarly:   req.BearishEarly,
-		BearishSymbols: bearishSymbols,
-		BullishSymbols: bullishSymbols,
-		Telegram:       telegram,
-		MetricsFilter:  metricsFilter,
-		Alerts:         alerts,
+		RSIPeriod:           rsiPeriod,
+		PivotPeriod:         pivotPeriod,
+		LookbackDay:         lookbackDay,
+		Divergence:          divergence,
+		Trendline:           trendline,
+		IndicesRecent:       indicesRecent,
+		SignalDaysThreshold: req.SignalDaysThreshold,
+		Telegram:            telegram,
+		MetricsFilter:       metricsFilter,
+		Alerts:              alerts,
 	}
 
 	// Set ID if provided
@@ -381,6 +347,7 @@ func toConfigStockAlert(a configvo.StockAlertConfig) ConfigStockAlert {
 		conditions[i] = ConfigAlertCondition{
 			Type:      string(c.Type),
 			Threshold: c.Threshold,
+			Reference: c.Reference,
 			Enabled:   c.Enabled,
 		}
 	}
@@ -399,7 +366,7 @@ func toStockAlertConfigVO(dto ConfigStockAlert) (configvo.StockAlertConfig, erro
 
 	conditions := make([]configvo.AlertCondition, len(dto.Conditions))
 	for i, c := range dto.Conditions {
-		cond, err := configvo.NewAlertCondition(c.Type, c.Threshold, c.Enabled)
+		cond, err := configvo.NewAlertCondition(c.Type, c.Threshold, c.Reference, c.Enabled)
 		if err != nil {
 			return configvo.StockAlertConfig{}, err
 		}

@@ -10,6 +10,8 @@ scripts/
 ├── deploy-vps.sh           # Deploy to VPS via SSH
 ├── vps-setup.sh            # Install Docker on fresh VPS
 ├── cleanup-github-vars.sh  # Remove old GitHub variables
+├── go-check.sh             # Go save-time checks (gofmt/vet/lint/vuln) — see .context/runbooks/go-hooks.md
+├── delegate.sh             # Ralph delegation prompt assembler — see .context/policies/delegation-playbook.md
 └── README.md               # This file
 ```
 

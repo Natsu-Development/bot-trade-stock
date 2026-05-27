@@ -85,3 +85,107 @@ export function apiStockMetricsToStock(api: ApiStockMetrics): Stock {
 export function transformApiStocks(apiStocks: ApiStockMetrics[]): Stock[] {
   return apiStocks.map(apiStockMetricsToStock)
 }
+
+/* ------------------------------------------------------------------ */
+/* Client-side column sorting for the screener results table          */
+/* ------------------------------------------------------------------ */
+
+/** Column ids that map to a single sortable Stock field. */
+export type ScreenerSortField =
+  | 'symbol'
+  | 'exchange'
+  | 'rs1m'
+  | 'rs3m'
+  | 'rs6m'
+  | 'rs9m'
+  | 'rs52w'
+  | 'volumeVsSma'
+  | 'currentVolume'
+  | 'price'
+  | 'change'
+  | 'ema9'
+  | 'ema21'
+  | 'ema50'
+  | 'sma200'
+
+export type SortDirection = 'asc' | 'desc'
+
+const STRING_SORT_FIELDS = new Set<ScreenerSortField>(['symbol', 'exchange'])
+
+/** Table column ids that can be sorted (everything except checkbox + 'signals'). */
+export const SORTABLE_COLUMNS = new Set<ScreenerSortField>([
+  'symbol', 'exchange', 'rs1m', 'rs3m', 'rs6m', 'rs9m', 'rs52w',
+  'volumeVsSma', 'currentVolume', 'price', 'change', 'ema9', 'ema21', 'ema50', 'sma200',
+])
+
+export function isSortableColumn(id: string): id is ScreenerSortField {
+  return SORTABLE_COLUMNS.has(id as ScreenerSortField)
+}
+
+/** Numeric fields default to descending on first click (biggest first); strings to ascending. */
+export function isNumericSortField(field: ScreenerSortField): boolean {
+  return !STRING_SORT_FIELDS.has(field)
+}
+
+function sortValue(stock: Stock, field: ScreenerSortField): number | string | undefined {
+  switch (field) {
+    case 'symbol':
+      return stock.symbol
+    case 'exchange':
+      return stock.exchange
+    case 'rs1m':
+      return stock.rs1m
+    case 'rs3m':
+      return stock.rs3m
+    case 'rs6m':
+      return stock.rs6m
+    case 'rs9m':
+      return stock.rs9m
+    case 'rs52w':
+      return stock.rs52w
+    case 'volumeVsSma': {
+      const n = parseFloat(stock.volume ?? '')
+      return Number.isNaN(n) ? undefined : n
+    }
+    case 'currentVolume':
+      return stock.currentVolume
+    case 'price':
+      return stock.price
+    case 'change':
+      return stock.change
+    case 'ema9':
+      return stock.ema9
+    case 'ema21':
+      return stock.ema21
+    case 'ema50':
+      return stock.ema50
+    case 'sma200':
+      return stock.sma200
+  }
+}
+
+function isMissing(v: number | string | undefined): boolean {
+  return v === undefined || v === '' || (typeof v === 'number' && Number.isNaN(v))
+}
+
+/**
+ * Stable client-side sort of stocks by a column field. Missing values
+ * (undefined / NaN / empty) always sort to the bottom regardless of direction,
+ * so they never crowd the top when sorting ascending.
+ */
+export function sortStocks(stocks: Stock[], field: ScreenerSortField, dir: SortDirection): Stock[] {
+  const factor = dir === 'asc' ? 1 : -1
+  return [...stocks].sort((a, b) => {
+    const av = sortValue(a, field)
+    const bv = sortValue(b, field)
+    const aMissing = isMissing(av)
+    const bMissing = isMissing(bv)
+    if (aMissing && bMissing) return 0
+    if (aMissing) return 1
+    if (bMissing) return -1
+    if (typeof av === 'string' && typeof bv === 'string') {
+      return factor * av.localeCompare(bv)
+    }
+    return factor * ((av as number) - (bv as number))
+  })
+}

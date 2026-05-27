@@ -52,9 +52,17 @@ func NewInfra(cfg *config.InfraConfig) (*Infra, error) {
 	providerMetrics := metrics.NewProviderMetrics()
 	providerPool := buildProviderPool(httpClient, cfg, providerMetrics)
 
-	credStore, err := credentials.NewEnvCredentialStore(cfg.SSICredentialsEnvPath)
-	if err != nil {
-		return nil, fmt.Errorf("init credential store: %w", err)
+	// SSI credentials are only loaded + fail-fast verified in production, where the
+	// quote API sits behind a Cloudflare challenge. Non-production deliberately
+	// leaves CredStore nil so dev startup does not instantiate cookie-refresh code.
+	var credStore *credentials.EnvCredentialStore
+	if cfg.Environment == "production" {
+		credStore, err = credentials.NewEnvCredentialStore(cfg.SSICredentialsEnvPath)
+		if err != nil {
+			return nil, fmt.Errorf("init credential store: %w", err)
+		}
+	} else {
+		appLogger.Info("SSI credentials disabled (non-production); no credential store loaded")
 	}
 
 	return &Infra{

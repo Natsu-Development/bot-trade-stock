@@ -8,17 +8,17 @@ import (
 
 // StockMetrics represents comprehensive metrics for a single stock.
 type StockMetrics struct {
-	Symbol        marketvo.Symbol   `json:"symbol" bson:"symbol"`
-	Name          string            `json:"name" bson:"name"`         // Vietnamese stock name from listallstock
-	Exchange      marketvo.Exchange `json:"exchange" bson:"exchange"` // HOSE, HNX, UPCOM
-	RS1M          int               `json:"rs_1m" bson:"rs_1m"`       // 1-month percentile (1-99), 0 if not enough data
-	RS3M          int               `json:"rs_3m" bson:"rs_3m"`       // 3-month percentile (1-99), 0 if not enough data
-	RS6M          int               `json:"rs_6m" bson:"rs_6m"`       // 6-month percentile (1-99), 0 if not enough data
-	RS9M          int               `json:"rs_9m" bson:"rs_9m"`       // 9-month percentile (1-99), 0 if not enough data
-	RS52W         int               `json:"rs_52w" bson:"rs_52w"`     // 52-week percentile (1-99), 0 if not enough data
+	Symbol        marketvo.Symbol        `json:"symbol" bson:"symbol"`
+	Name          string                 `json:"name" bson:"name"`         // Vietnamese stock name from listallstock
+	Exchange      marketvo.Exchange      `json:"exchange" bson:"exchange"` // HOSE, HNX, UPCOM
+	RS1M          int                    `json:"rs_1m" bson:"rs_1m"`       // 1-month percentile (1-99), 0 if not enough data
+	RS3M          int                    `json:"rs_3m" bson:"rs_3m"`       // 3-month percentile (1-99), 0 if not enough data
+	RS6M          int                    `json:"rs_6m" bson:"rs_6m"`       // 6-month percentile (1-99), 0 if not enough data
+	RS9M          int                    `json:"rs_9m" bson:"rs_9m"`       // 9-month percentile (1-99), 0 if not enough data
+	RS52W         int                    `json:"rs_52w" bson:"rs_52w"`     // 52-week percentile (1-99), 0 if not enough data
 	PeriodReturns periodvo.PeriodReturns `json:"period_returns" bson:"period_returns"`
-	CurrentVolume int64             `json:"current_volume" bson:"current_volume"` // Today's volume
-	VolumeSMA20   int64             `json:"volume_sma20" bson:"volume_sma20"`     // 20-day SMA of volume
+	CurrentVolume int64                  `json:"current_volume" bson:"current_volume"` // Today's volume
+	VolumeSMA20   int64                  `json:"volume_sma20" bson:"volume_sma20"`     // 20-day SMA of volume
 
 	// Price metrics
 	CurrentPrice   float64 `json:"current_price" bson:"current_price"`       // Latest close price
@@ -37,6 +37,20 @@ type StockMetrics struct {
 	HasBreakdownConfirmed bool `json:"has_breakdown_confirmed" bson:"has_breakdown_confirmed"`
 	HasBullishRSI         bool `json:"has_bullish_rsi" bson:"has_bullish_rsi"`
 	HasBearishRSI         bool `json:"has_bearish_rsi" bson:"has_bearish_rsi"`
+
+	// ResistanceLevel: nearest resistance trendline ABOVE latestClose at refresh
+	// time (i.e., not yet broken through). SupportLevel: nearest support BELOW
+	// latestClose. Both are produced exclusively by the refresh job's
+	// nearestPotentialResistanceLevel / nearestPotentialSupportLevel helpers
+	// and consumed exclusively by the tick-time potential-breakout/breakdown
+	// alert evaluator (AlertTypeTrendlineBreakout / Breakdown). Zero means no
+	// qualifying line exists, which the evaluator treats as "no alert."
+	// Response-only, NOT in the screener FilterField whitelist (the screener
+	// uses the boolean HasBreakout*/HasBreakdown* tags above instead).
+	// Additive bson/json → old documents decode fine.
+	ResistanceLevel    float64 `json:"resistance_level" bson:"resistance_level"`
+	SupportLevel       float64 `json:"support_level" bson:"support_level"`
+	TrendlineProximity float64 `json:"trendline_proximity" bson:"trendline_proximity"`
 }
 
 // GetVolumeVsSMA calculates the percentage of current volume vs SMA20 on-demand.
