@@ -89,10 +89,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '1'
+          memory: 768M
         reservations:
-          cpus: '0.1'
+          cpus: '0.5'
           memory: 100M
 
   # MongoDB Database
