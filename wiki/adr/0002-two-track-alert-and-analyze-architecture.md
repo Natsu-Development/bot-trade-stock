@@ -2,7 +2,7 @@
 title: "ADR 0002: Two-track alert + analyze job architecture"
 tags: ["alert", "analyze", "stock-alert", "rsi-divergence", "trendline", "session-gate", "auto-disable", "arrayfilter", "job-registry", "alert-evaluator", "intact-filter"]
 created: 2026-05-27T00:00:00.000Z
-updated: 2026-05-27T14:55:00.000Z
+updated: 2026-05-28T00:00:00.000Z
 sources:
   - "bot-trade/application/jobs/alert/stock_alert_job.go"
   - "bot-trade/application/jobs/analyze/base.go"
@@ -353,6 +353,93 @@ mongosh --eval 'db.bot_config.findOne({_id:"system"}).alerts[0].conditions'
 # Trigger the HoSE session gate (dev only)
 STOCK_ALERT_IGNORE_SESSION_GATE=true ./bot-trade
 ```
+
+## 7. Price-scale contract
+
+### Decision
+
+Per-share price fields are denominated in **kVND (thousands of VND)**, with
+scale handled at the **infrastructure layer** — the application and domain
+layers see a plain `float64` in kVND. Two distinct mechanisms:
+
+- **Quote path** (`marketvo.MarketQuote`) — `normalizedQuoteFromItem` divides
+  the raw-VND iboard-query response by 1000 **unconditionally** (all 14
+  per-share fields). This is a single-source adapter whose scale (raw VND) is
+  verified by fixture test. There is **no application-layer sanity gate and no
+  domain `Price` value object**.
+- **OHLCV bar path** (`marketvo.MarketData`) — `TransformOHLCV` keeps a
+  **self-correcting heuristic** (`needsPriceNormalization` / `normalizePrices`):
+  divide a per-symbol bar array by 1000 when its **maximum price ≥ 1,000**.
+  Rationale: no VN equity trades at or above 1,000 kVND, so the kVND and raw-VND
+  ranges do not overlap at 1,000 — a max ≥ 1,000 can only be raw VND. The check
+  is the array max (single pass), which ignores zero/NaN leading bars. This
+  transform is **shared** across SSI/VPS/VietCap, whose raw-vs-kVND scale is not
+  uniformly verified, so the heuristic is kept; unconditional division would
+  1000×-corrupt any provider already returning kVND. (The earlier 10,000
+  threshold left raw-VND small-caps in the 1k–10k range un-normalized.)
+
+The `outbound.QuoteProvider` port docstring declares the quote kVND
+post-condition.
+
+### History — superseded sub-decision (2026-05-27 → 2026-05-28)
+
+This section originally introduced, for the **quote path**, a domain value
+object `market.Price` (`IsSane`/`IsZeroTradedToday`/`KVND`) plus an
+application-layer sanity gate in `StockAlertJob.Execute` that dropped
+out-of-band quotes and emitted a per-tick warn log — added after the
+**2026-05-27 SHS misfire** (`18,300 > 20` fired a bogus alert from a raw-VND
+quote).
+
+On **2026-05-28** the value object and the gate were removed as
+over-engineering. The misfire's root cause was the *absence* of normalization
+in the adapter, which `normalizedQuoteFromItem`'s unconditional ÷1000 now fixes
+deterministically at the boundary; a runtime band-check in the application
+layer merely duplicated that guarantee one layer too high. The bar-path
+heuristic was **evaluated for the same unconditional treatment but retained** —
+unlike the single-source quote adapter, `TransformOHLCV` is shared across
+providers whose scales are not all verified, and the per-symbol bar array does
+not suffer the mixed-batch failure that motivated the quote-path change.
+
+### Accepted risk (quote path)
+
+Quote correctness now rests entirely on `normalizedQuoteFromItem`'s
+unconditional ÷1000 and its unit test (`TestSSIQuote_NormalizeAtBoundary`
+asserts ÷1000 on all 14 fields). There is **no in-process safety net**: if the
+adapter regresses (stops dividing), bogus values reach the evaluator with
+nothing to catch them at runtime. The lost coverage was the `SHSBugRegression`
+end-to-end test (deleted with the gate). This trade was made deliberately to
+keep quote price handling in one layer (infra) and drop the domain abstraction.
+
+### Rejected alternatives (still rejected)
+
+- **Median/percentile batch heuristic on the quote hot path** — a heuristic on
+  a mixed HOSE/HNX/UPCOM batch cannot distinguish a 152k blue chip from a
+  raw-VND leak; the per-adapter ÷1000 replaces it deterministically. (The bar
+  path keeps a per-symbol max-threshold heuristic precisely because it is *not* a
+  mixed batch.)
+- **Evaluator-level hard floor** — magic-number scale policy inside the pure
+  fire/no-fire domain rule; scale is an infrastructure concern, normalized at
+  the adapter, never in the domain.
+- **Unconditional ÷1000 in the shared `TransformOHLCV`** — bets that *every*
+  current and future bar provider returns raw VND. Rejected: unverified for
+  VPS/VietCap, and a kVND provider would be 1000×-corrupted with no runtime
+  guard. The max ≥ 1,000 heuristic gets the same correctness for stocks ≥ 1 kVND
+  while staying safe against a kVND provider; only sub-1,000-VND (< 1 kVND)
+  raw-VND penny stocks remain a blind spot.
+
+### Follow-ups
+
+1. Flag-gated `" kVND"` unit-label rollout via `STOCK_ALERT_SHOW_UNIT_LABEL`
+   (Telegram price strings remain unitless `%.2f`; the underlying scale is
+   guaranteed kVND — any "VND or thousands?" question resolves to thousands).
+2. If quote adapter-regression risk proves real in production, reintroduce a
+   sanity check **at the adapter boundary** (inside `normalizedQuoteFromItem`),
+   not in the application layer.
+3. Verify the actual price scale of the VPS and VietCap bar APIs (capture a real
+   response). If all bar providers are confirmed raw VND, migrate the bar path
+   to per-adapter unconditional ÷1000 (mirroring the quote path), which also
+   closes the residual sub-1,000-VND (< 1 kVND) blind spot. Until then, the
+   shared max ≥ 1,000 heuristic stays.
 
 ## Related pages
 

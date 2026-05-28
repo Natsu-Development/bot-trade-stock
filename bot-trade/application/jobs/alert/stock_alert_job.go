@@ -123,6 +123,8 @@ func (j *StockAlertJob) Execute(ctx context.Context) error {
 
 	// O(1) reference swap: prev = last tick's map, install current for next tick.
 	// The mutex guards against torn reads if a slow tick overlaps with the next.
+	// Prices are kVND by adapter contract (QuoteProvider.FetchAllQuotes); the
+	// scale is normalized at the infrastructure boundary, so no app-layer gate.
 	j.prevQuotesMu.Lock()
 	prev := j.prevQuotes
 	j.prevQuotes = quotes
