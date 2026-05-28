@@ -2,7 +2,7 @@
 title: "ADR 0002: Two-track alert + analyze job architecture"
 tags: ["alert", "analyze", "stock-alert", "rsi-divergence", "trendline", "session-gate", "auto-disable", "arrayfilter", "job-registry", "alert-evaluator", "signal-level"]
 created: 2026-05-27T00:00:00.000Z
-updated: 2026-05-28T16:00:00.000Z
+updated: 2026-05-28T17:30:00.000Z
 sources:
   - "bot-trade/application/jobs/alert/stock_alert_job.go"
   - "bot-trade/application/jobs/analyze/base.go"
@@ -11,6 +11,7 @@ sources:
   - "bot-trade/application/jobs/analyze/breakout_job.go"
   - "bot-trade/application/jobs/analyze/breakdown_job.go"
   - "bot-trade/application/jobs/registry/factory.go"
+  - "bot-trade/config/config.go"
   - "bot-trade/application/service/condition_disabler.go"
   - "bot-trade/application/usecase/stock_metrics.go"
   - "bot-trade/domain/analysis/service/signal_generator.go"
@@ -244,8 +245,40 @@ and a shared scoped-write seam:
 | `stock-refresh` | `application/jobs/refresh/stock_refresh_job.go` | (not an alert) — produces `StockMetrics` consumed by the tick evaluator's trendline-potential cases | — | — |
 
 The bullish/bearish RSI factories instantiate one job per configured interval
-under `STOCK_ANALYZE.<bullish/bearish>.intervals`. Same for breakout/breakdown.
-Adding a new interval is config-only.
+(plus an independent EARLY variant per interval). The interval set per job type
+is fixed in `config/config.go`'s `loadJobTypeConfig`:
+
+- **RSI bullish/bearish:** `1H`, `1D`, `1W`.
+- **Breakout/breakdown:** `1H`, `1W` — **1D is deliberately omitted**. The daily
+  trendline approach is already covered in real time by the tick path's
+  `trendline_breakout` / `trendline_breakdown` conditions (which read
+  `metrics.{Resistance,Support}Level`, built from 1D trendlines by the refresh
+  job), so a 1D MTF analyze run would duplicate it. The MTF jobs earn their keep
+  on the timeframes the tick path cannot see (1H/1W).
+
+### Scheduling principle (`*_<interval>_SCHEDULE`, 6-field cron, Asia/Ho_Chi_Minh)
+
+Schedules follow the *bar boundary*, not the wall clock — an interval's bar must
+be settled before it's analyzed:
+
+- **1H** — hourly across the session (`9-15`), staggered by job type to avoid a
+  same-second provider stampede (bullish/bearish each spawn confirmed + early on
+  the same cron).
+- **1D** — runs *after* the 15:00 close (final daily bar), inside the operational
+  **15:00–15:20** window. Configured twice-daily via a `12,15`-hour cron: a lunch
+  checkpoint (~12:1x, morning settled, daily bar still provisional) and the
+  after-close run. A single cron shares one minute across both hours, so the lunch
+  hour is 12 (not 11) to keep that shared minute ≤ 20 for the close run.
+- **1W** — RSI weekly fires Friday after close (completed weekly bar); breakout/
+  breakdown weekly use the same twice-daily lunch+close cadence every weekday for
+  earlier mid-week detection.
+
+Because a fired condition auto-disables (fire-once), the two daily/weekly runs are
+**first-detection-wins**, not preview-then-confirm: a lunch fire on a provisional
+bar pre-empts the after-close run for that symbol. Accepted trade-off for earlier
+alerts — the early-divergence variants benefit most from the lunch checkpoint.
+Adding/removing an interval is a `loadJobTypeConfig` change; tuning a time is
+env-only.
 
 ## Key files
 

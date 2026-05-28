@@ -94,10 +94,15 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	cfg.MongoDBDatabase = getStringEnv("MONGODB_DATABASE", &errors)
 
 	// Job Configurations
-	cfg.BullishJob = loadJobTypeConfig("BULLISH", &errors)
-	cfg.BearishJob = loadJobTypeConfig("BEARISH", &errors)
-	cfg.BreakoutJob = loadJobTypeConfig("BREAKOUT", &errors)
-	cfg.BreakdownJob = loadJobTypeConfig("BREAKDOWN", &errors)
+	// RSI divergence jobs run on 1H/1D/1W. Breakout/breakdown intentionally omit
+	// 1D: the daily trendline approach is already covered in real time by the
+	// tick alert job's trendline_breakout / trendline_breakdown conditions
+	// (metrics.{Resistance,Support}Level are built from 1D trendlines), so a 1D
+	// MTF run would duplicate it. The MTF jobs add value on 1H/1W.
+	cfg.BullishJob = loadJobTypeConfig("BULLISH", []string{"1H", "1D", "1W"}, &errors)
+	cfg.BearishJob = loadJobTypeConfig("BEARISH", []string{"1H", "1D", "1W"}, &errors)
+	cfg.BreakoutJob = loadJobTypeConfig("BREAKOUT", []string{"1H", "1W"}, &errors)
+	cfg.BreakdownJob = loadJobTypeConfig("BREAKDOWN", []string{"1H", "1W"}, &errors)
 	cfg.StockRefresh = loadStockRefreshConfig(&errors)
 	cfg.StockAlert = loadStockAlertConfig(&errors)
 
@@ -125,16 +130,19 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	return cfg, nil
 }
 
-// loadJobTypeConfig loads a job type configuration from environment.
-func loadJobTypeConfig(prefix string, errors *[]string) JobConfig {
+// loadJobTypeConfig loads a job type configuration from environment for the
+// given intervals. Only the listed intervals' *_ENABLED/*_SCHEDULE env vars are
+// read, so a job type that omits an interval (breakout/breakdown omit 1D)
+// neither requires nor consumes that interval's env vars.
+func loadJobTypeConfig(prefix string, intervals []string, errors *[]string) JobConfig {
+	ivMap := make(map[string]IntervalConfig, len(intervals))
+	for _, iv := range intervals {
+		ivMap[iv] = loadIntervalConfig(prefix, iv, errors)
+	}
 	return JobConfig{
 		Timeout:     time.Duration(getNumberEnv(prefix+"_TIMEOUT_MINUTES", errors)) * time.Minute,
 		Concurrency: getNumberEnv(prefix+"_CONCURRENCY", errors),
-		Intervals: map[string]IntervalConfig{
-			"1H": loadIntervalConfig(prefix, "1H", errors),
-			"1D": loadIntervalConfig(prefix, "1D", errors),
-			"1W": loadIntervalConfig(prefix, "1W", errors),
-		},
+		Intervals:   ivMap,
 	}
 }
 
