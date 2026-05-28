@@ -70,6 +70,15 @@ func (p *VPSProvider) FetchBars(
 	ctx context.Context,
 	q marketvo.MarketDataQuery,
 ) ([]marketvo.MarketData, error) {
+	// VPS histdatafeed (TradingView-compatible) only serves intraday + daily
+	// resolutions; it returns 400 "Invalid Resolution!" for W and M. Declare no
+	// data so ProviderPool falls back to a weekly/monthly-capable provider
+	// (SSI's bars API accepts W) without a wasted HTTP round-trip or an
+	// error-level log — pool.FetchData treats ErrNoData as a silent fallback.
+	if q.Interval == marketvo.Interval1W || q.Interval == marketvo.Interval1M {
+		return nil, fmt.Errorf("vps: %w", contract.ErrNoData)
+	}
+
 	url := fmt.Sprintf("%s/history?symbol=%s&resolution=%s&from=%d&to=%d",
 		vpsHistBaseURL,
 		q.Symbol,
