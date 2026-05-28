@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test'
-import { navigateToPage, waitForPageHeading, resetTestConfig, TEST_USERNAME, API_BASE } from '../helpers'
+import { navigateToPage, waitForPageHeading, resetTestConfig, TEST_USERNAME } from '../helpers'
 
 async function clearAuth(page: Page) {
   await page.context().clearCookies()
@@ -78,8 +78,7 @@ test.describe('Config Page', () => {
     await expect(page.getByRole('heading', { name: 'RSI Settings' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Divergence Parameters' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Trendline Parameters' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Bullish Watch Symbols' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Bearish Watch Symbols' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Stock Alerts' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Telegram Notifications' })).toBeVisible()
   })
 
@@ -92,36 +91,73 @@ test.describe('Config Page', () => {
   // Form Input Tests
   // --------------------------------------------------------
   test('should have RSI period input', async ({ page }) => {
-    const input = page.getByRole('spinbutton').first()
+    const input = page.getByRole('textbox').first()
     await expect(input).toBeVisible()
     await input.fill('21')
     await expect(input).toHaveValue('21')
   })
 
   test('should have divergence range inputs', async ({ page }) => {
-    const inputs = page.getByRole('spinbutton')
+    // NumberInput renders type="text" (role textbox), not a native spinbutton.
+    const inputs = page.getByRole('textbox')
     const count = await inputs.count()
-    expect(count).toBeGreaterThanOrEqual(5) // RSI, Pivot, Lookback, Range Min, Range Max
+    expect(count).toBeGreaterThanOrEqual(5) // RSI, Pivot, Lookback, Range Min, Range Max, …
   })
 
-  test('should have early detection checkbox', async ({ page }) => {
-    const checkbox = page.getByRole('checkbox').first()
-    await expect(checkbox).toBeVisible()
+  test('should have signal recency window input', async ({ page }) => {
+    // signal_days_threshold — gates how recent an analyze signal must be to fire.
+    await expect(page.getByText('Signal recency window (days)')).toBeVisible()
   })
 
   // --------------------------------------------------------
-  // Watchlist Tests
+  // Stock Alerts Tests
   // --------------------------------------------------------
-  test('should display watchlist symbols', async ({ page }) => {
-    // Check that VIC and VCB are visible somewhere on the page
-    await expect(page.getByText('VIC')).toBeVisible()
-    await expect(page.getByText('VCB')).toBeVisible()
+  test('should display Stock Alerts section with Add Alert', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'Stock Alerts' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Add Alert' })).toBeVisible()
   })
 
-  test('should have symbol input fields', async ({ page }) => {
-    const inputs = page.getByPlaceholder('Add symbol and press Enter')
-    const count = await inputs.count()
-    expect(count).toBeGreaterThanOrEqual(2) // Bullish and Bearish inputs
+  test('should open the alert editor with all condition types', async ({ page }) => {
+    await page.getByRole('button', { name: 'Add Alert' }).click()
+
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: 'Create Alert' })).toBeVisible()
+    await expect(dialog.locator('#alert-symbol')).toBeVisible()
+
+    // One representative control per condition category.
+    await expect(dialog.getByRole('switch', { name: 'Enable Price above' })).toBeVisible()
+    await expect(dialog.getByRole('switch', { name: 'Enable Volume spike' })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Enable EMA 21 for Price crosses above MA' })).toBeVisible()
+    await expect(dialog.getByRole('switch', { name: 'Enable Trendline breakout (potential)' })).toBeVisible()
+    await expect(dialog.getByRole('switch', { name: 'Enable Bullish RSI divergence', exact: true })).toBeVisible()
+
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await expect(dialog).not.toBeVisible()
+  })
+
+  test('should add a stock alert via the editor', async ({ page }) => {
+    // Drive the editor and assert the card renders from local state (no reload).
+    // Race-immune under fullyParallel: every test shares e2e_test_user's backend
+    // config, so a sibling's resetTestConfig would wipe any seeded+reloaded
+    // state; local draft state is per-page and unaffected.
+    await page.getByRole('button', { name: 'Add Alert' }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+
+    // Choose a symbol from the autocomplete (loaded from /stocks/filter).
+    await dialog.locator('#alert-symbol').fill('FPT')
+    await dialog.getByRole('option', { name: 'FPT', exact: true }).click()
+
+    // Enable a Price-above threshold condition.
+    await dialog.getByRole('textbox', { name: 'Price above threshold' }).fill('100')
+    await dialog.getByRole('switch', { name: 'Enable Price above' }).click()
+
+    await dialog.getByRole('button', { name: 'Create Alert' }).click()
+    await expect(dialog).not.toBeVisible()
+
+    // The new alert card is in the Stock Alerts list.
+    await expect(page.getByRole('button', { name: 'Edit alert for FPT' })).toBeVisible()
   })
 
   // --------------------------------------------------------
@@ -142,7 +178,7 @@ test.describe('Config Page', () => {
   // Save/Reset Tests
   // --------------------------------------------------------
   test('should save configuration', async ({ page }) => {
-    const input = page.getByRole('spinbutton').first()
+    const input = page.getByRole('textbox').first()
     await input.fill('21')
 
     await page.getByRole('button', { name: 'Save Config' }).click()
@@ -150,7 +186,7 @@ test.describe('Config Page', () => {
   })
 
   test('should reset form', async ({ page }) => {
-    const input = page.getByRole('spinbutton').first()
+    const input = page.getByRole('textbox').first()
     await input.fill('30')
 
     await page.getByRole('button', { name: 'Reset Defaults' }).click()
