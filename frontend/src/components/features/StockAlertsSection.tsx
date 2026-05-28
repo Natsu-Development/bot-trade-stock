@@ -3,6 +3,7 @@ import { Icons } from '../icons/Icons'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { StockAlertRow } from './StockAlertRow'
+import { StockAlertConditionDetail } from './StockAlertConditionDetail'
 import { StockAlertEditorModal } from './StockAlertEditorModal'
 import { alertsEqual } from '@/lib/alertOptions'
 import type { ApiStockAlert } from '@/lib/api'
@@ -13,6 +14,8 @@ interface StockAlertsSectionProps {
   onUpdate: (alerts: ApiStockAlert[]) => void
 }
 
+const detailPanelId = (symbol: string) => `alert-detail-${symbol}`
+
 export const StockAlertsSection = memo(function StockAlertsSection({
   alerts,
   originalAlerts,
@@ -20,6 +23,9 @@ export const StockAlertsSection = memo(function StockAlertsSection({
 }: StockAlertsSectionProps) {
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  // Expand-state is component-local ONLY and is never lifted into the alerts
+  // array, so toggling it cannot trip `isDirty` (alertsEqual is unaffected).
+  const [expandSet, setExpandSet] = useState<Set<string>>(() => new Set())
 
   const isDirty = useMemo(() => !alertsEqual(alerts, originalAlerts), [alerts, originalAlerts])
 
@@ -36,6 +42,20 @@ export const StockAlertsSection = memo(function StockAlertsSection({
   }, [alerts])
 
   const existingSymbols = useMemo(() => alerts.map((a) => a.symbol), [alerts])
+
+  // Reconcile-from-props (M4): effectively-expanded = expandSet ∩ live symbols.
+  // The incoming `alerts` prop is the single source of truth for which symbols
+  // exist; a stale key (deleted or renamed symbol) is simply never rendered, so
+  // delete AND rename self-heal without pruning inside an onUpdate handler.
+  const effectivelyExpanded = useMemo(() => {
+    const live = new Set<string>()
+    for (const a of alerts) {
+      if (expandSet.has(a.symbol)) live.add(a.symbol)
+    }
+    return live
+  }, [expandSet, alerts])
+
+  const allExpanded = alerts.length > 0 && effectivelyExpanded.size === alerts.length
 
   const handleAdd = useCallback(() => {
     setEditingIndex(null)
@@ -55,6 +75,23 @@ export const StockAlertsSection = memo(function StockAlertsSection({
     },
     [alerts, onUpdate]
   )
+
+  const handleToggle = useCallback((symbol: string) => {
+    setExpandSet((prev) => {
+      const next = new Set(prev)
+      if (next.has(symbol)) next.delete(symbol)
+      else next.add(symbol)
+      return next
+    })
+  }, [])
+
+  const handleExpandAll = useCallback(() => {
+    setExpandSet(new Set(alerts.map((a) => a.symbol)))
+  }, [alerts])
+
+  const handleCollapseAll = useCallback(() => {
+    setExpandSet(new Set())
+  }, [])
 
   const handleSaveDraft = useCallback(
     (draft: ApiStockAlert) => {
@@ -132,17 +169,68 @@ export const StockAlertsSection = memo(function StockAlertsSection({
               </Button>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
-              {alerts.map((alert, idx) => (
-                <StockAlertRow
-                  key={`${alert.symbol}-${idx}`}
-                  alert={alert}
-                  index={idx}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              ))}
-            </div>
+            <>
+              {/* Expand-all / Collapse-all controls (hidden on empty state) */}
+              <div className="flex items-center justify-end gap-2 mb-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleExpandAll}
+                  disabled={allExpanded}
+                >
+                  <span>Expand all</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCollapseAll}
+                  disabled={effectivelyExpanded.size === 0}
+                >
+                  <span>Collapse all</span>
+                </Button>
+              </div>
+
+              {/* Column header — aligned to the row tracks */}
+              <div className="alert-row-grid px-3 py-1.5 text-[11px] uppercase tracking-wider text-left font-medium text-[var(--text-muted)]">
+                <span>Symbol</span>
+                <span>Status</span>
+                <span>Watching</span>
+                <span>On/Total</span>
+                <span aria-hidden="true" />
+                <span className="justify-self-end">Actions</span>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                {alerts.map((alert, idx) => {
+                  const expanded = effectivelyExpanded.has(alert.symbol)
+                  const panelId = detailPanelId(alert.symbol)
+                  return (
+                    <div
+                      key={`${alert.symbol}-${idx}`}
+                      className="rounded-md border border-[var(--border-dim)] overflow-hidden bg-[var(--bg-surface)] transition-colors duration-150 hover:border-[var(--border-glow)]"
+                    >
+                      <StockAlertRow
+                        alert={alert}
+                        index={idx}
+                        expanded={expanded}
+                        panelId={panelId}
+                        onToggle={handleToggle}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                      />
+                      {expanded && (
+                        <StockAlertConditionDetail
+                          alert={alert}
+                          index={idx}
+                          panelId={panelId}
+                          onEdit={handleEdit}
+                        />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </>
           )}
         </div>
 

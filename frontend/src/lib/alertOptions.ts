@@ -333,6 +333,52 @@ export function countActiveConditions(alert: ApiStockAlert): { active: number; t
   return { active, total: alert.conditions.length }
 }
 
+/**
+ * Group an alert's conditions into the 5 ordered categories. Pure display
+ * helper for the expanded detail panel — categories with no conditions are
+ * omitted. Conditions whose type maps to no known category are skipped.
+ */
+export function groupConditionsByCategory(
+  alert: ApiStockAlert
+): Array<{ category: ConditionCategory; conditions: ApiAlertCondition[] }> {
+  return CONDITION_CATEGORIES.map((category) => ({
+    category,
+    conditions: alert.conditions.filter((c) => category.types.includes(c.type)),
+  })).filter((group) => group.conditions.length > 0)
+}
+
+/**
+ * Per-category count of ENABLED conditions for the collapsed WATCHING chips.
+ * Categories with zero enabled conditions are omitted, preserving category order.
+ */
+export function countEnabledByCategory(
+  alert: ApiStockAlert
+): Array<{ id: ConditionCategoryId; count: number }> {
+  const counts: Array<{ id: ConditionCategoryId; count: number }> = []
+  for (const category of CONDITION_CATEGORIES) {
+    const count = alert.conditions.reduce(
+      (n, c) => (c.enabled && category.types.includes(c.type) ? n + 1 : n),
+      0
+    )
+    if (count > 0) counts.push({ id: category.id, count })
+  }
+  return counts
+}
+
+/**
+ * Tally alerts by status. `paused` is defined as `!isAlertActive(alert)` — the
+ * single source of truth that the row also uses for its paused badge.
+ */
+export function countAlertStatuses(alerts: ApiStockAlert[]): { active: number; paused: number } {
+  let active = 0
+  let paused = 0
+  for (const alert of alerts) {
+    if (isAlertActive(alert)) active += 1
+    else paused += 1
+  }
+  return { active, paused }
+}
+
 export interface AlertValidationError {
   field: 'symbol' | 'conditions' | `condition.${number}.threshold` | `condition.${number}.reference`
   message: string

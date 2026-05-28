@@ -366,6 +366,20 @@
     height: 18px;
   }
 
+  /* ============================================
+     Stock Alerts — mandatory fixed-column grid.
+     Shared by the column header and every alert row so the eye scans straight
+     down each column (exchange-style table). Expanded detail panels span the
+     full width (grid-column: 1 / -1) and pad to align under WATCHING.
+     Tracks: SYMBOL | STATUS | WATCHING(1fr) | ON/TOTAL | CHEVRON | ACTIONS.
+     ============================================ */
+  .alert-row-grid {
+    display: grid;
+    grid-template-columns: 7rem 6.5rem minmax(0, 1fr) 4.5rem 2rem 5rem;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
   /* Grid utilities */
   .config-grid {
     display: grid;

@@ -22,6 +22,7 @@ import {
   getConditionOption,
   type AlertValidationError,
 } from '@/lib/alertOptions'
+import { SENTIMENT_BAR, SENTIMENT_DOT, SENTIMENT_TEXT } from '@/lib/alertStyles'
 import { cn } from '@/lib/utils'
 
 interface StockAlertEditorModalProps {
@@ -37,26 +38,8 @@ const DEFAULT_DRAFT: ApiStockAlert = {
 }
 
 // ---------------------------------------------------------------------------
-// Sentiment styling maps
+// Sentiment styling maps (shared SENTIMENT_DOT/TEXT/BAR live in lib/alertStyles)
 // ---------------------------------------------------------------------------
-const SENTIMENT_DOT: Record<string, string> = {
-  bull: 'bg-[var(--neon-bull)]',
-  bear: 'bg-[var(--neon-bear)]',
-  neutral: 'bg-[var(--neon-cyan)]',
-}
-
-const SENTIMENT_TEXT: Record<string, string> = {
-  bull: 'text-[var(--neon-bull)]',
-  bear: 'text-[var(--neon-bear)]',
-  neutral: 'text-[var(--neon-cyan)]',
-}
-
-const SENTIMENT_BAR: Record<string, string> = {
-  bull: 'bg-[var(--neon-bull)]',
-  bear: 'bg-[var(--neon-bear)]',
-  neutral: 'bg-[var(--neon-cyan)]',
-}
-
 const SENTIMENT_CHIP_ON: Record<string, string> = {
   bull: 'bg-[var(--neon-bull)] text-[var(--bg-void)] border-[var(--neon-bull)] shadow-[0_0_8px_var(--neon-bull)]',
   bear: 'bg-[var(--neon-bear)] text-[var(--bg-void)] border-[var(--neon-bear)] shadow-[0_0_8px_var(--neon-bear)]',
