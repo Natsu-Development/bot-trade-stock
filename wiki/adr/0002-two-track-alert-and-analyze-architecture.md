@@ -1,8 +1,8 @@
 ---
 title: "ADR 0002: Two-track alert + analyze job architecture"
-tags: ["alert", "analyze", "stock-alert", "rsi-divergence", "trendline", "session-gate", "auto-disable", "arrayfilter", "job-registry", "alert-evaluator", "intact-filter"]
+tags: ["alert", "analyze", "stock-alert", "rsi-divergence", "trendline", "session-gate", "auto-disable", "arrayfilter", "job-registry", "alert-evaluator", "signal-level"]
 created: 2026-05-27T00:00:00.000Z
-updated: 2026-05-28T00:00:00.000Z
+updated: 2026-05-28T16:00:00.000Z
 sources:
   - "bot-trade/application/jobs/alert/stock_alert_job.go"
   - "bot-trade/application/jobs/analyze/base.go"
@@ -14,7 +14,7 @@ sources:
   - "bot-trade/application/service/condition_disabler.go"
   - "bot-trade/application/usecase/stock_metrics.go"
   - "bot-trade/domain/analysis/service/signal_generator.go"
-  - "bot-trade/domain/analysis/service/trendline_filter.go"
+  - "bot-trade/domain/analysis/valueobject/signal.go"
   - "bot-trade/domain/config/aggregate/trading_config.go"
   - "bot-trade/domain/config/service/alert_evaluator.go"
   - "bot-trade/domain/config/valueobject/stock_alert_config.go"
@@ -88,7 +88,7 @@ and a shared scoped-write seam:
    | Analyze jobs (`IsAnalyzeOnly()`) | `bullish_divergence`, `bearish_divergence`, `bullish_divergence_early`, `bearish_divergence_early`, `trendline_breakout_mtf`, `trendline_breakdown_mtf` |
 
    The tick path explicitly skips analyze-only types at
-   `stock_alert_job.go:165` so adding a divergence condition to a user's
+   `stock_alert_job.go:167` so adding a divergence condition to a user's
    alerts cannot fire on the tick path even by accident.
 
 4. **`ConditionDisabler` is the only auto-disable seam.** Both tracks call
@@ -145,7 +145,7 @@ and a shared scoped-write seam:
   owns it, encoded via `IsAnalyzeOnly()`; (b) which fire/no-fire rule lives
   in `AlertEvaluator` or which detector emits the `analysisvo.Signal*Type`.
   Cross-track misclassification is the most likely future bug — covered by
-  the `stock_alert_job.go:165` skip guard and the analyze base's typed
+  the `stock_alert_job.go:167` skip guard and the analyze base's typed
   `disableType` field.
 - **Per-condition write is the contract for auto-disable**, not whole-doc
   update. Any new code path that disables a condition MUST go through
@@ -158,16 +158,15 @@ and a shared scoped-write seam:
   fresh OHLCV. The screener uses `HasBreakoutPotential` /
   `HasBreakoutConfirmed` booleans (independent path through
   `signal_generator.go`).
-- **Lifespan-intact filter precedes the nearest-level pick.** Before
-  `nearestPotential{Resistance,Support}Level` runs, the refresh job calls
-  `analysissvc.FilterIntactTrendlines(lines, recentData)`. A line is dropped
-  if `bar.Close` ever crossed `line.PriceAt(bar.Index)` on its breakage side
-  between `EndPivot.Index+1` and the latest bar — the same predicate
-  `findCrossingPoint{Above,Below}` already use to emit `*_Confirmed`
-  signals. Without this filter a broken-then-pulled-back line would
-  re-qualify as nearest once `latestClose` drifted back inside the band,
-  firing a phantom POTENTIAL alert. The Confirmed-signal emission path is
-  unchanged — broken lines still emit `*_Confirmed` at the breakout bar.
+- **Trendline level is read from the signal, not re-derived.**
+  `computeSignals` sets `metrics.{Resistance,Support}Level` from the nearest
+  `*_Potential` signal's `PriceLine` (`nearestLevelFromSignals` in
+  `stock_metrics.go`). A `*_Potential` signal is emitted only for an intact
+  line whose `latestClose` is inside its approach band; a broken line emits
+  `*_Confirmed` instead — so a broken-then-pulled-back line never surfaces as
+  a level. An intact line outside the band at refresh time also yields no
+  level (0), so the tick evaluator has nothing to fire until a later refresh
+  observes price near the line.
 - **HoSE session gate is a hard skip**. Outside the gate the alert job
   returns `nil` early; no fetch, no evaluator call, no disable. The
   refresh job and analyze jobs continue running on their own schedules
@@ -183,8 +182,9 @@ and a shared scoped-write seam:
 1. Cron fires `StockAlertJob.Execute` on `STOCK_ALERT_SCHEDULE`
    (default `*/15 * * * * 1-5`, weekday gate baked into the cron itself).
 2. `IsHoSEActiveQuoteWindow(j.now(), j.marketTz)` gates: returns `nil`
-   silently outside `09:00–11:30` and `13:00–14:45` ICT (HoSE intraday
-   continuous-matching window).
+   outside the active windows `09:15–11:30` and `13:00–15:00` ICT (the
+   `09:00–09:15` ATO auction and `11:30–13:00` lunch break are excluded; the
+   `14:30–14:45` ATC auction and post-ATC trail to 15:00 are included).
 3. `quoteProvider.FetchAllQuotes(ctx)` returns the full
    symbol→`MarketQuote` map (HOSE + HNX + UPCOM in one call).
 4. `metricsManager.MetricsBySymbol()` returns the shared lock-free metrics
@@ -255,7 +255,8 @@ Adding a new interval is config-only.
   - `bot-trade/domain/config/service/alert_evaluator.go` — pure fire/no-fire
     rule per `AlertType`. No I/O, no time-of-day. Test seam.
   - `bot-trade/domain/shared/valueobject/market/session.go` —
-    `IsHoSEActiveQuoteWindow`; HoSE 09:00–11:30 / 13:00–14:45 ICT.
+    `IsHoSEActiveQuoteWindow`; active `09:15–11:30` / `13:00–15:00` ICT
+    (ATO auction `09:00–09:15` excluded, ATC included).
 - **Analyze track**
   - `bot-trade/application/jobs/analyze/base.go` — generic `AnalysisJob`,
     selector closure pattern, `withinSignalWindow`, per-symbol errgroup,
@@ -281,20 +282,19 @@ Adding a new interval is config-only.
     `JobRegistry`, `RegisterFactory`, `GlobalRegistry`.
 - **Bridge metrics** (refresh-job-produced, tick-evaluator-consumed)
   - `bot-trade/application/usecase/stock_metrics.go` —
-    `computeSignals` runs `FilterIntactTrendlines` against `recentData` to
-    drop lines pierced by `Close` since their `EndPivot`, then calls
-    `nearestPotentialResistanceLevel` / `nearestPotentialSupportLevel` on
-    the surviving set. The single-bar guards inside the nearest-helpers
-    (`level < latestClose` / `level > latestClose`) remain as
-    defense-in-depth.
-  - `bot-trade/domain/analysis/service/trendline_filter.go` —
-    `IsIntact(line, bars)` boolean predicate and `FilterIntactTrendlines`
-    slice wrapper. Delegates to the unexported `findCrossingPoint{Above,
-    Below}` in `signal_generator.go` so the "broken vs intact" predicate
-    has one source of truth across the Confirmed-signal path and the
-    level-extraction path. Detection is Close-based (symmetric); line
-    construction is asymmetric (`priceFor` reads Low for support pivots,
-    High for resistance pivots).
+    `computeSignals` reads `metrics.{Resistance,Support}Level` from the
+    nearest `*_Potential` signal's `PriceLine` via `nearestLevelFromSignals`
+    (smallest `|PriceLine - latestClose|`). A *_Potential signal's PriceLine is
+    guaranteed on the approach side — a crossed line emits *_Confirmed instead —
+    so no side filter is needed. No separate intact-filter or trendline
+    re-projection: the signal generator already classified each line
+    (intact-in-band → `*_Potential`, broken → `*_Confirmed`).
+  - `bot-trade/domain/analysis/service/signal_generator.go` —
+    `GenerateResistanceSignals` / `GenerateSupportSignals` set
+    `Signal.PriceLine = line.PriceAt(currentIndex)` and emit `*_Potential`
+    only when `latestClose` is inside the proximity band — the same band
+    `alert_evaluator.go` later checks. Broken lines emit `*_Confirmed` via
+    the `findCrossingPoint{Above,Below}` Close-based crossing check.
   - `bot-trade/domain/metrics/aggregate/stock_metrics.go` — `ResistanceLevel`,
     `SupportLevel`, `TrendlineProximity`. Response-only, NOT in the screener
     filter whitelist.
@@ -302,7 +302,7 @@ Adding a new interval is config-only.
 ## Important gotchas
 
 - **The tick path silently skips `IsAnalyzeOnly()` types** at
-  `stock_alert_job.go:165`. A divergence condition will never fire on the
+  `stock_alert_job.go:167`. A divergence condition will never fire on the
   tick path even if a future bug makes its evaluator returnable.
 - **`AlertEvaluator` is the only place fire/no-fire lives** for tick types.
   Do not add fire logic inside `stock_alert_job.go` itself — the job is
@@ -319,11 +319,11 @@ Adding a new interval is config-only.
   prev snapshot. Do not move the swap inside the alert loop.
 - **`StockMetrics.{Resistance,Support}Level == 0`** is the "no qualifying
   line" signal — the evaluator suppresses the alert (lines 89 and 103 of
-  `alert_evaluator.go`). After a clean breakout-through-all-known-resistance,
-  ResistanceLevel is intentionally zero until the next refresh discovers
-  new pivots above the new high. Zero is also the result when every
-  candidate line was broken along its post-`EndPivot` lifespan; see the
-  lifespan-intact filter bullet in *Consequences* for the predicate.
+  `alert_evaluator.go`). Zero occurs when no `*_Potential` signal exists for
+  that direction: either every candidate line was broken (those emit
+  `*_Confirmed`), or no intact line sits inside the proximity band at refresh
+  time. The latter means an intact-but-far line is NOT pre-positioned — the
+  alert only arms after a refresh observes price near the line.
 - **Analyze jobs use their own per-interval trendlines**, not the tick
   evaluator's bridge metrics. Do not unify the two — they answer different
   questions (single-timeframe approach band vs multi-timeframe break-confirm).

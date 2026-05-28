@@ -38,13 +38,15 @@ type StockMetrics struct {
 	HasBullishRSI         bool `json:"has_bullish_rsi" bson:"has_bullish_rsi"`
 	HasBearishRSI         bool `json:"has_bearish_rsi" bson:"has_bearish_rsi"`
 
-	// ResistanceLevel: nearest resistance trendline ABOVE latestClose at refresh
-	// time (i.e., not yet broken through). SupportLevel: nearest support BELOW
-	// latestClose. Both are produced exclusively by the refresh job's
-	// nearestPotentialResistanceLevel / nearestPotentialSupportLevel helpers
-	// and consumed exclusively by the tick-time potential-breakout/breakdown
-	// alert evaluator (AlertTypeTrendlineBreakout / Breakdown). Zero means no
-	// qualifying line exists, which the evaluator treats as "no alert."
+	// ResistanceLevel: PriceLine of the nearest BreakoutPotential signal above
+	// latestClose at refresh time. SupportLevel: nearest BreakdownPotential
+	// below latestClose. Both are read directly from the refresh job's
+	// GenerateResistanceSignals / GenerateSupportSignals output (via
+	// nearestLevelFromSignals) and consumed exclusively by the tick-time
+	// potential-breakout/breakdown alert evaluator (AlertTypeTrendlineBreakout
+	// / Breakdown). A *_Potential signal exists only for an intact line inside
+	// its approach band, so a broken or far-from-price line yields 0 here,
+	// which the evaluator treats as "no alert."
 	// Response-only, NOT in the screener FilterField whitelist (the screener
 	// uses the boolean HasBreakout*/HasBreakdown* tags above instead).
 	// Additive bson/json → old documents decode fine.

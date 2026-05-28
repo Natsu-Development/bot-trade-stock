@@ -477,80 +477,41 @@ func (uc *StockMetricsUseCase) computeSignals(
 		}
 	}
 
-	// 8. Extract the trendline level nearest the latest close per direction for
-	// tick-time trendline-POTENTIAL alerts. The resistance/support input lists
-	// from BuildResistanceTrendlines/BuildSupportTrendlines contain every line
-	// derivable from pivot history — including lines latestClose has already
-	// broken through. The alert evaluator's approach-zone band is one-sided
-	// (below resistance, above support), so a broken line picked as "nearest"
-	// would put the band on the wrong side of price and make the alert
-	// silently dead.
-	//
-	// FilterIntactTrendlines pre-filters against recentData using the same
-	// Close-based crossing predicate GenerateSupportSignals /
-	// GenerateResistanceSignals use to emit *_Confirmed. This drops any line
-	// whose Close pierced its projection in the post-EndPivot window — the
-	// "broken then pulled back" case where latestClose is back inside the
-	// band but the line was crossed earlier. The `level < latestClose` /
-	// `level > latestClose` guard inside the nearestPotential* helpers is
-	// kept as defense-in-depth.
-	//
-	// The Confirmed-signal emission path above (GenerateSupportSignals /
-	// GenerateResistanceSignals at step 6) is UNCHANGED — broken lines still
-	// emit *_Confirmed at their breakout bar.
-	resistanceTrendlines = analysissvc.FilterIntactTrendlines(resistanceTrendlines, recentData)
-	supportTrendlines = analysissvc.FilterIntactTrendlines(supportTrendlines, recentData)
-
-	latestIndex := recentData[len(recentData)-1].Index
+	// 8. Read each direction's tick-time POTENTIAL alert level straight from the
+	// signals GenerateResistanceSignals / GenerateSupportSignals produced at
+	// step 6 — see nearestLevelFromSignals for why a *_Potential signal's
+	// PriceLine is exactly the level the evaluator can fire on.
 	latestClose := recentData[len(recentData)-1].Close
-	metrics.ResistanceLevel = nearestPotentialResistanceLevel(resistanceTrendlines, latestIndex, latestClose)
-	metrics.SupportLevel = nearestPotentialSupportLevel(supportTrendlines, latestIndex, latestClose)
+	metrics.ResistanceLevel = nearestLevelFromSignals(breakoutSignals, analysisvo.BreakoutPotential, latestClose)
+	metrics.SupportLevel = nearestLevelFromSignals(breakdownSignals, analysisvo.BreakdownPotential, latestClose)
 	metrics.TrendlineProximity = proximityPct
 }
 
-// nearestPotentialResistanceLevel returns the level (PriceAt(latestIndex)) of
-// the resistance trendline nearest latestClose AMONG THOSE NOT YET BROKEN —
-// lines whose level is at or above latestClose, i.e., would generate a
-// *_Potential signal rather than *_Confirmed. Skips lines with a non-positive
-// PriceAt(latestIndex). Returns 0 when no qualifying line exists, which the
-// alert evaluator interprets as "no above-price resistance to approach" and
-// suppresses the alert.
-func nearestPotentialResistanceLevel(lines []analysisvo.Trendline, latestIndex int, latestClose float64) float64 {
+// nearestLevelFromSignals returns the PriceLine of the `want` *_Potential
+// signal nearest latestClose, or 0 when none exists (the alert evaluator treats
+// 0 as "no level to approach" and suppresses the alert).
+//
+// GenerateResistanceSignals / GenerateSupportSignals emit a *_Potential signal
+// only for a line the latest close has NOT crossed — a crossed line emits
+// *_Confirmed instead. So a BreakoutPotential's PriceLine is always
+// >= latestClose and a BreakdownPotential's is always <= latestClose, and a
+// single |PriceLine - latestClose| nearest-pick serves both directions. The
+// caller just supplies the signal type it wants. PriceLine <= 0 is skipped
+// defensively.
+func nearestLevelFromSignals(signals []analysisvo.Signal, want analysisvo.SignalType, latestClose float64) float64 {
 	best := 0.0
 	bestDist := -1.0
-	for i := range lines {
-		level := lines[i].PriceAt(latestIndex)
-		// Skip non-positive levels AND already-broken-through lines (level
-		// strictly below latestClose). Equality keeps a line exactly at the
-		// close — degenerate but valid; the alert band collapses to a point.
-		if level <= 0 || level < latestClose {
+	for _, s := range signals {
+		if s.Type != want || s.PriceLine <= 0 {
 			continue
 		}
-		dist := level - latestClose
+		dist := s.PriceLine - latestClose
+		if dist < 0 {
+			dist = -dist
+		}
 		if bestDist < 0 || dist < bestDist {
 			bestDist = dist
-			best = level
-		}
-	}
-	return best
-}
-
-// nearestPotentialSupportLevel is the symmetric helper for support — picks the
-// nearest support trendline still below latestClose (would generate a
-// *_Potential signal, not *_Confirmed-broken-down). See the resistance variant
-// for the full rationale; mirrored side filter.
-func nearestPotentialSupportLevel(lines []analysisvo.Trendline, latestIndex int, latestClose float64) float64 {
-	best := 0.0
-	bestDist := -1.0
-	for i := range lines {
-		level := lines[i].PriceAt(latestIndex)
-		if level <= 0 || level > latestClose {
-			continue
-		}
-		dist := latestClose - level
-		if bestDist < 0 || dist < bestDist {
-			bestDist = dist
-			best = level
+			best = s.PriceLine
 		}
 	}
 	return best
