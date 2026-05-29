@@ -1,16 +1,16 @@
 ---
 name: golang-mastery
-description: Use when writing, reviewing, debugging, linting, or hardening Go code. Covers idiomatic Go, error handling, concurrency, interfaces, generics, tests, static analysis, production readiness, and Go toolchain checks for bot-trade.
+description: Use when writing, reviewing, debugging, linting, or hardening Go code. Covers idiomatic Go, error handling, concurrency, interfaces, generics, tests, static analysis, production readiness, and Go toolchain checks for backend.
 ---
 
 # Golang Mastery
 
-Use this skill for Go implementation and review work, especially under `bot-trade/**/*.go`.
+Use this skill for Go implementation and review work, especially under `backend/**/*.go`.
 
 ## Project Constraints
 
-- The backend module is `bot-trade`.
-- `bot-trade/go.mod` declares `go 1.23.0` and `toolchain go1.23.2`.
+- The backend module is `backend`.
+- `backend/go.mod` declares `go 1.23.0` and `toolchain go1.23.2`.
 - Do not use Go features newer than the module/toolchain unless the module version is intentionally changed.
 - Project-specific rules in `.context/rules/backend/*.md` override generic Go guidance.
 - Architecture guidance in `.context/skills/clean-architecture/SKILL.md` applies when changing layer boundaries, ports/adapters, domain objects, use cases, jobs, handlers, repositories, or providers.
@@ -26,7 +26,7 @@ Observed local toolchain:
 | golangci-lint | `v1.64.8` |
 | govulncheck | `v1.3.0` |
 
-The local toolchain includes `gopls` support for `bot-trade`. Prefer available language-server diagnostics for symbol/refactor questions, then verify with Go commands.
+The local toolchain includes `gopls` support for `backend`. Prefer available language-server diagnostics for symbol/refactor questions, then verify with Go commands.
 
 ## Workflow
 
@@ -77,9 +77,9 @@ Run heavier checks such as `govulncheck` and race tests when the change affects 
 
 ## Delegation contract
 
-When delegating Go work in `bot-trade/**/*.go` to sub-agents (`executor`, `architect`, `critic`, `debugger`, `test-engineer`), prepend this preamble to the Task prompt:
+When delegating Go work in `backend/**/*.go` to sub-agents (`executor`, `architect`, `critic`, `debugger`, `test-engineer`), prepend this preamble to the Task prompt:
 
-> Before writing or reviewing Go in `bot-trade/`:
+> Before writing or reviewing Go in `backend/`:
 > 1. `context.Context` first-arg, never stored in structs; no package-level mutable state.
 > 2. Wrap errors with `fmt.Errorf("...: %w", err)` only when callers inspect; handle once (no log + return).
 > 3. Prefer `errgroup` for bounded parallelism; channel buffers 0 or 1 unless justified.

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	configagg "bot-trade/domain/config/aggregate"
-	configvo "bot-trade/domain/config/valueobject"
-	filtervo "bot-trade/domain/shared/valueobject/filter"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	configagg "backend/domain/config/aggregate"
+	configvo "backend/domain/config/valueobject"
+	filtervo "backend/domain/shared/valueobject/filter"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // TradingConfigRequest is the DTO for creating/updating trading configuration.

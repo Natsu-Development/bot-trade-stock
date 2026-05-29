@@ -2,7 +2,7 @@
 package valueobject
 
 import (
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // DivergenceType represents the type of divergence.

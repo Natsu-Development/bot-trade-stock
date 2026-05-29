@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"bot-trade/application/port/outbound"
-	configvo "bot-trade/domain/config/valueobject"
+	"backend/application/port/outbound"
+	configvo "backend/domain/config/valueobject"
 )
 
 const (

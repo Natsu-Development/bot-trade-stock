@@ -2,8 +2,8 @@
 package aggregate
 
 import (
-	periodvo "bot-trade/domain/metrics/valueobject"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	periodvo "backend/domain/metrics/valueobject"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // StockMetrics represents comprehensive metrics for a single stock.

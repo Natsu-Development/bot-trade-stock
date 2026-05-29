@@ -7,9 +7,9 @@ import (
 	"context"
 	"time"
 
-	configagg "bot-trade/domain/config/aggregate"
-	configvo "bot-trade/domain/config/valueobject"
-	metricsagg "bot-trade/domain/metrics/aggregate"
+	configagg "backend/domain/config/aggregate"
+	configvo "backend/domain/config/valueobject"
+	metricsagg "backend/domain/metrics/aggregate"
 )
 
 // ConfigRepository defines the interface for TradingConfig persistence.

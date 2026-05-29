@@ -4,10 +4,10 @@ import (
 	"errors"
 	"net/http"
 
-	"bot-trade/application/port/inbound"
-	"bot-trade/domain/config"
-	marketvo "bot-trade/domain/shared/valueobject/market"
-	"bot-trade/presentation/http/response"
+	"backend/application/port/inbound"
+	"backend/domain/config"
+	marketvo "backend/domain/shared/valueobject/market"
+	"backend/presentation/http/response"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"

@@ -4,7 +4,7 @@ package service
 import (
 	"math"
 
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // CalculateRSI computes RSI for price history using Wilder's smoothing method.

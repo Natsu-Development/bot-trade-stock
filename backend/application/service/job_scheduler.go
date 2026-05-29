@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"bot-trade/application/port/inbound"
-	"bot-trade/application/port/outbound"
+	"backend/application/port/inbound"
+	"backend/application/port/outbound"
 
 	"go.uber.org/zap"
 )

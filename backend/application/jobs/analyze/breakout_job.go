@@ -4,15 +4,15 @@ import (
 	"context"
 	"fmt"
 
-	"bot-trade/application/jobs/registry"
-	"bot-trade/application/port/inbound"
-	"bot-trade/application/port/outbound"
-	appPrep "bot-trade/application/usecase/analyze/prep"
-	appTrendline "bot-trade/application/usecase/analyze/trendline"
-	analysisvo "bot-trade/domain/analysis/valueobject"
-	configagg "bot-trade/domain/config/aggregate"
-	configvo "bot-trade/domain/config/valueobject"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	"backend/application/jobs/registry"
+	"backend/application/port/inbound"
+	"backend/application/port/outbound"
+	appPrep "backend/application/usecase/analyze/prep"
+	appTrendline "backend/application/usecase/analyze/trendline"
+	analysisvo "backend/domain/analysis/valueobject"
+	configagg "backend/domain/config/aggregate"
+	configvo "backend/domain/config/valueobject"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 func init() {

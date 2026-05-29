@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"bot-trade/domain/shared"
-	"bot-trade/domain/shared/valueobject/market"
+	"backend/domain/shared"
+	"backend/domain/shared/valueobject/market"
 )
 
 var (

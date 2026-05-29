@@ -2,8 +2,8 @@
 package service
 
 import (
-	metricsagg "bot-trade/domain/metrics/aggregate"
-	filtervo "bot-trade/domain/shared/valueobject/filter"
+	metricsagg "backend/domain/metrics/aggregate"
+	filtervo "backend/domain/shared/valueobject/filter"
 )
 
 // Matches checks if a stock matches the filter criteria.

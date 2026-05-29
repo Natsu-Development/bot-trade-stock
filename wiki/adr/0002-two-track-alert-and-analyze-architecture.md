@@ -4,24 +4,24 @@ tags: ["alert", "analyze", "stock-alert", "rsi-divergence", "trendline", "sessio
 created: 2026-05-27T00:00:00.000Z
 updated: 2026-05-28T17:30:00.000Z
 sources:
-  - "bot-trade/application/jobs/alert/stock_alert_job.go"
-  - "bot-trade/application/jobs/analyze/base.go"
-  - "bot-trade/application/jobs/analyze/bullish_rsi_job.go"
-  - "bot-trade/application/jobs/analyze/bearish_rsi_job.go"
-  - "bot-trade/application/jobs/analyze/breakout_job.go"
-  - "bot-trade/application/jobs/analyze/breakdown_job.go"
-  - "bot-trade/application/jobs/registry/factory.go"
-  - "bot-trade/config/config.go"
-  - "bot-trade/application/service/condition_disabler.go"
-  - "bot-trade/application/usecase/stock_metrics.go"
-  - "bot-trade/domain/analysis/service/signal_generator.go"
-  - "bot-trade/domain/analysis/valueobject/signal.go"
-  - "bot-trade/domain/config/aggregate/trading_config.go"
-  - "bot-trade/domain/config/service/alert_evaluator.go"
-  - "bot-trade/domain/config/valueobject/stock_alert_config.go"
-  - "bot-trade/domain/metrics/aggregate/stock_metrics.go"
-  - "bot-trade/domain/shared/valueobject/market/session.go"
-  - "bot-trade/infrastructure/mongodb/config_repository.go"
+  - "backend/application/jobs/alert/stock_alert_job.go"
+  - "backend/application/jobs/analyze/base.go"
+  - "backend/application/jobs/analyze/bullish_rsi_job.go"
+  - "backend/application/jobs/analyze/bearish_rsi_job.go"
+  - "backend/application/jobs/analyze/breakout_job.go"
+  - "backend/application/jobs/analyze/breakdown_job.go"
+  - "backend/application/jobs/registry/factory.go"
+  - "backend/config/config.go"
+  - "backend/application/service/condition_disabler.go"
+  - "backend/application/usecase/stock_metrics.go"
+  - "backend/domain/analysis/service/signal_generator.go"
+  - "backend/domain/analysis/valueobject/signal.go"
+  - "backend/domain/config/aggregate/trading_config.go"
+  - "backend/domain/config/service/alert_evaluator.go"
+  - "backend/domain/config/valueobject/stock_alert_config.go"
+  - "backend/domain/metrics/aggregate/stock_metrics.go"
+  - "backend/domain/shared/valueobject/market/session.go"
+  - "backend/infrastructure/mongodb/config_repository.go"
 links:
   - "jobs-and-scheduling.md"
   - "backend-architecture.md"
@@ -66,13 +66,13 @@ alerts on that stale window produces ghost signals and wastes provider quota.
 Split alert evaluation into two independent tracks with a shared config model
 and a shared scoped-write seam:
 
-1. **Tick alert job** (`bot-trade/application/jobs/alert/stock_alert_job.go`)
+1. **Tick alert job** (`backend/application/jobs/alert/stock_alert_job.go`)
    runs on a fast cron (default 15s) gated by `IsHoSEActiveQuoteWindow`. It
    fetches all `ssi-quote` quotes once, loads every `TradingConfig` once, and
    for each enabled non-`IsAnalyzeOnly()` condition calls the `AlertEvaluator`
    domain service. Fired conditions get auto-disabled via `ConditionDisabler`.
 
-2. **Analyze jobs** (`bot-trade/application/jobs/analyze/*.go`) — bullish_rsi,
+2. **Analyze jobs** (`backend/application/jobs/analyze/*.go`) — bullish_rsi,
    bearish_rsi, breakout, breakdown — run on a slower per-interval cron,
    pull fresh OHLCV via the `MarketGateway`/`Preparer`, and detect divergence /
    multi-timeframe trendline signals. Each job derives its symbol set
@@ -80,7 +80,7 @@ and a shared scoped-write seam:
    get auto-disabled via the same `ConditionDisabler`.
 
 3. **Single `AlertCondition` taxonomy with `IsAnalyzeOnly()` classifier**
-   (`bot-trade/domain/config/valueobject/stock_alert_config.go`). The fourteen
+   (`backend/domain/config/valueobject/stock_alert_config.go`). The fourteen
    condition types partition cleanly:
 
    | Track | Types |
@@ -110,7 +110,7 @@ and a shared scoped-write seam:
 6. **Job factory registry.** Every job file calls
    `registry.RegisterFactory(<name>, <factory>)` in `init()`. Wire iterates
    `GlobalRegistry().AllFactories()` and feeds each factory the same
-   `JobDependencies` struct (`bot-trade/application/jobs/registry/factory.go`).
+   `JobDependencies` struct (`backend/application/jobs/registry/factory.go`).
    Adding a job is a single file with an `init()` — no central wiring edit.
 
 ## Rejected alternatives
@@ -204,7 +204,7 @@ and a shared scoped-write seam:
 
 ### Track 2: analyze jobs
 1. Each analyze cron fires `AnalysisJob.Execute(ctx)` (see
-   `bot-trade/application/jobs/analyze/base.go`).
+   `backend/application/jobs/analyze/base.go`).
 2. Selector closure `selectSymbols(cfg)` calls
    `cfg.SymbolsWithEnabledCondition(<type>)` for the job's bound type
    (e.g., `AlertTypeBullishDivergence`). Symbols with the condition
@@ -283,38 +283,38 @@ env-only.
 ## Key files
 
 - **Tick path**
-  - `bot-trade/application/jobs/alert/stock_alert_job.go` — Execute, session
+  - `backend/application/jobs/alert/stock_alert_job.go` — Execute, session
     gate, prev-quote swap, per-condition fire+notify+disable loop.
-  - `bot-trade/domain/config/service/alert_evaluator.go` — pure fire/no-fire
+  - `backend/domain/config/service/alert_evaluator.go` — pure fire/no-fire
     rule per `AlertType`. No I/O, no time-of-day. Test seam.
-  - `bot-trade/domain/shared/valueobject/market/session.go` —
+  - `backend/domain/shared/valueobject/market/session.go` —
     `IsHoSEActiveQuoteWindow`; active `09:15–11:30` / `13:00–15:00` ICT
     (ATO auction `09:00–09:15` excluded, ATC included).
 - **Analyze track**
-  - `bot-trade/application/jobs/analyze/base.go` — generic `AnalysisJob`,
+  - `backend/application/jobs/analyze/base.go` — generic `AnalysisJob`,
     selector closure pattern, `withinSignalWindow`, per-symbol errgroup,
     `firstSignalOfType`.
-  - `bot-trade/application/jobs/analyze/{bullish,bearish}_rsi_job.go` — RSI
+  - `backend/application/jobs/analyze/{bullish,bearish}_rsi_job.go` — RSI
     divergence factories; one job per interval per confirmed/early variant.
-  - `bot-trade/application/jobs/analyze/{breakout,breakdown}_job.go` —
+  - `backend/application/jobs/analyze/{breakout,breakdown}_job.go` —
     multi-timeframe trendline factories.
-  - `bot-trade/application/usecase/analyze/{rsi,trendline}/*.go` — pure
+  - `backend/application/usecase/analyze/{rsi,trendline}/*.go` — pure
     detection logic invoked by the analyze strategies.
 - **Shared**
-  - `bot-trade/application/service/condition_disabler.go` — single seam for
+  - `backend/application/service/condition_disabler.go` — single seam for
     auto-disable; identity `(configID, symbol, type, reference)`.
-  - `bot-trade/domain/config/valueobject/stock_alert_config.go` — `AlertType`,
+  - `backend/domain/config/valueobject/stock_alert_config.go` — `AlertType`,
     `IsDivergence`, `IsTrendlineMTF`, `IsAnalyzeOnly`, `RequiresThreshold`,
     `RequiresReference`. The taxonomy and its classifiers.
-  - `bot-trade/domain/config/aggregate/trading_config.go` —
+  - `backend/domain/config/aggregate/trading_config.go` —
     `SymbolsWithEnabledCondition(t)` powers analyze-job symbol selection;
     `Merge` enforces partial-PUT contract.
-  - `bot-trade/infrastructure/mongodb/config_repository.go` —
+  - `backend/infrastructure/mongodb/config_repository.go` —
     `SetConditionEnabled` (scoped arrayFilter `$set`); `GetByID`, `GetAll`.
-  - `bot-trade/application/jobs/registry/factory.go` — `JobDependencies`,
+  - `backend/application/jobs/registry/factory.go` — `JobDependencies`,
     `JobRegistry`, `RegisterFactory`, `GlobalRegistry`.
 - **Bridge metrics** (refresh-job-produced, tick-evaluator-consumed)
-  - `bot-trade/application/usecase/stock_metrics.go` —
+  - `backend/application/usecase/stock_metrics.go` —
     `computeSignals` reads `metrics.{Resistance,Support}Level` from the
     nearest `*_Potential` signal's `PriceLine` via `nearestLevelFromSignals`
     (smallest `|PriceLine - latestClose|`). A *_Potential signal's PriceLine is
@@ -322,13 +322,13 @@ env-only.
     so no side filter is needed. No separate intact-filter or trendline
     re-projection: the signal generator already classified each line
     (intact-in-band → `*_Potential`, broken → `*_Confirmed`).
-  - `bot-trade/domain/analysis/service/signal_generator.go` —
+  - `backend/domain/analysis/service/signal_generator.go` —
     `GenerateResistanceSignals` / `GenerateSupportSignals` set
     `Signal.PriceLine = line.PriceAt(currentIndex)` and emit `*_Potential`
     only when `latestClose` is inside the proximity band — the same band
     `alert_evaluator.go` later checks. Broken lines emit `*_Confirmed` via
     the `findCrossingPoint{Above,Below}` Close-based crossing check.
-  - `bot-trade/domain/metrics/aggregate/stock_metrics.go` — `ResistanceLevel`,
+  - `backend/domain/metrics/aggregate/stock_metrics.go` — `ResistanceLevel`,
     `SupportLevel`, `TrendlineProximity`. Response-only, NOT in the screener
     filter whitelist.
 
@@ -369,7 +369,7 @@ env-only.
 
 ```bash
 # Compile + unit tests for the alert/analyze layer
-cd bot-trade
+cd backend
 go test ./application/jobs/alert/... ./application/jobs/analyze/... \
         ./domain/config/service/... ./domain/config/aggregate/... \
         ./application/service/...
@@ -384,7 +384,7 @@ mongosh --eval 'db.bot_config.findOne({_id:"system"}).alerts'
 mongosh --eval 'db.bot_config.findOne({_id:"system"}).alerts[0].conditions'
 
 # Trigger the HoSE session gate (dev only)
-STOCK_ALERT_IGNORE_SESSION_GATE=true ./bot-trade
+STOCK_ALERT_IGNORE_SESSION_GATE=true ./backend
 ```
 
 ## 7. Price-scale contract

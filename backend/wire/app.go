@@ -5,21 +5,21 @@ import (
 	"fmt"
 	"time"
 
-	_ "bot-trade/application/jobs"
-	jobsRegistry "bot-trade/application/jobs/registry"
-	"bot-trade/application/port/outbound"
-	appService "bot-trade/application/service"
-	"bot-trade/application/usecase"
-	appAnalyze "bot-trade/application/usecase/analyze"
-	appPrep "bot-trade/application/usecase/analyze/prep"
-	appRsi "bot-trade/application/usecase/analyze/rsi"
-	appTrendline "bot-trade/application/usecase/analyze/trendline"
-	"bot-trade/config"
-	alertservice "bot-trade/domain/config/service"
-	infraCron "bot-trade/infrastructure/cron"
-	"bot-trade/infrastructure/mongodb"
-	"bot-trade/infrastructure/provider/sources"
-	"bot-trade/infrastructure/telegram"
+	_ "backend/application/jobs"
+	jobsRegistry "backend/application/jobs/registry"
+	"backend/application/port/outbound"
+	appService "backend/application/service"
+	"backend/application/usecase"
+	appAnalyze "backend/application/usecase/analyze"
+	appPrep "backend/application/usecase/analyze/prep"
+	appRsi "backend/application/usecase/analyze/rsi"
+	appTrendline "backend/application/usecase/analyze/trendline"
+	"backend/config"
+	alertservice "backend/domain/config/service"
+	infraCron "backend/infrastructure/cron"
+	"backend/infrastructure/mongodb"
+	"backend/infrastructure/provider/sources"
+	"backend/infrastructure/telegram"
 
 	"go.uber.org/zap"
 )
@@ -101,7 +101,7 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 	// Build job dependencies. MarketTimezone re-uses the cron-scheduler's
 	// loaded *time.Location so the binary has a single source of truth for
 	// "what is Vietnam time?" — consumed by StockAlertJob's HoSE session gate
-	// (see bot-trade/domain/shared/valueobject/market/session.go).
+	// (see backend/domain/shared/valueobject/market/session.go).
 	jobDeps := jobsRegistry.JobDependencies{
 		Preparer:            dataPreparer,
 		BullishRSIUC:        bullishRSIUC,

@@ -25,7 +25,7 @@ Go HTTP API.
 
 ## System at a glance
 
-- **Backend** (`bot-trade/`): Go 1.23, Gin HTTP, MongoDB, robfig/cron, zap logging,
+- **Backend** (`backend/`): Go 1.23, Gin HTTP, MongoDB, robfig/cron, zap logging,
   Prometheus metrics. Strict Clean Architecture + DDD + Hexagonal ports/adapters.
 - **Frontend** (`frontend/`): React 18 + TypeScript + Vite, lightweight-charts, Tailwind.
   Single `ApiClient` singleton (`frontend/src/lib/api.ts:315`).
@@ -36,14 +36,14 @@ Go HTTP API.
 
 | Layer | Path | Depends on external? | Role |
 |-------|------|----------------------|------|
-| Domain | `bot-trade/domain/` | No | Pure business logic: divergence, trendlines, metrics, config, alerts |
-| Application | `bot-trade/application/` | No (interfaces only) | Use cases, jobs, ports, DTOs |
-| Infrastructure | `bot-trade/infrastructure/` | Yes | Mongo, HTTP providers, Telegram, cron, credentials |
-| Presentation | `bot-trade/presentation/http/` | Yes | Gin handlers, router, middleware |
-| Wiring | `bot-trade/wire/` | Yes | Manual DI (3 layers) |
-| Entrypoint | `bot-trade/cmd/server/main.go` | Yes | Boot, schedulers, graceful shutdown |
+| Domain | `backend/domain/` | No | Pure business logic: divergence, trendlines, metrics, config, alerts |
+| Application | `backend/application/` | No (interfaces only) | Use cases, jobs, ports, DTOs |
+| Infrastructure | `backend/infrastructure/` | Yes | Mongo, HTTP providers, Telegram, cron, credentials |
+| Presentation | `backend/presentation/http/` | Yes | Gin handlers, router, middleware |
+| Wiring | `backend/wire/` | Yes | Manual DI (3 layers) |
+| Entrypoint | `backend/cmd/server/main.go` | Yes | Boot, schedulers, graceful shutdown |
 
-Interface compliance is asserted at compile time, e.g. `var _ outbound.MarketGateway = (*ProviderPool)(nil)` (`bot-trade/infrastructure/provider/pool.go:26`).
+Interface compliance is asserted at compile time, e.g. `var _ outbound.MarketGateway = (*ProviderPool)(nil)` (`backend/infrastructure/provider/pool.go:26`).
 
 ## Bounded contexts (domain/)
 
@@ -67,7 +67,7 @@ Interface compliance is asserted at compile time, e.g. `var _ outbound.MarketGat
 | Provider | 21 | 84% | Market data adapters |
 | Alert | 7 | 100% | Stock-alert job — fully self-contained |
 
-## HTTP API surface (`bot-trade/presentation/http/router.go`)
+## HTTP API surface (`backend/presentation/http/router.go`)
 
 | Method | Path | Handler | Purpose |
 |--------|------|---------|---------|
@@ -161,7 +161,7 @@ Real-time alert flow (every ~15s): `StockAlertJob.Execute` → `FetchAllQuotes` 
   alert tick (~15s). Verify: inspect repository code in `infrastructure/mongodb/*_repository.go`
   and Mongo `getIndexes()`. Impact: alert-tick latency under many configs.
 - **Unknown:** Test coverage. No `_test.go` files surfaced in the file listing; `e2e/` exists
-  at repo root. Verify: `find bot-trade -name '*_test.go'` and inspect `e2e/`.
+  at repo root. Verify: `find backend -name '*_test.go'` and inspect `e2e/`.
 - **Unknown:** Alert auto-disable persistence race. `processConfig` sets `cond.Enabled=false`
   then `configRepo.Update`; concurrent config edits via the API could be clobbered (last-writer-wins). Verify: read `infrastructure/mongodb/config_repository.go` Update semantics.
 

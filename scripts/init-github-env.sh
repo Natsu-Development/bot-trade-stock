@@ -10,16 +10,16 @@ echo "======================================"
 echo ""
 
 # Check if we're in the right directory (scripts folder)
-if [ ! -f "../bot-trade/env.example" ]; then
-    echo "❌ Error: bot-trade/env.example not found"
+if [ ! -f "../backend/env.example" ]; then
+    echo "❌ Error: backend/env.example not found"
     echo "💡 Please run this script from the scripts directory"
     echo "   Current directory: $(pwd)"
-    echo "   Looking for: ../bot-trade/env.example"
+    echo "   Looking for: ../backend/env.example"
     exit 1
 fi
 
 echo "This script will automatically create GitHub environment variables"
-echo "based on your bot-trade/env.example file."
+echo "based on your backend/env.example file."
 echo ""
 
 # Get GitHub repository information
@@ -36,7 +36,7 @@ fi
 REPO_OWNER="$1"
 REPO_NAME="$2" 
 GIT_TOKEN="$3"
-ENV_EXAMPLE_FILE="${4:-../bot-trade/env.example}"
+ENV_EXAMPLE_FILE="${4:-../backend/env.example}"
 ENVIRONMENT="${5:-production}"
 
 # If not provided via command line, prompt user
@@ -78,7 +78,7 @@ fi
 if [ -z "$REPO_OWNER" ] || [ -z "$REPO_NAME" ] || [ -z "$GIT_TOKEN" ]; then
     echo "❌ Error: All fields are required"
     echo "❌ Usage: $0 [REPO_OWNER] [REPO_NAME] [GIT_TOKEN] [ENV_EXAMPLE_FILE] [ENVIRONMENT]"
-    echo "   Example: $0 myuser trading-app ghp_xxxxx ../bot-trade/env.example production"
+    echo "   Example: $0 myuser trading-app ghp_xxxxx ../backend/env.example production"
     echo ""
     echo "💡 Get your GitHub token from: https://github.com/settings/tokens"
     echo "   Required permissions: repo (full repository access)"

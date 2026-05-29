@@ -8,9 +8,9 @@ import (
 	"syscall"
 	"time"
 
-	"bot-trade/config"
-	"bot-trade/pkg/server"
-	"bot-trade/wire"
+	"backend/config"
+	"backend/pkg/server"
+	"backend/wire"
 
 	"go.uber.org/zap"
 )

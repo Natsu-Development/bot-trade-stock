@@ -2,7 +2,7 @@
 name: backend-naming
 description: Go naming conventions and import organization
 paths:
-  - "bot-trade/**/*.go"
+  - "backend/**/*.go"
 ---
 
 # Go Naming Conventions
@@ -49,9 +49,9 @@ import (
     "go.uber.org/zap"
 
     // internal
-    "bot-trade/config"
-    "bot-trade/domain/metrics/aggregate"
-    "bot-trade/application/port/outbound"
+    "backend/config"
+    "backend/domain/metrics/aggregate"
+    "backend/application/port/outbound"
 )
 ```
 

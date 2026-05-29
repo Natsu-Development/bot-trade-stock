@@ -4,8 +4,8 @@ package service
 import (
 	"sort"
 
-	analysisvo "bot-trade/domain/analysis/valueobject"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	analysisvo "backend/domain/analysis/valueobject"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // FindBullishDivergences detects bullish divergence patterns (Price LL, RSI HL).

@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/http"
 
-	"bot-trade/application/dto"
-	"bot-trade/application/port/inbound"
-	"bot-trade/domain/config"
-	shared "bot-trade/domain/shared"
-	"bot-trade/presentation/http/response"
+	"backend/application/dto"
+	"backend/application/port/inbound"
+	"backend/domain/config"
+	shared "backend/domain/shared"
+	"backend/presentation/http/response"
 
 	"github.com/gin-gonic/gin"
 )

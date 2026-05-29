@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/http"
 
-	"bot-trade/application/dto"
-	"bot-trade/application/port/inbound"
-	filtervo "bot-trade/domain/shared/valueobject/filter"
-	marketvo "bot-trade/domain/shared/valueobject/market"
-	"bot-trade/presentation/http/response"
+	"backend/application/dto"
+	"backend/application/port/inbound"
+	filtervo "backend/domain/shared/valueobject/filter"
+	marketvo "backend/domain/shared/valueobject/market"
+	"backend/presentation/http/response"
 
 	"github.com/gin-gonic/gin"
 )

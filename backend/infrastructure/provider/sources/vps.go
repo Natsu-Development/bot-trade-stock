@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"bot-trade/application/port/outbound"
-	marketvo "bot-trade/domain/shared/valueobject/market"
-	"bot-trade/infrastructure/provider/contract"
-	"bot-trade/infrastructure/provider/registry"
+	"backend/application/port/outbound"
+	marketvo "backend/domain/shared/valueobject/market"
+	"backend/infrastructure/provider/contract"
+	"backend/infrastructure/provider/registry"
 )
 
 const (

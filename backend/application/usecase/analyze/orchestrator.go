@@ -4,14 +4,14 @@ import (
 	"context"
 	"time"
 
-	"bot-trade/application/dto"
-	"bot-trade/application/port/inbound"
-	"bot-trade/application/port/outbound"
-	appPrep "bot-trade/application/usecase/analyze/prep"
-	appRsi "bot-trade/application/usecase/analyze/rsi"
-	appTrendline "bot-trade/application/usecase/analyze/trendline"
-	configagg "bot-trade/domain/config/aggregate"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	"backend/application/dto"
+	"backend/application/port/inbound"
+	"backend/application/port/outbound"
+	appPrep "backend/application/usecase/analyze/prep"
+	appRsi "backend/application/usecase/analyze/rsi"
+	appTrendline "backend/application/usecase/analyze/trendline"
+	configagg "backend/domain/config/aggregate"
+	marketvo "backend/domain/shared/valueobject/market"
 
 	"go.uber.org/zap"
 )

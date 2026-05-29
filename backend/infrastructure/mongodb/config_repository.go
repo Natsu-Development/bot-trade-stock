@@ -5,10 +5,10 @@ import (
 	"errors"
 	"time"
 
-	"bot-trade/application/port/outbound"
-	"bot-trade/domain/config"
-	configagg "bot-trade/domain/config/aggregate"
-	configvo "bot-trade/domain/config/valueobject"
+	"backend/application/port/outbound"
+	"backend/domain/config"
+	configagg "backend/domain/config/aggregate"
+	configvo "backend/domain/config/valueobject"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"

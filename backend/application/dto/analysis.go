@@ -5,8 +5,8 @@ package dto
 import (
 	"time"
 
-	analysisvo "bot-trade/domain/analysis/valueobject"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	analysisvo "backend/domain/analysis/valueobject"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // AnalysisResult is the unified application DTO for analysis responses.

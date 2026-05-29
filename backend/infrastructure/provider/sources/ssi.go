@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	marketvo "bot-trade/domain/shared/valueobject/market"
-	"bot-trade/infrastructure/provider/contract"
-	"bot-trade/infrastructure/provider/registry"
+	marketvo "backend/domain/shared/valueobject/market"
+	"backend/infrastructure/provider/contract"
+	"backend/infrastructure/provider/registry"
 
 	"go.uber.org/zap"
 )

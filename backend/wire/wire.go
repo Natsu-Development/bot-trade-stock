@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"bot-trade/config"
+	"backend/config"
 
 	"go.uber.org/zap"
 )

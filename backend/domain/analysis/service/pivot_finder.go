@@ -2,8 +2,8 @@
 package service
 
 import (
-	analysisvo "bot-trade/domain/analysis/valueobject"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	analysisvo "backend/domain/analysis/valueobject"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // FindHighPivots finds high pivot points in market data.

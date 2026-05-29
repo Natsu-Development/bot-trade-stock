@@ -2,7 +2,7 @@ name: Build and Deploy Trading App
 
 on:
   push:
-    branches: [master]
+    branches: [master, 'release/*']
   workflow_dispatch:
     inputs:
       environment:
@@ -52,8 +52,8 @@ jobs:
       - name: Build and push bot image
         uses: docker/build-push-action@v5
         with:
-          context: bot-trade
-          file: bot-trade/Dockerfile
+          context: backend
+          file: backend/Dockerfile
           push: true
           tags: |
             ${{ steps.config.outputs.DOCKER_NAMESPACE }}/trading-bot:${{ github.sha }}
@@ -134,7 +134,7 @@ jobs:
             "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "git_sha": "${{ github.sha }}",
             "git_ref": "${{ github.ref }}",
-            "environment": "${{ github.ref_name == 'master' && 'production' || 'staging' }}",
+            "environment": "${{ (github.ref_name == 'master' || startsWith(github.ref_name, 'release/')) && 'production' || 'staging' }}",
             "images": {
               "bot": "${{ needs.build-images.outputs.bot-image }}",
               "frontend": "${{ needs.build-images.outputs.frontend-image }}"
@@ -158,7 +158,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [build-images, build-config]
-    environment: ${{ github.ref_name == 'master' && 'production' || 'staging' }}
+    environment: ${{ (github.ref_name == 'master' || startsWith(github.ref_name, 'release/')) && 'production' || 'staging' }}
 
     steps:
       - name: Download deployment package
@@ -259,7 +259,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [deploy]
     environment: production
-    if: github.ref == 'refs/heads/master' && needs.deploy.result == 'success'
+    if: (github.ref == 'refs/heads/master' || startsWith(github.ref_name, 'release/')) && needs.deploy.result == 'success'
 
     steps:
       - name: Setup SSH for cleanup

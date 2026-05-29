@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	marketvo "bot-trade/domain/shared/valueobject/market"
-	"bot-trade/infrastructure/provider/contract"
+	marketvo "backend/domain/shared/valueobject/market"
+	"backend/infrastructure/provider/contract"
 )
 
 // HandleHTTPError checks for common HTTP errors and returns appropriate errors.

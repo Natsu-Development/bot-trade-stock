@@ -9,10 +9,10 @@ frontend/node_modules/
 trading-ui-preview.html
 node_modules/
 
-# Go Build Artifacts (only at root level of bot-trade)
-bot-trade/main
-bot-trade/server
-bot-trade/bin/
+# Go Build Artifacts (only at root level of backend)
+backend/main
+backend/server
+backend/bin/
 *.test
 *.out
 tmp/

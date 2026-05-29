@@ -131,18 +131,18 @@ Task: <TASK_DESCRIPTION>
 **Composed from:**
 - `.context/policies/code-intelligence.md` Delegation contract
 - `.context/skills/golang-mastery/SKILL.md` Delegation contract
-- `.context/rules/backend/*.md` (path-specific, for any touched bot-trade file)
+- `.context/rules/backend/*.md` (path-specific, for any touched backend file)
 - `.context/skills/clean-architecture/SKILL.md` (if layer boundaries touched)
 - `.context/skills/trading-domain/SKILL.md` (if trading logic touched)
 
 <!-- BEGIN PROMPT -->
-Before editing any Go symbol in `bot-trade/**/*.go`:
+Before editing any Go symbol in `backend/**/*.go`:
 1. Run `mcp__gitnexus__impact({target: "<symbolName>", direction: "upstream"})`.
    Report direct callers, affected flows, risk level (LOW/MEDIUM/HIGH/CRITICAL).
 2. Refuse to proceed on HIGH/CRITICAL risk without explicit confirmation.
 3. Use `mcp__plugin_oh-my-claudecode_t__lsp_document_symbols` or `lsp_workspace_symbols` to confirm symbol shape before editing.
 
-Before writing Go code in `bot-trade/`:
+Before writing Go code in `backend/`:
 4. `context.Context` first-arg, never stored in structs.
 5. Wrap errors with `fmt.Errorf("...: %w", err)` only when callers inspect; handle each error once (no log + return).
 6. Prefer `errgroup` for bounded parallelism; channel buffers 0 or 1 unless justified.
@@ -220,7 +220,7 @@ Task: <TASK_DESCRIPTION>
 - TDD discipline already in agent prompt (RED-GREEN-REFACTOR)
 
 <!-- BEGIN PROMPT -->
-You are writing or hardening Go tests for `bot-trade/`. Follow strict TDD if the parent story is greenfield; otherwise add tests that mirror existing patterns.
+You are writing or hardening Go tests for `backend/`. Follow strict TDD if the parent story is greenfield; otherwise add tests that mirror existing patterns.
 
 Constraints:
 1. Match existing test patterns in the package — same framework (`testing` stdlib), table-driven structure, naming convention.

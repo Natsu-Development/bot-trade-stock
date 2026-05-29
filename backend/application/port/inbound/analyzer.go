@@ -6,9 +6,9 @@ package inbound
 import (
 	"context"
 
-	"bot-trade/application/dto"
-	"bot-trade/domain/config/aggregate"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	"backend/application/dto"
+	"backend/domain/config/aggregate"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // Analyzer defines the interface for unified analysis use cases.

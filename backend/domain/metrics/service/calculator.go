@@ -5,10 +5,10 @@ import (
 	"math"
 	"sort"
 
-	metricsagg "bot-trade/domain/metrics/aggregate"
-	periodvo "bot-trade/domain/metrics/valueobject"
-	indicatorsvc "bot-trade/domain/shared/service"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	metricsagg "backend/domain/metrics/aggregate"
+	periodvo "backend/domain/metrics/valueobject"
+	indicatorsvc "backend/domain/shared/service"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // Calculator calculates stock metrics including RS ratings.

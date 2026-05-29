@@ -41,7 +41,7 @@ If any GitNexus tool warns the index is stale, run `npx gitnexus@1.6.5 analyze -
 
 ## gopls — Go Semantic Correctness
 
-For `bot-trade/**/*.go`, gopls is the source of truth for "is this Go valid, where are the exact references, what does this package expose?". The Go workspace is the `bot-trade` module at `bot-trade/go.mod`.
+For `backend/**/*.go`, gopls is the source of truth for "is this Go valid, where are the exact references, what does this package expose?". The Go workspace is the `backend` module at `backend/go.mod`.
 
 ### Always
 
@@ -99,7 +99,7 @@ Consequence: when work is delegated to OMC sub-agents (`executor`, `code-reviewe
 When delegating Go edits to OMC sub-agents, the task prompt **must** include this preamble:
 
 ```
-Before editing any Go symbol in bot-trade/**/*.go:
+Before editing any Go symbol in backend/**/*.go:
 1. Run `mcp__gitnexus__impact({target: "<symbolName>", direction: "upstream"})`.
 2. Report direct callers, affected flows, and risk level.
 3. Refuse to proceed on HIGH/CRITICAL risk without explicit confirmation.

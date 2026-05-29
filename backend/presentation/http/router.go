@@ -3,8 +3,8 @@ package http
 import (
 	"time"
 
-	"bot-trade/presentation/http/handler"
-	"bot-trade/presentation/http/middleware"
+	"backend/presentation/http/handler"
+	"backend/presentation/http/middleware"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"

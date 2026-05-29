@@ -3,7 +3,7 @@ package outbound
 import (
 	"context"
 
-	configvo "bot-trade/domain/config/valueobject"
+	configvo "backend/domain/config/valueobject"
 )
 
 // Message represents a notification message to send.

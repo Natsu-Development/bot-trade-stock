@@ -13,7 +13,7 @@ This directory is the shared implementation context for this repository. It is p
 
 | Path touched | Read first |
 | --- | --- |
-| `bot-trade/**/*.go` | `rules/backend/architecture.md`, `rules/backend/style.md`, `rules/backend/naming.md`, `rules/backend/error-handling.md`, `rules/backend/concurrency.md`, `rules/backend/patterns.md` |
+| `backend/**/*.go` | `rules/backend/architecture.md`, `rules/backend/style.md`, `rules/backend/naming.md`, `rules/backend/error-handling.md`, `rules/backend/concurrency.md`, `rules/backend/patterns.md` |
 | `frontend/**/*.{ts,tsx}` | `rules/frontend.md` |
 | `**/*_test.go`, `frontend/tests/**/*.spec.ts` | `rules/testing.md` |
 
@@ -22,7 +22,7 @@ This directory is the shared implementation context for this repository. It is p
 | Work area | Read first |
 | --- | --- |
 | Go implementation, review, linting, concurrency, error handling, testing, or static analysis | `skills/golang-mastery/SKILL.md` |
-| Go backend architecture, Clean Architecture, DDD, ports/adapters, `bot-trade` layering | `skills/clean-architecture/SKILL.md` |
+| Go backend architecture, Clean Architecture, DDD, ports/adapters, `backend` layering | `skills/clean-architecture/SKILL.md` |
 | React + TypeScript frontend components, hooks, API client, UI conventions | `skills/frontend-patterns/SKILL.md` |
 | Trading logic, RSI divergence, trendlines, RS Rating, alerts, stock metrics | `skills/trading-domain/SKILL.md` |
 

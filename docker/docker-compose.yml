@@ -37,7 +37,7 @@ services:
   # Go Trading Bot Service (Direct VietCap API)
   bot-trade:
     build:
-      context: ../bot-trade
+      context: ../backend
       dockerfile: Dockerfile
     container_name: trading-bot
     expose:

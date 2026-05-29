@@ -3,7 +3,7 @@ package outbound
 import (
 	"context"
 
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // MarketGateway defines the core interface for fetching market data.

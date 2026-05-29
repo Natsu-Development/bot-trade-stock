@@ -3,7 +3,7 @@ package inbound
 import (
 	"context"
 
-	configagg "bot-trade/domain/config/aggregate"
+	configagg "backend/domain/config/aggregate"
 )
 
 // ConfigManager defines the primary port for configuration operations.

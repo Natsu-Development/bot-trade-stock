@@ -10,7 +10,7 @@ import { api, getConfigId, type ApiTradingConfig, type ApiStockAlert, type ApiAl
 import { isValidFilterOperator } from '@/lib/screenerFilterOptions'
 import { getConditionOption, MA_REFERENCE_OPTIONS } from '@/lib/alertOptions'
 
-// Mirror of bot-trade/domain/config/valueobject/stock_alert_config.go Validate():
+// Mirror of backend/domain/config/valueobject/stock_alert_config.go Validate():
 // the backend rejects enabled conditions whose type RequiresThreshold but has
 // threshold <= 0, or RequiresReference but lacks a valid MA pick. Disabled
 // conditions are accepted as paused placeholders regardless of payload, so we

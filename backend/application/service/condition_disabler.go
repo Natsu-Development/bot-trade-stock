@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"bot-trade/application/port/outbound"
-	configvo "bot-trade/domain/config/valueobject"
+	"backend/application/port/outbound"
+	configvo "backend/domain/config/valueobject"
 )
 
 // ConditionDisabler is the single seam for auto-disabling a fired alert condition.

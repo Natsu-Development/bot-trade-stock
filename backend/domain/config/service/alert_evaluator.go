@@ -4,9 +4,9 @@ package service
 import (
 	"fmt"
 
-	configvo "bot-trade/domain/config/valueobject"
-	metricsagg "bot-trade/domain/metrics/aggregate"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	configvo "backend/domain/config/valueobject"
+	metricsagg "backend/domain/metrics/aggregate"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // EvaluationResult carries the formatted output of a fired alert condition.

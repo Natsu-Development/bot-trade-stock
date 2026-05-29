@@ -1,10 +1,10 @@
 package rsi
 
 import (
-	"bot-trade/application/dto"
-	appPrep "bot-trade/application/usecase/analyze/prep"
-	analysisservice "bot-trade/domain/analysis/service"
-	analysisvo "bot-trade/domain/analysis/valueobject"
+	"backend/application/dto"
+	appPrep "backend/application/usecase/analyze/prep"
+	analysisservice "backend/domain/analysis/service"
+	analysisvo "backend/domain/analysis/valueobject"
 )
 
 // BearishRSIUseCase detects bearish RSI divergences.

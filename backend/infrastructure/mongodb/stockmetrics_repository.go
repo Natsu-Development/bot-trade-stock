@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"bot-trade/application/port/outbound"
-	metricsagg "bot-trade/domain/metrics/aggregate"
+	"backend/application/port/outbound"
+	metricsagg "backend/domain/metrics/aggregate"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"

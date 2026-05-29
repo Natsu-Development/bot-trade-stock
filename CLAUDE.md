@@ -58,13 +58,13 @@ When this top-extract disagrees with the `<!-- gitnexus:start --> ... <!-- gitne
 
 | Path you're touching | Read first |
 |---|---|
-| `bot-trade/**/*.go` | `.context/rules/backend/{architecture,style,naming,error-handling,concurrency,patterns}.md` |
+| `backend/**/*.go` | `.context/rules/backend/{architecture,style,naming,error-handling,concurrency,patterns}.md` |
 | `frontend/**/*.{ts,tsx}` | `.context/rules/frontend.md` |
 | `**/*_test.go`, `frontend/tests/**/*.spec.ts` | `.context/rules/testing.md` |
 
 | Work area | Read first |
 |---|---|
-| Go architecture / DDD / Clean Architecture / `bot-trade` layering | `.context/skills/clean-architecture/SKILL.md` |
+| Go architecture / DDD / Clean Architecture / `backend` layering | `.context/skills/clean-architecture/SKILL.md` |
 | Go idiom / linting / concurrency / error handling / testing | `.context/skills/golang-mastery/SKILL.md` |
 | React + TypeScript frontend | `.context/skills/frontend-patterns/SKILL.md` |
 | Trading logic (RSI divergence, trendlines, RS Rating, alerts) | `.context/skills/trading-domain/SKILL.md` |
@@ -83,7 +83,7 @@ Operational runbooks live under `.context/runbooks/` (`analyze.md`, `deploy.md`,
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **bot-trade-stock** (3497 symbols, 8696 relationships, 248 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **bot-trade-stock** (3538 symbols, 8610 relationships, 244 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

@@ -5,12 +5,12 @@ import (
 	"errors"
 	"time"
 
-	"bot-trade/application/port/inbound"
-	"bot-trade/application/port/outbound"
-	"bot-trade/domain/config"
-	configagg "bot-trade/domain/config/aggregate"
-	configvo "bot-trade/domain/config/valueobject"
-	"bot-trade/domain/shared"
+	"backend/application/port/inbound"
+	"backend/application/port/outbound"
+	"backend/domain/config"
+	configagg "backend/domain/config/aggregate"
+	configvo "backend/domain/config/valueobject"
+	"backend/domain/shared"
 
 	"github.com/google/uuid"
 )

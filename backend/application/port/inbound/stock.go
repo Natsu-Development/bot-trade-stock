@@ -5,9 +5,9 @@ import (
 	"errors"
 	"time"
 
-	"bot-trade/application/dto"
-	metricsagg "bot-trade/domain/metrics/aggregate"
-	filtervo "bot-trade/domain/shared/valueobject/filter"
+	"backend/application/dto"
+	metricsagg "backend/domain/metrics/aggregate"
+	filtervo "backend/domain/shared/valueobject/filter"
 )
 
 // ErrCacheNotReady is returned when the stock metrics cache has not been populated yet.

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"sync/atomic"
 
-	marketvo "bot-trade/domain/shared/valueobject/market"
-	"bot-trade/infrastructure/metrics"
-	"bot-trade/infrastructure/provider/contract"
+	marketvo "backend/domain/shared/valueobject/market"
+	"backend/infrastructure/metrics"
+	"backend/infrastructure/provider/contract"
 )
 
 // WrappedProvider wraps a Provider with rate limiting, health tracking, and metrics.

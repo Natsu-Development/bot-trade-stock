@@ -6,7 +6,7 @@ package filter
 import (
 	"errors"
 
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 var (

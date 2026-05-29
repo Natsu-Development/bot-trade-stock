@@ -1,11 +1,11 @@
 ---
 name: clean-architecture
-description: Use when designing or modifying Go backend architecture, Clean Architecture boundaries, DDD aggregates/value objects/domain services, ports/adapters, dependency direction, and bot-trade layering.
+description: Use when designing or modifying Go backend architecture, Clean Architecture boundaries, DDD aggregates/value objects/domain services, ports/adapters, dependency direction, and backend layering.
 ---
 
 # Clean Architecture + DDD for Go
 
-Guidelines for implementing Clean Architecture with Domain-Driven Design patterns in the bot-trade service.
+Guidelines for implementing Clean Architecture with Domain-Driven Design patterns in the backend service.
 
 ## Architecture Layers
 
@@ -35,7 +35,7 @@ Guidelines for implementing Clean Architecture with Domain-Driven Design pattern
 ## Directory Structure
 
 ```
-bot-trade/
+backend/
 ├── domain/
 │   ├── aggregate/          # Domain aggregates (Analysis, Config, Market)
 │   │   ├── analysis/       # DivergenceType, AnalysisResult

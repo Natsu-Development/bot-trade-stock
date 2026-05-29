@@ -4,9 +4,9 @@ package aggregate
 import (
 	"time"
 
-	"bot-trade/domain/config/valueobject"
-	"bot-trade/domain/shared"
-	"bot-trade/domain/shared/valueobject/market"
+	"backend/domain/config/valueobject"
+	"backend/domain/shared"
+	"backend/domain/shared/valueobject/market"
 )
 
 const (

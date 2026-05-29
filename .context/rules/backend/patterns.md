@@ -1,6 +1,6 @@
 ---
 paths:
-  - "bot-trade/**/*.go"
+  - "backend/**/*.go"
 ---
 
 # Go Domain Patterns

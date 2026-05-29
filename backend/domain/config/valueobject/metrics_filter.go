@@ -4,8 +4,8 @@ package valueobject
 import (
 	"time"
 
-	filtervo "bot-trade/domain/shared/valueobject/filter"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	filtervo "backend/domain/shared/valueobject/filter"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // MetricsFilter holds saved screener filter presets for metrics.

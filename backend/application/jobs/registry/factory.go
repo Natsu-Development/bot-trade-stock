@@ -3,14 +3,14 @@ package registry
 import (
 	"time"
 
-	"bot-trade/application/port/inbound"
-	"bot-trade/application/port/outbound"
-	appService "bot-trade/application/service"
-	appPrep "bot-trade/application/usecase/analyze/prep"
-	appRsi "bot-trade/application/usecase/analyze/rsi"
-	appTrendline "bot-trade/application/usecase/analyze/trendline"
-	"bot-trade/config"
-	alertservice "bot-trade/domain/config/service"
+	"backend/application/port/inbound"
+	"backend/application/port/outbound"
+	appService "backend/application/service"
+	appPrep "backend/application/usecase/analyze/prep"
+	appRsi "backend/application/usecase/analyze/rsi"
+	appTrendline "backend/application/usecase/analyze/trendline"
+	"backend/config"
+	alertservice "backend/domain/config/service"
 )
 
 // Global registry instance

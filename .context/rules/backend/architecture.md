@@ -1,11 +1,11 @@
 ---
 paths:
-  - "bot-trade/**/*.go"
+  - "backend/**/*.go"
 ---
 
-# Go Architecture Rules (bot-trade)
+# Go Architecture Rules (backend)
 
-> Path-specific quick lookup for any `bot-trade/**/*.go` change.
+> Path-specific quick lookup for any `backend/**/*.go` change.
 > **Canonical patterns**, narrative, and code examples live in [`../../skills/clean-architecture/SKILL.md`](../../skills/clean-architecture/SKILL.md). Read that for: dependency direction prose, aggregate examples, port/repository code, use-case orchestration, thin handler patterns.
 
 ## Dependency direction
@@ -35,7 +35,7 @@ paths:
 
 | File | Purpose |
 |------|---------|
-| `cmd/bot-trade/main.go` | Entrypoint |
+| `cmd/server/main.go` | Entrypoint |
 | `wire/wire.go` | Dependency injection (Wire) |
 | `config/` | Env-based configuration |
 | `application/port/inbound/` | Handler interfaces |

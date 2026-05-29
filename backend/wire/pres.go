@@ -3,8 +3,8 @@ package wire
 import (
 	"net/http"
 
-	presHTTP "bot-trade/presentation/http"
-	presHandler "bot-trade/presentation/http/handler"
+	presHTTP "backend/presentation/http"
+	presHandler "backend/presentation/http/handler"
 
 	"go.uber.org/zap"
 )

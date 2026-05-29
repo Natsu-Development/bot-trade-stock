@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"bot-trade/application/port/inbound"
-	"bot-trade/application/port/outbound"
-	configagg "bot-trade/domain/config/aggregate"
-	sharedservice "bot-trade/domain/shared/service"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	"backend/application/port/inbound"
+	"backend/application/port/outbound"
+	configagg "backend/domain/config/aggregate"
+	sharedservice "backend/domain/shared/service"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // DataPrepare contains all data needed for analysis.

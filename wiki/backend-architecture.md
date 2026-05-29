@@ -9,7 +9,7 @@ confidence: high
 schemaVersion: 1
 ---
 
-# Backend architecture — bot-trade
+# Backend architecture — backend
 
 ## Layering and dependency rule
 

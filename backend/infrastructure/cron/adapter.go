@@ -6,7 +6,7 @@ package cron
 import (
 	"time"
 
-	"bot-trade/application/port/outbound"
+	"backend/application/port/outbound"
 
 	"github.com/robfig/cron/v3"
 )

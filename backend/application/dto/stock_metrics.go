@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	metricsagg "bot-trade/domain/metrics/aggregate"
-	filtervo "bot-trade/domain/shared/valueobject/filter"
+	metricsagg "backend/domain/metrics/aggregate"
+	filtervo "backend/domain/shared/valueobject/filter"
 )
 
 // FilterValue accepts both boolean and numeric JSON values.
