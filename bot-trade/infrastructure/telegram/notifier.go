@@ -130,6 +130,18 @@ func iconForLabel(label string) string {
 		return "🚀"
 	case configvo.LabelMatchedVolumeBurst:
 		return "⚡"
+	case configvo.LabelTrendlineBreakout:
+		return "📈"
+	case configvo.LabelTrendlineBreakdown:
+		return "📉"
+	case configvo.LabelPriceCrossAbove:
+		return "🔼"
+	case configvo.LabelPriceCrossBelow:
+		return "🔽"
+	case configvo.LabelBullishDivergence:
+		return "🟢"
+	case configvo.LabelBearishDivergence:
+		return "🔴"
 	default:
 		return "•"
 	}

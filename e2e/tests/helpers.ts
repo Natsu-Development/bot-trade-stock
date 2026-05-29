@@ -28,8 +28,8 @@ export async function resetTestConfig() {
       divergence: { range_min: 30, range_max: 70 },
       trendline: { max_lines: 5, proximity_percent: 3 },
       indices_recent: 5,
-      bearish_symbols: ['VCB'],
-      bullish_symbols: ['VIC'],
+      signal_days_threshold: 30,
+      alerts: [],
       telegram: { enabled: false },
     }),
   })

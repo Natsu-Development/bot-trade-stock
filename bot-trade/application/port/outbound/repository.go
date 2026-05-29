@@ -8,6 +8,7 @@ import (
 	"time"
 
 	configagg "bot-trade/domain/config/aggregate"
+	configvo "bot-trade/domain/config/valueobject"
 	metricsagg "bot-trade/domain/metrics/aggregate"
 )
 
@@ -18,6 +19,10 @@ type ConfigRepository interface {
 	GetAll(ctx context.Context) ([]*configagg.TradingConfig, error)
 	Update(ctx context.Context, cfg *configagg.TradingConfig) error
 	Delete(ctx context.Context, id string) error
+	// SetConditionEnabled scopes a single-condition enabled toggle to the matching
+	// (symbol, type, reference) via an arrayFilter, avoiding whole-doc clobber when
+	// multiple jobs disable different conditions in the same config concurrently.
+	SetConditionEnabled(ctx context.Context, configID, symbol string, cond configvo.AlertCondition, enabled bool) error
 }
 
 // StockMetricsRepository defines the interface for stock metrics persistence.

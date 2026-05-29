@@ -39,12 +39,10 @@ x``
 *.bak
 
 # AI Context Files
-.cursor/
-.kiro/
-.claude/
 .omc/
+.omx/
 .gitnexus/
-CLAUDE.md
+.codex/
 
 # Playwright test files
 e2e/node_modules/

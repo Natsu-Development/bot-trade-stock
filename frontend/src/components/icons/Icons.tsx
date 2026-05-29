@@ -237,4 +237,10 @@ export const Icons = {
       <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
     </svg>
   ),
+
+  ChevronRight: (props: SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M9 18l6-6-6-6"/>
+    </svg>
+  ),
 }

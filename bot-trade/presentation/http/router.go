@@ -44,10 +44,6 @@ func NewRouter(
 	router.PUT("/config/:id", configHandler.UpdateConfig)
 	router.DELETE("/config/:id", configHandler.DeleteConfig)
 
-	// Watchlist management endpoints
-	router.POST("/config/:id/watchlist", configHandler.AddSymbolsToWatchlist)
-	router.DELETE("/config/:id/watchlist", configHandler.RemoveSymbolsFromWatchlist)
-
 	// Unified analysis endpoint - returns all analysis types in one call
 	router.GET("/analyze/:symbol", analyzeHandler.Analyze)
 

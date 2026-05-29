@@ -14,9 +14,9 @@ import (
 // Contains all analysis outputs from domain services.
 // JSON tags are included for direct API marshaling.
 type AnalysisResult struct {
-	Symbol           string        `json:"symbol"`
-	ProcessingTimeMs int64         `json:"processing_time_ms"`
-	Timestamp        time.Time     `json:"timestamp"`
+	Symbol           string    `json:"symbol"`
+	ProcessingTimeMs int64     `json:"processing_time_ms"`
+	Timestamp        time.Time `json:"timestamp"`
 
 	// Combined divergences (both bullish and bearish) with type field
 	Divergences []DivergenceDTO `json:"divergences"`
@@ -34,8 +34,8 @@ type AnalysisResult struct {
 // DivergenceDTO represents a detected divergence pattern for JSON marshaling.
 // Combines both bullish and bearish divergences with a type field.
 type DivergenceDTO struct {
-	Type    string      `json:"type"`
-	IsEarly bool        `json:"is_early"`
+	Type    string       `json:"type"`
+	IsEarly bool         `json:"is_early"`
 	Points  []PivotPoint `json:"divergence_points"`
 }
 
@@ -47,13 +47,13 @@ type PivotPoint struct {
 
 // TrendlineDTO represents a detected trendline with computed data points.
 type TrendlineDTO struct {
-	Type       string     `json:"type"`
+	Type       string      `json:"type"`
 	DataPoints []DataPoint `json:"data_points"`
-	StartPrice float64    `json:"start_price"`
-	EndPrice   float64    `json:"end_price"`
-	StartDate  string     `json:"start_date"`
-	EndDate    string     `json:"end_date"`
-	Slope      float64    `json:"slope"`
+	StartPrice float64     `json:"start_price"`
+	EndPrice   float64     `json:"end_price"`
+	StartDate  string      `json:"start_date"`
+	EndDate    string      `json:"end_date"`
+	Slope      float64     `json:"slope"`
 }
 
 // DataPoint represents a single point on a trendline.
@@ -64,9 +64,9 @@ type DataPoint struct {
 
 // SignalDTO represents a trading signal for JSON marshaling.
 type SignalDTO struct {
-	Type   string  `json:"type"`
-	Price  float64 `json:"price"`
-	Time   string  `json:"time"`
+	Type      string  `json:"type"`
+	Price     float64 `json:"price"`
+	Time      string  `json:"time"`
 	PriceLine float64 `json:"price_line"`
 }
 
@@ -103,7 +103,7 @@ func ToTrendlineDTOs(priceHistory []marketvo.MarketData, tls []analysisvo.Trendl
 	result := make([]TrendlineDTO, len(tls))
 	for i, tl := range tls {
 		domainPoints := tl.DataPoints(priceHistory)
-		dataPoints := make([]DataPoint, len(domainPoints))		
+		dataPoints := make([]DataPoint, len(domainPoints))
 		for i, p := range domainPoints {
 			dataPoints[i] = DataPoint{
 				Date:  p.Date,
@@ -128,9 +128,9 @@ func ToSignalDTOs(signals []analysisvo.Signal) []SignalDTO {
 	result := make([]SignalDTO, len(signals))
 	for i, s := range signals {
 		result[i] = SignalDTO{
-			Type:   string(s.Type),
-			Price:  s.Price,
-			Time:   s.Time,
+			Type:      string(s.Type),
+			Price:     s.Price,
+			Time:      s.Time,
 			PriceLine: s.PriceLine,
 		}
 	}

@@ -16,6 +16,12 @@ func getStringEnv(key string, errors *[]string) string {
 	return value
 }
 
+// getOptionalStringEnv reads an env var without recording a "required" error when
+// it is unset. Use for values that are mandatory only in some environments.
+func getOptionalStringEnv(key string) string {
+	return os.Getenv(key)
+}
+
 func getNumberEnv(key string, errors *[]string) int {
 	value := os.Getenv(key)
 	if value == "" {

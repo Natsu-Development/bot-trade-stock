@@ -8,8 +8,11 @@ import (
 	"bot-trade/application/dto"
 	"bot-trade/application/port/inbound"
 	"bot-trade/application/port/outbound"
+	appService "bot-trade/application/service"
 	appPrep "bot-trade/application/usecase/analyze/prep"
+	analysisvo "bot-trade/domain/analysis/valueobject"
 	configagg "bot-trade/domain/config/aggregate"
+	configvo "bot-trade/domain/config/valueobject"
 	marketvo "bot-trade/domain/shared/valueobject/market"
 
 	"go.uber.org/zap"
@@ -19,9 +22,42 @@ import (
 // SymbolSelector selects which symbols to analyze from a config.
 type SymbolSelector func(cfg *configagg.TradingConfig) []marketvo.Symbol
 
-// AnalyzeFunc performs analysis on prepared data and returns a message if there's a signal.
-// Returns empty Message{} if no signal, or error on failure.
-type AnalyzeFunc func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, error)
+// firstSignalOfType returns the first signal of the given type and whether one
+// was found. Typed on analysisvo.SignalType so callers cannot pass a stray
+// string literal for a signal that the detectors never emit.
+func firstSignalOfType(signals []dto.SignalDTO, t analysisvo.SignalType) (dto.SignalDTO, bool) {
+	for _, s := range signals {
+		if s.Type == string(t) {
+			return s, true
+		}
+	}
+	return dto.SignalDTO{}, false
+}
+
+// withinSignalWindow reports whether a signal dated dateStr (layout "2006-01-02")
+// falls within the last `days` days. days <= 0 disables the filter (always true).
+// This applies the config SignalDaysThreshold recency window in the analyze jobs,
+// so an alert fires only for a recently-formed trendline/divergence signal — not
+// one from anywhere in the analyzed lookback range.
+func withinSignalWindow(dateStr string, days int) bool {
+	// Defensive: unset/non-positive config values mean "no filter".
+	if days <= 0 {
+		return true
+	}
+	if dateStr == "" {
+		return false
+	}
+	d, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return false
+	}
+	return !d.Before(time.Now().AddDate(0, 0, -days))
+}
+
+// AnalyzeFunc performs analysis on prepared data and reports a message plus whether
+// a signal fired. Returns (msg, true) on a signal, (zero, false) on no signal, or
+// error on failure. The fired flag drives the auto-disable in analyzeSymbol.
+type AnalyzeFunc func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, bool, error)
 
 // AnalysisJob is a generic job that analyzes symbols using a strategy function.
 type AnalysisJob struct {
@@ -33,8 +69,13 @@ type AnalysisJob struct {
 	preparer      *appPrep.Preparer
 	configRepo    outbound.ConfigRepository
 	notifier      outbound.Notifier
+	disabler      *appService.ConditionDisabler
 	selectSymbols SymbolSelector
 	analyze       AnalyzeFunc
+	// disableType is the condition type this job auto-disables on a fired signal.
+	// Set per factory (bullish_divergence / bearish_divergence); identity is
+	// (symbol, type) since divergence conditions carry no reference.
+	disableType configvo.AlertType
 }
 
 func (j *AnalysisJob) Metadata() inbound.JobMetadata {
@@ -69,11 +110,27 @@ func (j *AnalysisJob) processConfig(ctx context.Context, cfg *configagg.TradingC
 			return nil
 		})
 	}
-	g.Wait()
+	// Goroutines never return an error (analyzeSymbol logs and swallows its own
+	// failures), so Wait cannot fail; discard explicitly to satisfy errcheck.
+	_ = g.Wait()
 }
 
 func (j *AnalysisJob) analyzeSymbol(ctx context.Context, symbol string, cfg *configagg.TradingConfig) {
-	query, err := marketvo.NewMarketDataQueryFromStrings(symbol, "", j.interval, cfg.LookbackDay)
+	// Scale LookbackDay by interval cadence so weekly/monthly jobs fetch enough
+	// bars for the RSI/pivot/divergence pipeline. See ADR in
+	// .omc/plans/analyze-interval-autoscale.md.
+	interval, err := marketvo.NewInterval(j.interval)
+	if err != nil {
+		zap.L().Error("Invalid job interval",
+			zap.String("symbol", symbol),
+			zap.String("interval", j.interval),
+			zap.Error(err),
+		)
+		return
+	}
+	effectiveLookback := marketvo.EffectiveLookbackDays(interval, cfg.LookbackDay)
+
+	query, err := marketvo.NewMarketDataQueryFromStrings(symbol, "", j.interval, effectiveLookback)
 	if err != nil {
 		zap.L().Error("Failed to create query", zap.String("symbol", symbol), zap.Error(err))
 		return
@@ -85,41 +142,30 @@ func (j *AnalysisJob) analyzeSymbol(ctx context.Context, symbol string, cfg *con
 		return
 	}
 
-	msg, err := j.analyze(ctx, data, j.interval)
+	msg, fired, err := j.analyze(ctx, data, j.interval)
 	if err != nil {
 		zap.L().Error("Analysis failed", zap.String("symbol", symbol), zap.Error(err))
 		return
 	}
 
-	if msg.Title == "" {
+	if !fired {
 		return
 	}
 
 	if err := j.notifier.Send(ctx, cfg.Telegram, msg); err != nil {
 		zap.L().Error("Failed to send notification", zap.String("symbol", symbol), zap.Error(err))
+		return
 	}
-}
 
-// FilterSignals filters signals by allowed types.
-func FilterSignals(signals []dto.SignalDTO, allowedTypes []string) []dto.SignalDTO {
-	var filtered []dto.SignalDTO
-	for _, s := range signals {
-		for _, t := range allowedTypes {
-			if s.Type == t {
-				filtered = append(filtered, s)
-				break
-			}
-		}
+	// Auto-disable the fired divergence condition via the scoped per-condition write
+	// so concurrent tick-job disables on the same config are never clobbered.
+	cond := configvo.AlertCondition{Type: j.disableType}
+	if err := j.disabler.Disable(ctx, string(cfg.ID), symbol, cond); err != nil {
+		zap.L().Error("Failed to persist divergence auto-disable",
+			zap.String("symbol", symbol),
+			zap.String("config_id", string(cfg.ID)),
+			zap.String("type", string(j.disableType)),
+			zap.Error(err),
+		)
 	}
-	return filtered
-}
-
-// SelectBearishSymbols returns bearish watchlist symbols.
-func SelectBearishSymbols(cfg *configagg.TradingConfig) []marketvo.Symbol {
-	return cfg.BearishSymbols
-}
-
-// SelectBullishSymbols returns bullish watchlist symbols.
-func SelectBullishSymbols(cfg *configagg.TradingConfig) []marketvo.Symbol {
-	return cfg.BullishSymbols
 }

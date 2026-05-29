@@ -8,11 +8,10 @@ import (
 )
 
 var (
-	ErrInvalidConfigID       = errors.New("config ID must be between 2 and 50 alphanumeric characters, hyphens, or underscores")
-	ErrInvalidRSIPeriod      = errors.New("RSI period must be between 2 and 100")
-	ErrInvalidPivotPeriod    = errors.New("pivot period must be between 2 and 100")
-	ErrInvalidIndicesRecent  = errors.New("indices recent must be a positive integer (1+)")
-	ErrInvalidWatchlistType  = errors.New("watchlist type must be 'bullish' or 'bearish'")
+	ErrInvalidConfigID      = errors.New("config ID must be between 2 and 50 alphanumeric characters, hyphens, or underscores")
+	ErrInvalidRSIPeriod     = errors.New("RSI period must be between 2 and 100")
+	ErrInvalidPivotPeriod   = errors.New("pivot period must be between 2 and 100")
+	ErrInvalidIndicesRecent = errors.New("indices recent must be a positive integer (1+)")
 )
 
 // ConfigID is a unique identifier for trading configurations.
@@ -71,22 +70,4 @@ func NewIndicesRecent(value int) (IndicesRecent, error) {
 		return 0, ErrInvalidIndicesRecent
 	}
 	return IndicesRecent(value), nil
-}
-
-// WatchlistType represents which watchlist a symbol belongs to.
-type WatchlistType string
-
-const (
-	WatchlistBullish WatchlistType = "bullish"
-	WatchlistBearish WatchlistType = "bearish"
-)
-
-// NewWatchlistType creates a validated WatchlistType.
-func NewWatchlistType(value string) (WatchlistType, error) {
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	wt := WatchlistType(normalized)
-	if wt == WatchlistBullish || wt == WatchlistBearish {
-		return wt, nil
-	}
-	return "", ErrInvalidWatchlistType
 }

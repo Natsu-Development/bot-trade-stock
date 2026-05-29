@@ -1,0 +1,16 @@
+{
+  "name": "go-lsp-local",
+  "owner": {
+    "name": "zion"
+  },
+  "plugins": [
+    {
+      "name": "go-lsp",
+      "source": {
+        "source": "github",
+        "repo": "zircote/go-lsp"
+      },
+      "description": "Go development plugin: gopls LSP integration + 14 hooks (golangci-lint, gofmt, testing, govulncheck)."
+    }
+  ]
+}

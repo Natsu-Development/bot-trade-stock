@@ -5,6 +5,11 @@ Documentation=file:///opt/bot-trade/scripts/ssi-bypass/README.md
 [Timer]
 OnCalendar=Mon..Fri *-*-* 08:50:00 Asia/Ho_Chi_Minh
 OnCalendar=Mon..Fri *-*-* 12:50:00 Asia/Ho_Chi_Minh
+# Spread the fire-time across a 60s window to avoid Cloudflare fingerprinting
+# a perfectly periodic FlareSolverr challenge cadence. FixedRandomDelay keeps
+# the offset stable per host so journals are easier to read across reboots.
+RandomizedDelaySec=60
+FixedRandomDelay=true
 Persistent=true
 Unit=bot-trade-cookie-refresh.service
 

@@ -1,0 +1,51 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make:*)",
+      "Bash(go:*)",
+      "Bash(gofmt:*)",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(git:*)",
+      "Bash(curl:*)",
+      "Bash(yarn:*)",
+      "Bash(npm:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(mkdir:*)",
+      "Bash(rm:*)",
+      "Bash(mv:*)",
+      "Bash(cp:*)",
+      "Bash(air:*)"
+    ],
+    "deny": []
+  },
+  "enabledPlugins": {
+    "aio-golang-mastery@aiocean-plugins": true,
+    "oh-my-claudecode@omc": true,
+    "go-lsp@go-lsp-local": true
+  },
+  "extraKnownMarketplaces": {
+    "go-lsp-local": {
+      "source": {
+        "source": "directory",
+        "path": "/home/zion/Documents/Dev/true-profit/.claude/marketplaces/go-lsp"
+      }
+    }
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/go-check.sh",
+            "timeout": 60,
+            "statusMessage": "Running Go checks (gofmt/vet/lint or mod verify/vuln)…"
+          }
+        ]
+      }
+    ]
+  }
+}

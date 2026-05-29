@@ -33,9 +33,6 @@ type AppServices struct {
 
 	// Scheduler
 	Scheduler *appService.JobScheduler
-
-	// SSI quote provider — exposed for the health handler's LastForbiddenAt view.
-	SSIProvider *sources.SSIQueryProvider
 }
 
 // NewAppServices initializes all application layer dependencies.
@@ -65,9 +62,13 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 	// Stateless domain service that owns alert fire/no-fire + value formatting.
 	alertEvaluator := alertservice.NewAlertEvaluator()
 
+	// Shared scoped-write seam used by both the tick alert job and the analyze jobs
+	// to auto-disable fired conditions without whole-doc clobber.
+	conditionDisabler := appService.NewConditionDisabler(configRepo)
+
 	// Use Cases
 	configUC := usecase.NewConfigUseCase(configRepo)
-	stockMetricsUC := usecase.NewStockMetricsUseCase(gateway, stockMetricsRepo, configRepo, cfg.SignalDaysThreshold, cfg.StockRefresh.Concurrency)
+	stockMetricsUC := usecase.NewStockMetricsUseCase(gateway, stockMetricsRepo, configRepo, cfg.StockRefresh.Concurrency)
 
 	// Load cached data on startup
 	loadCtx, loadCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -97,7 +98,10 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 	cronAdapter := infraCron.NewAdapter(loc)
 	scheduler := appService.NewJobScheduler(cronAdapter)
 
-	// Build job dependencies
+	// Build job dependencies. MarketTimezone re-uses the cron-scheduler's
+	// loaded *time.Location so the binary has a single source of truth for
+	// "what is Vietnam time?" — consumed by StockAlertJob's HoSE session gate
+	// (see bot-trade/domain/shared/valueobject/market/session.go).
 	jobDeps := jobsRegistry.JobDependencies{
 		Preparer:            dataPreparer,
 		BullishRSIUC:        bullishRSIUC,
@@ -109,7 +113,9 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 		ConfigRepo:          configRepo,
 		QuoteProvider:       quoteProvider,
 		AlertEvaluator:      alertEvaluator,
+		ConditionDisabler:   conditionDisabler,
 		Config:              cfg,
+		MarketTimezone:      loc,
 	}
 
 	// Register all jobs via factories
@@ -128,6 +134,5 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 		StockMetrics: stockMetricsUC,
 		Analyzer:     analyzer,
 		Scheduler:    scheduler,
-		SSIProvider:  quoteProvider,
 	}, nil
 }

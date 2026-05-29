@@ -249,11 +249,22 @@ export type AlertConditionType =
   | 'price_below'
   | 'volume_spike'
   | 'transaction_volume_spike'
+  | 'trendline_breakout'
+  | 'trendline_breakdown'
+  | 'price_cross_above'
+  | 'price_cross_below'
+  | 'bullish_divergence'
+  | 'bearish_divergence'
+  | 'bullish_divergence_early'
+  | 'bearish_divergence_early'
+  | 'trendline_breakout_mtf'
+  | 'trendline_breakdown_mtf'
 
 export interface ApiAlertCondition {
   type: AlertConditionType
   threshold: number
   enabled: boolean
+  reference?: 'ema9' | 'ema21' | 'ema50' | 'sma200'
 }
 
 export interface ApiStockAlert {
@@ -276,9 +287,7 @@ export interface ApiTradingConfig {
     proximity_percent: number
   }
   indices_recent: number
-  bearish_early: boolean | null
-  bearish_symbols: string[]
-  bullish_symbols: string[]
+  signal_days_threshold: number
   telegram: {
     enabled: boolean
     bot_token?: string
@@ -450,9 +459,7 @@ class ApiClient {
         proximity_percent: 3,
       },
       indices_recent: 5,
-      bearish_early: null,
-      bearish_symbols: [],
-      bullish_symbols: [],
+      signal_days_threshold: 50,
       telegram: { enabled: false },
       metrics_filter: [],
       alerts: [],
@@ -470,27 +477,6 @@ class ApiClient {
     })
   }
 
-  async addSymbolsToWatchlist(
-    configId: string,
-    listType: 'bullish' | 'bearish',
-    symbols: string[]
-  ): Promise<{ message: string; list_type: string; symbols: string[] }> {
-    return this.request(`/config/${encodeURIComponent(configId)}/watchlist`, {
-      method: 'POST',
-      body: JSON.stringify({ list_type: listType, symbols }),
-    })
-  }
-
-  async removeSymbolsFromWatchlist(
-    configId: string,
-    listType: 'bullish' | 'bearish',
-    symbols: string[]
-  ): Promise<{ message: string; list_type: string; symbols: string[] }> {
-    return this.request(`/config/${encodeURIComponent(configId)}/watchlist`, {
-      method: 'DELETE',
-      body: JSON.stringify({ list_type: listType, symbols }),
-    })
-  }
 }
 
 // Singleton instance
@@ -521,8 +507,4 @@ export const api = {
   getConfig: (id: string) => apiInstance.getConfig(id),
   createConfig: (id: string, c?: Partial<ApiTradingConfig>) => apiInstance.createConfig(id, c),
   updateConfig: (id: string, c: Partial<ApiTradingConfig>) => apiInstance.updateConfig(id, c),
-  addSymbolsToWatchlist: (cId: string, lT: 'bullish' | 'bearish', s: string[]) =>
-    apiInstance.addSymbolsToWatchlist(cId, lT, s),
-  removeSymbolsFromWatchlist: (cId: string, lT: 'bullish' | 'bearish', s: string[]) =>
-    apiInstance.removeSymbolsFromWatchlist(cId, lT, s),
 }

@@ -16,8 +16,6 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
-	"sync/atomic"
-	"time"
 
 	"bot-trade/infrastructure/credentials"
 	"bot-trade/infrastructure/metrics"
@@ -34,6 +32,10 @@ const (
 	ssiQuoteName    = "ssi-quote"
 	ssiQuoteBaseURL = "https://iboard-query.ssi.com.vn"
 	ssiCookieDomain = ".ssi.com.vn"
+
+	// defaultUserAgent is used when no credential snapshot/user-agent is available.
+	// Keeps the request browser-like even without minted credentials.
+	defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
 // ssiQuoteEndpoints maps exchange code to the iboard-query group endpoint path.
@@ -52,32 +54,32 @@ type ssiQuoteResponse struct {
 
 // ssiQuoteItem is a single stock quote from iboard-query.
 type ssiQuoteItem struct {
-	StockSymbol         string  `json:"stockSymbol"`
-	MatchedPrice        float64 `json:"matchedPrice"`
-	NmTotalTradedQty    int64   `json:"nmTotalTradedQty"`
-	NmTotalTradedValue  float64 `json:"nmTotalTradedValue"`
-	PriceChange         float64 `json:"priceChange"`
-	PriceChangePercent  float64 `json:"priceChangePercent"`
-	RefPrice            float64 `json:"refPrice"`
-	Ceiling             float64 `json:"ceiling"`
-	Floor               float64 `json:"floor"`
-	Highest             float64 `json:"highest"`
-	Lowest              float64 `json:"lowest"`
-	AvgPrice            float64 `json:"avgPrice"`
-	Best1Bid            float64 `json:"best1Bid"`
-	Best1BidVol         int64   `json:"best1BidVol"`
-	Best1Offer          float64 `json:"best1Offer"`
-	Best1OfferVol       int64   `json:"best1OfferVol"`
-	Best2Bid            float64 `json:"best2Bid"`
-	Best2BidVol         int64   `json:"best2BidVol"`
-	Best2Offer          float64 `json:"best2Offer"`
-	Best2OfferVol       int64   `json:"best2OfferVol"`
-	Best3Bid            float64 `json:"best3Bid"`
-	Best3BidVol         int64   `json:"best3BidVol"`
-	Best3Offer          float64 `json:"best3Offer"`
-	Best3OfferVol       int64   `json:"best3OfferVol"`
-	TradingDate         string  `json:"tradingDate"`
-	Exchange            string  `json:"exchange"`
+	StockSymbol        string  `json:"stockSymbol"`
+	MatchedPrice       float64 `json:"matchedPrice"`
+	NmTotalTradedQty   int64   `json:"nmTotalTradedQty"`
+	NmTotalTradedValue float64 `json:"nmTotalTradedValue"`
+	PriceChange        float64 `json:"priceChange"`
+	PriceChangePercent float64 `json:"priceChangePercent"`
+	RefPrice           float64 `json:"refPrice"`
+	Ceiling            float64 `json:"ceiling"`
+	Floor              float64 `json:"floor"`
+	Highest            float64 `json:"highest"`
+	Lowest             float64 `json:"lowest"`
+	AvgPrice           float64 `json:"avgPrice"`
+	Best1Bid           float64 `json:"best1Bid"`
+	Best1BidVol        int64   `json:"best1BidVol"`
+	Best1Offer         float64 `json:"best1Offer"`
+	Best1OfferVol      int64   `json:"best1OfferVol"`
+	Best2Bid           float64 `json:"best2Bid"`
+	Best2BidVol        int64   `json:"best2BidVol"`
+	Best2Offer         float64 `json:"best2Offer"`
+	Best2OfferVol      int64   `json:"best2OfferVol"`
+	Best3Bid           float64 `json:"best3Bid"`
+	Best3BidVol        int64   `json:"best3BidVol"`
+	Best3Offer         float64 `json:"best3Offer"`
+	Best3OfferVol      int64   `json:"best3OfferVol"`
+	TradingDate        string  `json:"tradingDate"`
+	Exchange           string  `json:"exchange"`
 }
 
 // credentialStore is a consumer-side interface — the SSI provider only needs the
@@ -91,21 +93,16 @@ type credentialStore interface {
 // Standalone — does NOT implement contract.Provider (which serves OHLCV charts).
 // Observed via ProviderMetrics so dashboards see request rate / latency / errors
 // for quote-fetches under {provider="ssi-quote"}.
-//
-// lastForbiddenAt is set atomically (Unix seconds) whenever fetchExchange
-// observes a 403. Zero means no 403 has been observed in this process lifetime.
-// Safe for concurrent reads from multiple goroutines.
 type SSIQueryProvider struct {
-	client          *http.Client
-	baseURL         string
-	metrics         *metrics.ProviderMetrics
-	credStore       credentialStore
-	lastForbiddenAt atomic.Int64
+	client    *http.Client
+	baseURL   string
+	metrics   *metrics.ProviderMetrics
+	credStore credentialStore
 }
 
 // NewSSIQueryProvider creates a new SSI iboard-query adapter.
-// All three arguments are required; passing nil returns an error rather than
-// silently dropping observability or serving stale/empty credentials.
+// The credential store is optional so non-production wiring can skip credential
+// refresh code entirely and send quote requests without Cloudflare cookies.
 func NewSSIQueryProvider(client *http.Client, m *metrics.ProviderMetrics, store credentialStore) (*SSIQueryProvider, error) {
 	if client == nil {
 		return nil, fmt.Errorf("ssi-quote: http client is required")
@@ -113,10 +110,6 @@ func NewSSIQueryProvider(client *http.Client, m *metrics.ProviderMetrics, store 
 	if m == nil {
 		return nil, fmt.Errorf("ssi-quote: provider metrics is required")
 	}
-	if store == nil {
-		return nil, fmt.Errorf("ssi-quote: credential store is required")
-	}
-
 	m.InitProvider(ssiQuoteName, 0)
 	return &SSIQueryProvider{
 		client:    client,
@@ -124,17 +117,6 @@ func NewSSIQueryProvider(client *http.Client, m *metrics.ProviderMetrics, store 
 		metrics:   m,
 		credStore: store,
 	}, nil
-}
-
-// LastForbiddenAt returns the time of the most recent 403 observed by this
-// provider. Returns the zero time if no 403 has been observed in this process
-// lifetime. Safe to call from multiple goroutines concurrently.
-func (p *SSIQueryProvider) LastForbiddenAt() time.Time {
-	v := p.lastForbiddenAt.Load()
-	if v == 0 {
-		return time.Time{}
-	}
-	return time.Unix(v, 0)
 }
 
 // FetchAllQuotes fetches HOSE, HNX, and UPCOM quotes in parallel and returns a
@@ -173,6 +155,7 @@ func (p *SSIQueryProvider) FetchAllQuotes(ctx context.Context) (map[string]marke
 		}
 	}
 
+	// Quotes arrive in kVND from fetchExchange via normalizedQuoteFromItem — no batch normalization required.
 	zap.L().Debug("SSI quotes fetched",
 		zap.String("provider", ssiQuoteName),
 		zap.Int("total_symbols", len(combined)),
@@ -181,21 +164,58 @@ func (p *SSIQueryProvider) FetchAllQuotes(ctx context.Context) (map[string]marke
 	return combined, nil
 }
 
+// normalizedQuoteFromItem converts an iboard-query response item to a domain
+// MarketQuote with every per-share price field in kVND (thousands of VND).
+// The SSI iboard-query API returns raw VND; this conversion is unconditional
+// per the adapter contract documented on outbound.QuoteProvider.FetchAllQuotes.
+func normalizedQuoteFromItem(item ssiQuoteItem) marketvo.MarketQuote {
+	return marketvo.MarketQuote{
+		Symbol:           item.StockSymbol,
+		MatchedPrice:     item.MatchedPrice / 1000.0,
+		TotalTradedQty:   item.NmTotalTradedQty,
+		TotalTradedValue: item.NmTotalTradedValue,
+		PriceChange:      item.PriceChange / 1000.0,
+		PriceChangePct:   item.PriceChangePercent,
+		RefPrice:         item.RefPrice / 1000.0,
+		Ceiling:          item.Ceiling / 1000.0,
+		Floor:            item.Floor / 1000.0,
+		Highest:          item.Highest / 1000.0,
+		Lowest:           item.Lowest / 1000.0,
+		AvgPrice:         item.AvgPrice / 1000.0,
+		Best1Bid:         item.Best1Bid / 1000.0,
+		Best1BidVol:      item.Best1BidVol,
+		Best1Offer:       item.Best1Offer / 1000.0,
+		Best1OfferVol:    item.Best1OfferVol,
+		Best2Bid:         item.Best2Bid / 1000.0,
+		Best2BidVol:      item.Best2BidVol,
+		Best2Offer:       item.Best2Offer / 1000.0,
+		Best2OfferVol:    item.Best2OfferVol,
+		Best3Bid:         item.Best3Bid / 1000.0,
+		Best3BidVol:      item.Best3BidVol,
+		Best3Offer:       item.Best3Offer / 1000.0,
+		Best3OfferVol:    item.Best3OfferVol,
+		TradingDate:      item.TradingDate,
+		Exchange:         item.Exchange,
+	}
+}
+
 // fetchExchange fetches quotes for a single exchange path.
 // A fresh cookiejar.Jar is built on every call so the 3 parallel exchange
 // goroutines do not share mutable jar state, and each call picks up the
-// latest credentials from the atomic credStore snapshot.
+// latest credentials from the atomic credStore snapshot when one is configured.
 func (p *SSIQueryProvider) fetchExchange(ctx context.Context, exchange, path string) (out map[string]marketvo.MarketQuote, err error) {
 	tracker := p.metrics.BeginRequest(ssiQuoteName)
 	defer func() {
-		if errors.Is(err, contract.ErrForbidden) {
-			p.lastForbiddenAt.Store(time.Now().Unix())
-		}
 		tracker.EndRequest(err, errors.Is(err, contract.ErrRateLimited), 0)
 	}()
 
 	// Snapshot credentials once; all header/cookie writes use this value.
-	creds := p.credStore.Current()
+	// Non-production may have no credential store, in which case zero-value
+	// credentials intentionally produce no Cloudflare cookies.
+	var creds credentials.SSICredentials
+	if p.credStore != nil {
+		creds = p.credStore.Current()
+	}
 
 	// Build a per-call jar so concurrent goroutines cannot observe each
 	// other's Set-Cookie rotations, and each call starts from the live snapshot.
@@ -237,7 +257,11 @@ func (p *SSIQueryProvider) fetchExchange(ctx context.Context, exchange, path str
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("Cache-Control", "max-age=0")
-	req.Header.Set("User-Agent", creds.UserAgent)
+	userAgent := creds.UserAgent
+	if userAgent == "" {
+		userAgent = defaultUserAgent
+	}
+	req.Header.Set("User-Agent", userAgent)
 	// Browser client hints + fetch metadata. CF accumulates samples on requests
 	// missing these and flags after a few hours of identical traffic. Values
 	// must match the User-Agent (Chrome 148, Linux, desktop, navigation context).
@@ -280,34 +304,7 @@ func (p *SSIQueryProvider) fetchExchange(ctx context.Context, exchange, path str
 		if item.StockSymbol == "" {
 			continue
 		}
-		out[item.StockSymbol] = marketvo.MarketQuote{
-			Symbol:           item.StockSymbol,
-			MatchedPrice:     item.MatchedPrice,
-			TotalTradedQty:   item.NmTotalTradedQty,
-			TotalTradedValue: item.NmTotalTradedValue,
-			PriceChange:      item.PriceChange,
-			PriceChangePct:   item.PriceChangePercent,
-			RefPrice:         item.RefPrice,
-			Ceiling:          item.Ceiling,
-			Floor:            item.Floor,
-			Highest:          item.Highest,
-			Lowest:           item.Lowest,
-			AvgPrice:         item.AvgPrice,
-			Best1Bid:         item.Best1Bid,
-			Best1BidVol:      item.Best1BidVol,
-			Best1Offer:       item.Best1Offer,
-			Best1OfferVol:    item.Best1OfferVol,
-			Best2Bid:         item.Best2Bid,
-			Best2BidVol:      item.Best2BidVol,
-			Best2Offer:       item.Best2Offer,
-			Best2OfferVol:    item.Best2OfferVol,
-			Best3Bid:         item.Best3Bid,
-			Best3BidVol:      item.Best3BidVol,
-			Best3Offer:       item.Best3Offer,
-			Best3OfferVol:    item.Best3OfferVol,
-			TradingDate:      item.TradingDate,
-			Exchange:         item.Exchange,
-		}
+		out[item.StockSymbol] = normalizedQuoteFromItem(item)
 	}
 
 	zap.L().Debug("SSI exchange quotes fetched",

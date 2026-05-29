@@ -19,7 +19,10 @@ type StockLister interface {
 }
 
 // QuoteProvider fetches real-time market quotes for all symbols.
-// Implementations should return a map keyed by symbol to enable O(1) lookup.
+//
+// FetchAllQuotes MUST return MarketQuote with every per-share price field in kVND (thousands of VND).
+// Scale normalization is the adapter's responsibility at the infrastructure boundary
+// (e.g. SSI's normalizedQuoteFromItem divides raw VND by 1000); there is no app-layer gate.
 type QuoteProvider interface {
 	FetchAllQuotes(ctx context.Context) (map[string]marketvo.MarketQuote, error)
 }
