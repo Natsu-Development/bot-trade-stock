@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	minRPS          float64       = 1.0
-	streakTarget    int           = 10
-	increaseFactor  float64       = 1.1
-	decreaseFactor  float64       = 0.7
-	adjustCooldown  time.Duration = 2 * time.Second
+	minRPS         float64       = 1.0
+	streakTarget   int           = 10
+	increaseFactor float64       = 1.1
+	decreaseFactor float64       = 0.7
+	adjustCooldown time.Duration = 2 * time.Second
 )
 
 // TokenBucket enforces a requests-per-second cap using a classic token-bucket

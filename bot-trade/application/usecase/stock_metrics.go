@@ -47,9 +47,6 @@ type StockMetricsUseCase struct {
 	calculator *metricsservice.Calculator
 	configRepo outbound.ConfigRepository
 
-	// Signal threshold (days a signal is considered valid)
-	signalDaysThreshold int
-
 	// Concurrency limit for batch fetching
 	concurrency int
 
@@ -82,16 +79,14 @@ func NewStockMetricsUseCase(
 	gateway outbound.MarketGateway,
 	repository outbound.StockMetricsRepository,
 	configRepo outbound.ConfigRepository,
-	signalDaysThreshold int,
 	concurrency int,
 ) *StockMetricsUseCase {
 	return &StockMetricsUseCase{
-		gateway:             gateway,
-		repository:          repository,
-		calculator:          metricsservice.NewCalculator(),
-		configRepo:          configRepo,
-		signalDaysThreshold: signalDaysThreshold,
-		concurrency:         concurrency,
+		gateway:     gateway,
+		repository:  repository,
+		calculator:  metricsservice.NewCalculator(),
+		configRepo:  configRepo,
+		concurrency: concurrency,
 	}
 }
 
@@ -197,7 +192,7 @@ func (uc *StockMetricsUseCase) refresh(ctx context.Context) (*dto.StockMetricsRe
 		info := stockInfoLookup[symbol]
 		metrics := uc.calculator.CalculateForStock(symbol, info.exchange, info.name, data)
 		if metrics != nil {
-			// Compute signals using system config if available
+			// Compute signals using the system config if available.
 			if systemConfig != nil {
 				uc.computeSignals(metrics, data, systemConfig)
 			}
@@ -408,7 +403,7 @@ func (uc *StockMetricsUseCase) computeSignals(
 	rangeMin := cfg.Divergence.RangeMin
 	rangeMax := cfg.Divergence.RangeMax
 	maxLines := cfg.Trendline.MaxLines
-	signalThreshold := time.Now().AddDate(0, 0, -uc.signalDaysThreshold)
+	signalThreshold := time.Now().AddDate(0, 0, -cfg.SignalDaysThreshold)
 
 	if len(priceHistory) < rsiPeriod+1 {
 		return
@@ -481,6 +476,45 @@ func (uc *StockMetricsUseCase) computeSignals(
 			}
 		}
 	}
+
+	// 8. Read each direction's tick-time POTENTIAL alert level straight from the
+	// signals GenerateResistanceSignals / GenerateSupportSignals produced at
+	// step 6 — see nearestLevelFromSignals for why a *_Potential signal's
+	// PriceLine is exactly the level the evaluator can fire on.
+	latestClose := recentData[len(recentData)-1].Close
+	metrics.ResistanceLevel = nearestLevelFromSignals(breakoutSignals, analysisvo.BreakoutPotential, latestClose)
+	metrics.SupportLevel = nearestLevelFromSignals(breakdownSignals, analysisvo.BreakdownPotential, latestClose)
+	metrics.TrendlineProximity = proximityPct
+}
+
+// nearestLevelFromSignals returns the PriceLine of the `want` *_Potential
+// signal nearest latestClose, or 0 when none exists (the alert evaluator treats
+// 0 as "no level to approach" and suppresses the alert).
+//
+// GenerateResistanceSignals / GenerateSupportSignals emit a *_Potential signal
+// only for a line the latest close has NOT crossed — a crossed line emits
+// *_Confirmed instead. So a BreakoutPotential's PriceLine is always
+// >= latestClose and a BreakdownPotential's is always <= latestClose, and a
+// single |PriceLine - latestClose| nearest-pick serves both directions. The
+// caller just supplies the signal type it wants. PriceLine <= 0 is skipped
+// defensively.
+func nearestLevelFromSignals(signals []analysisvo.Signal, want analysisvo.SignalType, latestClose float64) float64 {
+	best := 0.0
+	bestDist := -1.0
+	for _, s := range signals {
+		if s.Type != want || s.PriceLine <= 0 {
+			continue
+		}
+		dist := s.PriceLine - latestClose
+		if dist < 0 {
+			dist = -dist
+		}
+		if bestDist < 0 || dist < bestDist {
+			bestDist = dist
+			best = s.PriceLine
+		}
+	}
+	return best
 }
 
 // isSignalWithinDays checks if a date string (YYYY-MM-DD) is within threshold.

@@ -3,7 +3,6 @@ package usecase
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"bot-trade/application/port/inbound"
@@ -12,7 +11,6 @@ import (
 	configagg "bot-trade/domain/config/aggregate"
 	configvo "bot-trade/domain/config/valueobject"
 	"bot-trade/domain/shared"
-	marketvo "bot-trade/domain/shared/valueobject/market"
 
 	"github.com/google/uuid"
 )
@@ -97,56 +95,4 @@ func (uc *ConfigUseCase) UpdateConfig(ctx context.Context, id string, update *co
 // DeleteConfig removes configuration by ID.
 func (uc *ConfigUseCase) DeleteConfig(ctx context.Context, id string) error {
 	return uc.repo.Delete(ctx, id)
-}
-
-// AddSymbols adds symbols to the specified watchlist (bullish or bearish).
-func (uc *ConfigUseCase) AddSymbols(ctx context.Context, configID string, listType string, symbols []string) error {
-	cfg, err := uc.repo.GetByID(ctx, configID)
-	if err != nil {
-		return err
-	}
-
-	wt, err := configvo.NewWatchlistType(listType)
-	if err != nil {
-		return shared.NewValidationError(err.Error())
-	}
-
-	// Add each symbol using aggregate method
-	for _, symStr := range symbols {
-		symbol, err := marketvo.NewSymbol(symStr)
-		if err != nil {
-			return shared.NewValidationError(fmt.Sprintf("invalid symbol '%s': %s", symStr, err.Error()))
-		}
-		if err := cfg.AddSymbol(wt, symbol); err != nil {
-			return err
-		}
-	}
-
-	return uc.repo.Update(ctx, cfg)
-}
-
-// RemoveSymbols removes symbols from the specified watchlist (bullish or bearish).
-func (uc *ConfigUseCase) RemoveSymbols(ctx context.Context, configID string, listType string, symbols []string) error {
-	cfg, err := uc.repo.GetByID(ctx, configID)
-	if err != nil {
-		return err
-	}
-
-	wt, err := configvo.NewWatchlistType(listType)
-	if err != nil {
-		return shared.NewValidationError(err.Error())
-	}
-
-	// Remove each symbol using aggregate method
-	for _, symStr := range symbols {
-		symbol, err := marketvo.NewSymbol(symStr)
-		if err != nil {
-			return shared.NewValidationError(fmt.Sprintf("invalid symbol '%s': %s", symStr, err.Error()))
-		}
-		if err := cfg.RemoveSymbol(wt, symbol); err != nil {
-			return err
-		}
-	}
-
-	return uc.repo.Update(ctx, cfg)
 }

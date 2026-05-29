@@ -66,23 +66,31 @@ type OHLCVData struct {
 	Volumes    []int64
 }
 
-// priceNormalizationThreshold is the threshold above which prices are considered
-// to be in actual VND and need to be normalized to thousands of VND.
-// Vietnamese stocks typically trade below 1000 (thousands of VND).
-// If prices are above this threshold, they're likely in actual VND (e.g., 82100 instead of 82.1).
-const priceNormalizationThreshold = 10000.0
+// priceNormalizationThreshold separates raw VND from kVND (thousands of VND).
+// No listed Vietnamese equity trades at or above 1,000 kVND (= 1,000,000 VND
+// per share), so any price >= 1,000 must be raw VND and is divided to kVND;
+// anything below 1,000 is already kVND and passes through. This boundary makes
+// the bar path self-correct whether a provider returns raw VND or kVND — the two
+// scales do not overlap around 1,000.
+//
+// This is bar-only: the OHLCV path is shared across providers (SSI/VPS/VietCap)
+// whose raw-vs-kVND scale is not uniformly verified, so unconditional division
+// would 1000x-corrupt any provider already returning kVND. (The quote path uses
+// a single verified adapter, normalizedQuoteFromItem, that divides unconditionally.)
+const priceNormalizationThreshold = 1000.0
 
-// needsPriceNormalization checks if prices need to be normalized from actual VND to thousands of VND.
-// Returns true if the median price is above the threshold, indicating prices are in actual VND.
+// needsPriceNormalization reports whether a per-symbol bar array is in raw VND
+// (and must be divided by 1000). It tests the largest price in the array: zero
+// and NaN values from corrupted leading bars never raise the max, so they cannot
+// force a false negative.
 func needsPriceNormalization(prices []float64) bool {
-	if len(prices) == 0 {
-		return false
+	var maxPrice float64
+	for _, p := range prices {
+		if p > maxPrice {
+			maxPrice = p
+		}
 	}
-
-	// Use the first close price as a sample
-	// If it's above the threshold, prices are likely in actual VND
-	samplePrice := prices[0]
-	return samplePrice > priceNormalizationThreshold
+	return maxPrice >= priceNormalizationThreshold
 }
 
 // normalizePrices converts prices from actual VND to thousands of VND if needed.

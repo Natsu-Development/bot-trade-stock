@@ -2,12 +2,18 @@ import { useState, useCallback, useEffect, useMemo, useRef, useDeferredValue } f
 import { Header } from '../layout/Header'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, DialogIcon } from '@/components/ui/dialog'
 import { Icons } from '../icons/Icons'
-import { api, getConfigId } from '../../lib/api'
+import { api } from '../../lib/api'
 import { toast } from '../ui/Toast'
 import { handleError } from '../../lib/errors'
-import { transformApiStocks } from '../../lib/screenerUtils'
+import {
+  transformApiStocks,
+  sortStocks,
+  isSortableColumn,
+  isNumericSortField,
+  type ScreenerSortField,
+  type SortDirection,
+} from '../../lib/screenerUtils'
 import { FilterBar } from '../screener/FilterBar'
 import { SaveFilterPresetDialog } from '../screener/SaveFilterPresetDialog'
 import { ScreenerResultsTable } from '../screener/ScreenerResultsTable'
@@ -51,9 +57,27 @@ export function Screener() {
     columnsByCategory,
   } = useTableColumns()
 
-  const sortedStocks = useMemo(() => {
-    return [...stocks].sort((a, b) => a.symbol.localeCompare(b.symbol))
-  }, [stocks])
+  // Per-column sort (client-side). Default: symbol ascending.
+  const [sort, setSort] = useState<{ field: ScreenerSortField; dir: SortDirection }>({
+    field: 'symbol',
+    dir: 'asc',
+  })
+
+  // Stable identity: isSortableColumn/isNumericSortField are pure module functions,
+  // not reactive values, so an empty dep array is correct.
+  const handleSort = useCallback((columnId: string) => {
+    if (!isSortableColumn(columnId)) return
+    setSort((prev) =>
+      prev.field === columnId
+        ? { field: prev.field, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { field: columnId, dir: isNumericSortField(columnId) ? 'desc' : 'asc' }
+    )
+  }, [])
+
+  const sortedStocks = useMemo(
+    () => sortStocks(stocks, sort.field, sort.dir),
+    [stocks, sort]
+  )
 
   const displayStocks = useMemo(() => {
     const q = deferredSymbolSearch.trim().toUpperCase()
@@ -63,12 +87,9 @@ export function Screener() {
 
   const {
     selectedStocks,
-    showWatchlistModal,
-    setShowWatchlistModal,
     handleToggleStockSelection,
     handleToggleAllSelection,
     clearSelection,
-    selectAllStocks,
   } = useStockSelection(displayStocks)
 
   // Ref keeps latest getFilterRequest without destabilizing fetchStocks
@@ -114,41 +135,6 @@ export function Screener() {
     handleReset()
   }, [handleReset])
 
-  const handleAddSelectedToWatchlistWithError = useCallback(() => {
-    const hasSelection = selectedStocks.size > 0
-    if (!hasSelection) {
-      toast.error('Please select at least one stock')
-      return
-    }
-    setShowWatchlistModal(true)
-  }, [selectedStocks])
-
-  const handleAddAllToWatchlistWithError = useCallback(() => {
-    if (displayStocks.length === 0) {
-      toast.error('No stocks to add')
-      return
-    }
-    selectAllStocks()
-    setShowWatchlistModal(true)
-  }, [displayStocks.length, selectAllStocks, setShowWatchlistModal])
-
-  const handleConfirmWatchlist = useCallback(async (listType: 'bullish' | 'bearish') => {
-    try {
-      const configId = getConfigId()
-      const symbols = Array.from(selectedStocks)
-
-      await api.addSymbolsToWatchlist(configId, listType, symbols)
-
-      clearSelection()
-      setShowWatchlistModal(false)
-
-      const listName = listType === 'bullish' ? 'Bullish' : 'Bearish'
-      toast.success(`Added ${symbols.length} stocks to ${listName} watchlist`)
-    } catch (error) {
-      console.error('Failed to add to watchlist:', error)
-      toast.error('Failed to add stocks to watchlist')
-    }
-  }, [selectedStocks, clearSelection, setShowWatchlistModal])
 
   return (
     <div className="animate-slide-in-from-bottom">
@@ -237,25 +223,6 @@ export function Screener() {
         <Card.Header
           action={
             <div className="flex gap-2">
-              {selectedStocks.size > 0 && (
-                <Button
-                  variant="primary"
-                  icon="Plus"
-                  onClick={handleAddSelectedToWatchlistWithError}
-                  className="text-xs px-3 py-1.5 h-8"
-                >
-                  <span>Add Selected ({selectedStocks.size})</span>
-                </Button>
-              )}
-              <Button
-                variant="secondary"
-                icon="List"
-                onClick={handleAddAllToWatchlistWithError}
-                disabled={displayStocks.length === 0}
-                className="text-xs px-3 py-1.5 h-8"
-              >
-                <span>Add All</span>
-              </Button>
               <ColumnSelector
                 columnsByCategory={columnsByCategory}
                 visibleColumns={visibleColumns}
@@ -295,6 +262,9 @@ export function Screener() {
             onToggleRow={handleToggleStockSelection}
             onToggleAll={handleToggleAllSelection}
             visibleColumns={visibleColumns}
+            sortField={sort.field}
+            sortDir={sort.dir}
+            onSort={handleSort}
             noRowsMessage={
               deferredSymbolSearch.trim() && sortedStocks.length > 0
                 ? 'No symbols match your search.'
@@ -310,66 +280,6 @@ export function Screener() {
         onSave={handleSaveFilter}
       />
 
-      <Dialog open={showWatchlistModal} onOpenChange={(open) => setShowWatchlistModal(open)}>
-        <DialogContent size="md" aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogIcon><Icons.List /></DialogIcon>
-            <DialogTitle>Add to Watchlist</DialogTitle>
-          </DialogHeader>
-          <DialogBody>
-            <p className="mb-4">
-              Add {selectedStocks.size} stock(s) to your watchlist:
-            </p>
-            <div className="flex flex-col gap-3">
-              <button
-                className="flex items-center gap-4 w-full p-4 bg-[var(--bg-elevated)] border border-[var(--border-dim)] rounded-md cursor-pointer transition-all duration-150 hover:border-[var(--border-glow)] hover:bg-[var(--bg-hover)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
-                onClick={() => handleConfirmWatchlist('bullish')}
-              >
-                <div className="flex items-center justify-center w-12 h-12 rounded-md bg-[var(--neon-bull-dim)] text-[var(--neon-bull)] flex-shrink-0">
-                  <Icons.TrendUp />
-                </div>
-                <div className="text-left">
-                  <div className="text-sm font-semibold mb-1 text-[var(--neon-bull)]">Bullish Watchlist</div>
-                  <div className="text-xs text-[var(--text-muted)]">
-                    For entry signals - stocks you want to buy
-                  </div>
-                </div>
-              </button>
-              <button
-                className="flex items-center gap-4 w-full p-4 bg-[var(--bg-elevated)] border border-[var(--border-dim)] rounded-md cursor-pointer transition-all duration-150 hover:border-[var(--border-glow)] hover:bg-[var(--bg-hover)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
-                onClick={() => handleConfirmWatchlist('bearish')}
-              >
-                <div className="flex items-center justify-center w-12 h-12 rounded-md bg-[var(--neon-bear-dim)] text-[var(--neon-bear)] flex-shrink-0">
-                  <Icons.TrendDown />
-                </div>
-                <div className="text-left">
-                  <div className="text-sm font-semibold mb-1 text-[var(--neon-bear)]">Bearish Watchlist</div>
-                  <div className="text-xs text-[var(--text-muted)]">
-                    For exit signals - stocks you currently hold
-                  </div>
-                </div>
-              </button>
-            </div>
-            {selectedStocks.size <= 5 && (
-              <div className="mt-4 p-3 bg-[var(--bg-elevated)] rounded-md border border-[var(--border-dim)]">
-                <div className="text-xs text-[var(--text-muted)] mb-2">Selected stocks:</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {Array.from(selectedStocks).map(s => (
-                    <span key={s} className="px-2.5 py-1 bg-[var(--bg-hover)] border border-[var(--border-dim)] rounded text-xs font-mono text-[var(--text-secondary)]">
-                      {s}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="secondary" onClick={() => setShowWatchlistModal(false)}>
-              <span>Cancel</span>
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

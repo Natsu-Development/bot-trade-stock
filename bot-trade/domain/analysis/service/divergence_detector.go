@@ -116,12 +116,50 @@ func FindEarlyBearishDivergence(
 		return analysisvo.Divergence{}
 	}
 
+	// Sort newest-first so lastPivot is the most-recent pivot (FindHighPivots
+	// returns pivots in ascending index order).
+	pivots = sortDescending(pivots)
 	lastPivot := pivots[0]
 
 	// Bearish: Price makes Higher High, RSI makes Lower High
 	if currentData.High > lastPivot.High && currentData.RSI < lastPivot.RSI {
 		return analysisvo.Divergence{
 			Type:        analysisvo.BearishDivergence,
+			FirstPivot:  lastPivot,
+			SecondPivot: currentData,
+			IsEarly:     true,
+		}
+	}
+
+	return analysisvo.Divergence{}
+}
+
+// FindEarlyBullishDivergence detects a forming bullish divergence using the current bar.
+// Mirror of FindEarlyBearishDivergence for the bullish direction: it compares the current
+// bar against the most-recent low pivot before the second pivot is confirmed.
+//
+// Parameters:
+//   - pivots: Confirmed low pivot points (most recent first)
+//   - currentData: Current market data bar
+//
+// Returns: Early bullish divergence (IsEarly=true) if detected, zero value otherwise.
+func FindEarlyBullishDivergence(
+	pivots []marketvo.MarketData,
+	currentData marketvo.MarketData,
+) analysisvo.Divergence {
+	if len(pivots) == 0 || !currentData.HasRSI() {
+		return analysisvo.Divergence{}
+	}
+
+	// Sort newest-first so lastPivot is the most-recent pivot (FindLowPivots
+	// returns pivots in ascending index order).
+	pivots = sortDescending(pivots)
+	lastPivot := pivots[0]
+
+	// Bullish: Price makes Lower Low, RSI makes Higher Low
+	if currentData.Low < lastPivot.Low && currentData.RSI > lastPivot.RSI {
+		return analysisvo.Divergence{
+			Type:        analysisvo.BullishDivergence,
 			FirstPivot:  lastPivot,
 			SecondPivot: currentData,
 			IsEarly:     true,

@@ -3,12 +3,29 @@ import { Header } from '../layout/Header'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Icons } from '../icons/Icons'
-import { SymbolTag } from '../features/SymbolTag'
 import { MetricsFilterSection } from '../features/MetricsFilterSection'
 import { StockAlertsSection } from '../features/StockAlertsSection'
 import { NumberInput } from '@/components/ui/NumberInput'
-import { api, getConfigId, type ApiTradingConfig, type ApiStockAlert, type ScreenerFilterPreset } from '@/lib/api'
+import { api, getConfigId, type ApiTradingConfig, type ApiStockAlert, type ApiAlertCondition, type ScreenerFilterPreset } from '@/lib/api'
 import { isValidFilterOperator } from '@/lib/screenerFilterOptions'
+import { getConditionOption, MA_REFERENCE_OPTIONS } from '@/lib/alertOptions'
+
+// Mirror of bot-trade/domain/config/valueobject/stock_alert_config.go Validate():
+// the backend rejects enabled conditions whose type RequiresThreshold but has
+// threshold <= 0, or RequiresReference but lacks a valid MA pick. Disabled
+// conditions are accepted as paused placeholders regardless of payload, so we
+// never strip them. Dropping bad conditions client-side keeps a partial-typo
+// in the alert editor from 400'ing the entire config save.
+const VALID_MA_REFERENCES = new Set<string>(MA_REFERENCE_OPTIONS.map(o => o.value))
+
+function isConditionSubmittable(c: ApiAlertCondition): boolean {
+  if (c.enabled === false) return true
+  const opt = getConditionOption(c.type)
+  if (!opt) return false
+  if (opt.hasThreshold && (!Number.isFinite(c.threshold) || c.threshold <= 0)) return false
+  if (opt.hasReference && !VALID_MA_REFERENCES.has(c.reference ?? '')) return false
+  return true
+}
 
 export function Config() {
   const [config, setConfig] = useState<ApiTradingConfig | null>(null)
@@ -16,10 +33,6 @@ export function Config() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-
-  // Form input states
-  const [newBullSymbol, setNewBullSymbol] = useState('')
-  const [newBearSymbol, setNewBearSymbol] = useState('')
 
   // Store original config for reset
   const [originalConfig, setOriginalConfig] = useState<ApiTradingConfig | null>(null)
@@ -70,10 +83,13 @@ export function Config() {
           filters: preset.filters.filter(f => f.op && isValidFilterOperator(f.op)),
         })).filter(preset => preset.filters.length > 0),
         alerts: (config.alerts || [])
+          // Drop conditions that would fail backend Validate (typed predicate
+          // mirrors AlertType.RequiresThreshold / RequiresReference). Keeps
+          // valid sibling conditions on the same alert intact.
+          .map(a => ({ ...a, conditions: a.conditions.filter(isConditionSubmittable) }))
           .filter(a =>
             a.symbol.trim().length > 0 &&
-            a.conditions.length > 0 &&
-            a.conditions.every(c => Number.isFinite(c.threshold) && c.threshold > 0)
+            a.conditions.length > 0
           )
           .map(a => ({
             symbol: a.symbol,
@@ -81,6 +97,7 @@ export function Config() {
               type: c.type,
               threshold: c.threshold,
               enabled: c.enabled !== false, // default true for any stale payload
+              ...(c.reference ? { reference: c.reference } : {}),
             })),
           })),
       }
@@ -123,64 +140,6 @@ export function Config() {
         ...config,
         trendline: { ...config.trendline, [key]: value },
       })
-    }
-  }
-
-  const handleAddBullSymbol = async () => {
-    const symbol = newBullSymbol.trim().toUpperCase()
-    if (!symbol || !config || config.bullish_symbols.includes(symbol)) {
-      setNewBullSymbol('')
-      return
-    }
-
-    try {
-      const configId = getConfigId()
-      await api.addSymbolsToWatchlist(configId, 'bullish', [symbol])
-      setConfig({ ...config, bullish_symbols: [...config.bullish_symbols, symbol] })
-      setNewBullSymbol('')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add symbol')
-    }
-  }
-
-  const handleAddBearSymbol = async () => {
-    const symbol = newBearSymbol.trim().toUpperCase()
-    if (!symbol || !config || config.bearish_symbols.includes(symbol)) {
-      setNewBearSymbol('')
-      return
-    }
-
-    try {
-      const configId = getConfigId()
-      await api.addSymbolsToWatchlist(configId, 'bearish', [symbol])
-      setConfig({ ...config, bearish_symbols: [...config.bearish_symbols, symbol] })
-      setNewBearSymbol('')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add symbol')
-    }
-  }
-
-  const handleRemoveBullSymbol = async (symbol: string) => {
-    if (!config) return
-
-    try {
-      const configId = getConfigId()
-      await api.removeSymbolsFromWatchlist(configId, 'bullish', [symbol])
-      setConfig({ ...config, bullish_symbols: config.bullish_symbols.filter(s => s !== symbol) })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove symbol')
-    }
-  }
-
-  const handleRemoveBearSymbol = async (symbol: string) => {
-    if (!config) return
-
-    try {
-      const configId = getConfigId()
-      await api.removeSymbolsFromWatchlist(configId, 'bearish', [symbol])
-      setConfig({ ...config, bearish_symbols: config.bearish_symbols.filter(s => s !== symbol) })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove symbol')
     }
   }
 
@@ -315,14 +274,21 @@ export function Config() {
                     onChange={v => updateField('indices_recent', v)}
                   />
                 </div>
-                <label className="form-checkbox mt-4">
-                  <input
-                    type="checkbox"
-                    checked={config.bearish_early ?? false}
-                    onChange={e => updateField('bearish_early', e.target.checked)}
+                <div className="form-group mt-4">
+                  <label className="form-label">Signal recency window (days)</label>
+                  <NumberInput
+                    className="form-input"
+                    value={config.signal_days_threshold}
+                    onChange={v => updateField('signal_days_threshold', v)}
+                    min={1}
+                    max={365}
                   />
-                  <span>Enable early detection mode</span>
-                </label>
+                  <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
+                    Alerts only fire for trendline / RSI-divergence signals detected within
+                    this many recent days — not across the whole analyzed range. Lower = only
+                    fresh signals; higher = also older ones. Used by your analyze alerts.
+                  </p>
+                </div>
               </div>
 
               <div className="config-section">
@@ -355,60 +321,6 @@ export function Config() {
         </div>
 
         <div>
-          <Card className="mb-6">
-            <Card.Body>
-              <div className="config-section">
-                <h3 className="config-section-title">
-                  <Icons.TrendUp />
-                  <span>Bullish Watch Symbols</span>
-                </h3>
-                <input
-                  type="text"
-                  className="form-input mb-4"
-                  placeholder="Add symbol and press Enter"
-                  value={newBullSymbol}
-                  onChange={e => setNewBullSymbol(e.target.value.toUpperCase())}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      handleAddBullSymbol()
-                    }
-                  }}
-                />
-                <div className="symbol-tags">
-                  {config.bullish_symbols.map(symbol => (
-                    <SymbolTag key={symbol} symbol={symbol} onRemove={handleRemoveBullSymbol} />
-                  ))}
-                </div>
-              </div>
-
-              <div className="config-section">
-                <h3 className="config-section-title">
-                  <Icons.TrendDown />
-                  <span>Bearish Watch Symbols</span>
-                </h3>
-                <input
-                  type="text"
-                  className="form-input mb-4"
-                  placeholder="Add symbol and press Enter"
-                  value={newBearSymbol}
-                  onChange={e => setNewBearSymbol(e.target.value.toUpperCase())}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      handleAddBearSymbol()
-                    }
-                  }}
-                />
-                <div className="symbol-tags">
-                  {config.bearish_symbols.map(symbol => (
-                    <SymbolTag key={symbol} symbol={symbol} onRemove={handleRemoveBearSymbol} />
-                  ))}
-                </div>
-              </div>
-            </Card.Body>
-          </Card>
-
           <Card>
             <Card.Body>
               <div className="config-section !mb-0">

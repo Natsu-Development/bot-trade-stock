@@ -49,12 +49,23 @@ func (h *AnalyzeHandler) Analyze(c *gin.Context) {
 		return
 	}
 
-	// endDate defaults to today, startDate is calculated from LookbackDay
+	// Scale LookbackDay by interval cadence so weekly/monthly fetches return
+	// enough bars for the RSI/pivot/divergence pipeline. See ADR in
+	// .omc/plans/analyze-interval-autoscale.md.
+	intervalStr := c.DefaultQuery("interval", "1D")
+	interval, err := marketvo.NewInterval(intervalStr)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	effectiveLookback := marketvo.EffectiveLookbackDays(interval, cfg.LookbackDay)
+
+	// endDate defaults to today, startDate is calculated from effectiveLookback
 	query, err := marketvo.NewMarketDataQueryFromStrings(
 		c.Param("symbol"),
 		c.Query("end_date"),
-		c.DefaultQuery("interval", "1D"),
-		cfg.LookbackDay,
+		intervalStr,
+		effectiveLookback,
 	)
 	if err != nil {
 		response.BadRequest(c, err.Error())

@@ -48,3 +48,18 @@ func NewInterval(value string) (Interval, error) {
 		return "", ErrInvalidInterval
 	}
 }
+
+// daysPerBar returns the approximate calendar days each bar of the given interval spans.
+// Used by EffectiveLookbackDays to size lookback windows correctly across cadences.
+// Intraday intervals are treated as identity (multiplier 1.0) — their bars are sub-daily,
+// so a calendar-day lookback already over-provisions them.
+func daysPerBar(i Interval) float64 {
+	switch i {
+	case Interval1W:
+		return 7.0
+	case Interval1M:
+		return 30.0
+	default:
+		return 1.0 // 1D and all intraday: identity
+	}
+}

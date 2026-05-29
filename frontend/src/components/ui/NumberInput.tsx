@@ -86,8 +86,17 @@ export function NumberInput({
   }, [])
 
   return (
+    // type="text" + inputMode="decimal" replaces type="number" deliberately:
+    //   * Removes the browser's spinner icons (only rendered on type=number).
+    //   * Removes the ArrowUp/ArrowDown auto-increment behavior (also gated
+    //     on type=number).
+    //   * Still pops up the decimal keyboard on mobile via inputMode.
+    // commitValue already runs parseFloat + isNaN, so non-numeric input is
+    // rejected on debounce/blur with the same UX as before.
     <input
-      type="number"
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
       className={className}
       value={localValue}
       onChange={handleChange}

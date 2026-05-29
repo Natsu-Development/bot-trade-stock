@@ -65,12 +65,18 @@ func (a *App) StopSchedulers() {
 // Called by the SIGHUP handler in cmd/server/main.go; non-fatal on error —
 // the prior credential snapshot is preserved on parse failure.
 func (a *App) ReloadCredentials() error {
+	if a.infra.CredStore == nil {
+		return nil
+	}
 	return a.infra.CredStore.Reload()
 }
 
 // CurrentCredentialMintedAt returns the MintedAt timestamp of the current SSI
 // credential snapshot. Used by the SIGHUP handler to log reload events.
 func (a *App) CurrentCredentialMintedAt() time.Time {
+	if a.infra.CredStore == nil {
+		return time.Time{}
+	}
 	return a.infra.CredStore.Current().MintedAt
 }
 

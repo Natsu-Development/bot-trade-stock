@@ -1,8 +1,11 @@
 package registry
 
 import (
+	"time"
+
 	"bot-trade/application/port/inbound"
 	"bot-trade/application/port/outbound"
+	appService "bot-trade/application/service"
 	appPrep "bot-trade/application/usecase/analyze/prep"
 	appRsi "bot-trade/application/usecase/analyze/rsi"
 	appTrendline "bot-trade/application/usecase/analyze/trendline"
@@ -21,20 +24,27 @@ type JobDependencies struct {
 	// Specialized use cases for jobs (pure analysis, no I/O)
 	BullishRSIUC *appRsi.BullishRSIUseCase
 	BearishRSIUC *appRsi.BearishRSIUseCase
-
-	// Trendline use cases
-	BreakoutUC  *appTrendline.BreakoutUseCase
-	BreakdownUC *appTrendline.BreakdownUseCase
+	BreakoutUC   *appTrendline.BreakoutUseCase
+	BreakdownUC  *appTrendline.BreakdownUseCase
 
 	// Stock metrics manager
 	StockMetricsManager inbound.StockMetricsManager
 
 	// Shared dependencies
-	Notifier       outbound.Notifier
-	ConfigRepo     outbound.ConfigRepository
-	QuoteProvider  outbound.QuoteProvider
-	AlertEvaluator *alertservice.AlertEvaluator
-	Config         *config.InfraConfig
+	Notifier          outbound.Notifier
+	ConfigRepo        outbound.ConfigRepository
+	QuoteProvider     outbound.QuoteProvider
+	AlertEvaluator    *alertservice.AlertEvaluator
+	ConditionDisabler *appService.ConditionDisabler
+	Config            *config.InfraConfig
+
+	// MarketTimezone is the HoSE-local timezone (Asia/Ho_Chi_Minh by default,
+	// loaded once at startup from CRON_TIMEZONE in wire/app.go).
+	// Job factories that gate on HoSE trading sessions (currently only
+	// StockAlertJob) read it via this injected field rather than calling
+	// time.LoadLocation themselves, keeping the binary's view of "Vietnam
+	// time" single-sourced.
+	MarketTimezone *time.Location
 }
 
 // JobFactory creates one or more job instances from dependencies.

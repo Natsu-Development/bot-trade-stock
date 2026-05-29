@@ -19,6 +19,12 @@ type JobConfig struct {
 	Timeout     time.Duration
 	Concurrency int
 	Intervals   map[string]IntervalConfig
+	// IgnoreSessionGate, when true, makes the job execute every cron tick
+	// regardless of the HoSE intraday session window. Intended for local
+	// development; production should leave this false so ATO (09:00-09:15)
+	// and lunch (11:30-13:00) ticks are skipped. Currently consumed only by
+	// StockAlertJob (env: STOCK_ALERT_IGNORE_SESSION_GATE).
+	IgnoreSessionGate bool
 }
 
 // InfraConfig holds infrastructure configuration loaded from environment variables.
@@ -52,9 +58,6 @@ type InfraConfig struct {
 	// Logging Configuration
 	LogLevel    string
 	Environment string // development, production
-
-	// Signal Configuration
-	SignalDaysThreshold int // Days a signal is considered valid
 
 	// Cron Configuration
 	CronTimezone string // Cron scheduler timezone (e.g., "Asia/Ho_Chi_Minh")
@@ -91,10 +94,15 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	cfg.MongoDBDatabase = getStringEnv("MONGODB_DATABASE", &errors)
 
 	// Job Configurations
-	cfg.BullishJob = loadJobTypeConfig("BULLISH", &errors)
-	cfg.BearishJob = loadJobTypeConfig("BEARISH", &errors)
-	cfg.BreakoutJob = loadJobTypeConfig("BREAKOUT", &errors)
-	cfg.BreakdownJob = loadJobTypeConfig("BREAKDOWN", &errors)
+	// RSI divergence jobs run on 1H/1D/1W. Breakout/breakdown intentionally omit
+	// 1D: the daily trendline approach is already covered in real time by the
+	// tick alert job's trendline_breakout / trendline_breakdown conditions
+	// (metrics.{Resistance,Support}Level are built from 1D trendlines), so a 1D
+	// MTF run would duplicate it. The MTF jobs add value on 1H/1W.
+	cfg.BullishJob = loadJobTypeConfig("BULLISH", []string{"1H", "1D", "1W"}, &errors)
+	cfg.BearishJob = loadJobTypeConfig("BEARISH", []string{"1H", "1D", "1W"}, &errors)
+	cfg.BreakoutJob = loadJobTypeConfig("BREAKOUT", []string{"1H", "1W"}, &errors)
+	cfg.BreakdownJob = loadJobTypeConfig("BREAKDOWN", []string{"1H", "1W"}, &errors)
 	cfg.StockRefresh = loadStockRefreshConfig(&errors)
 	cfg.StockAlert = loadStockAlertConfig(&errors)
 
@@ -102,14 +110,18 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	cfg.LogLevel = getLogLevelEnv("LOG_LEVEL", &errors)
 	cfg.Environment = getEnvironmentEnv("ENVIRONMENT", &errors)
 
-	// Signal Configuration
-	cfg.SignalDaysThreshold = getNumberEnv("SIGNAL_DAYS_THRESHOLD", &errors)
-
 	// Cron Configuration
 	cfg.CronTimezone = getStringEnv("CRON_TIMEZONE", &errors)
 
 	// SSI Configuration
-	cfg.SSICredentialsEnvPath = getStringEnv("SSI_CREDENTIALS_ENV_PATH", &errors)
+	// Credentials are required + fail-fast verified only in production, where SSI
+	// gates the quote API behind a Cloudflare challenge. Non-production fetches
+	// quotes without the challenge, so the path is optional there.
+	if cfg.Environment == "production" {
+		cfg.SSICredentialsEnvPath = getStringEnv("SSI_CREDENTIALS_ENV_PATH", &errors)
+	} else {
+		cfg.SSICredentialsEnvPath = getOptionalStringEnv("SSI_CREDENTIALS_ENV_PATH")
+	}
 
 	if len(errors) > 0 {
 		return nil, fmt.Errorf("configuration validation failed:\n%s", strings.Join(errors, "\n"))
@@ -118,16 +130,19 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	return cfg, nil
 }
 
-// loadJobTypeConfig loads a job type configuration from environment.
-func loadJobTypeConfig(prefix string, errors *[]string) JobConfig {
+// loadJobTypeConfig loads a job type configuration from environment for the
+// given intervals. Only the listed intervals' *_ENABLED/*_SCHEDULE env vars are
+// read, so a job type that omits an interval (breakout/breakdown omit 1D)
+// neither requires nor consumes that interval's env vars.
+func loadJobTypeConfig(prefix string, intervals []string, errors *[]string) JobConfig {
+	ivMap := make(map[string]IntervalConfig, len(intervals))
+	for _, iv := range intervals {
+		ivMap[iv] = loadIntervalConfig(prefix, iv, errors)
+	}
 	return JobConfig{
 		Timeout:     time.Duration(getNumberEnv(prefix+"_TIMEOUT_MINUTES", errors)) * time.Minute,
 		Concurrency: getNumberEnv(prefix+"_CONCURRENCY", errors),
-		Intervals: map[string]IntervalConfig{
-			"1H": loadIntervalConfig(prefix, "1H", errors),
-			"1D": loadIntervalConfig(prefix, "1D", errors),
-			"1W": loadIntervalConfig(prefix, "1W", errors),
-		},
+		Intervals:   ivMap,
 	}
 }
 
@@ -156,7 +171,8 @@ func loadStockRefreshConfig(errors *[]string) JobConfig {
 // loadStockAlertConfig loads stock alert job configuration.
 func loadStockAlertConfig(errors *[]string) JobConfig {
 	return JobConfig{
-		Timeout: time.Duration(getNumberEnv("STOCK_ALERT_TIMEOUT_MINUTES", errors)) * time.Minute,
+		Timeout:           time.Duration(getNumberEnv("STOCK_ALERT_TIMEOUT_MINUTES", errors)) * time.Minute,
+		IgnoreSessionGate: getBoolEnv("STOCK_ALERT_IGNORE_SESSION_GATE", errors),
 		Intervals: map[string]IntervalConfig{
 			"default": {
 				Enabled:  getBoolEnv("STOCK_ALERT_ENABLED", errors),
@@ -179,4 +195,3 @@ func (c *InfraConfig) Logger() LoggerConfig {
 		Environment: c.Environment,
 	}
 }
-
