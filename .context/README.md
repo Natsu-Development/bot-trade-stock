@@ -23,7 +23,8 @@ This directory is the shared implementation context for this repository. It is p
 | --- | --- |
 | Go implementation, review, linting, concurrency, error handling, testing, or static analysis | `skills/golang-mastery/SKILL.md` |
 | Go backend architecture, Clean Architecture, DDD, ports/adapters, `backend` layering | `skills/clean-architecture/SKILL.md` |
-| React + TypeScript frontend components, hooks, API client, UI conventions | `skills/frontend-patterns/SKILL.md` |
+| React + TypeScript frontend components, hooks, API client, state, conventions | `skills/frontend-patterns/SKILL.md` |
+| Frontend design system — tokens, `ui/` primitives, CVA variants, icons, animation, lint rules | `skills/frontend-patterns/references/ui-kit.md` |
 | Trading logic, RSI divergence, trendlines, RS Rating, alerts, stock metrics | `skills/trading-domain/SKILL.md` |
 
 ## Runbook Lookup
@@ -47,4 +48,5 @@ This directory is the shared implementation context for this repository. It is p
 
 - Keep this directory limited to project facts, conventions, domain guidance, skill-shaped project context, and operational runbooks.
 - Do not add tool-specific orchestration prompts, model routing, session state, or runtime workflow instructions here.
+- **Tool-agnostic rule:** keep agent/harness names (assistant brands, plugin or MCP tool names, session-runtime paths) out of `.context/` **and** `wiki/` — these are shared knowledge for *any* agent. Tool-specific wiring belongs in that tool's own config (`CLAUDE.md`, `AGENTS.md`, …), which points *at* these folders. Known exception: `policies/delegation-playbook.md` is agent-orchestration tooling and is flagged as such in its own header.
 - Keep this as the only README in `.context/`; update this index when adding or moving context files.

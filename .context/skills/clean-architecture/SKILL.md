@@ -34,44 +34,56 @@ Guidelines for implementing Clean Architecture with Domain-Driven Design pattern
 
 ## Directory Structure
 
+Domain is grouped **by bounded context** (not by type) — each context owns its
+own `aggregate/` / `service/` / `valueobject/` subpackages.
+
 ```
 backend/
-├── domain/
-│   ├── aggregate/          # Domain aggregates (Analysis, Config, Market)
-│   │   ├── analysis/       # DivergenceType, AnalysisResult
-│   │   ├── config/         # TradingConfig aggregate root
-│   │   └── market/         # Signal, Query, Indicator types
-│   └── service/            # Domain services (pure business logic)
-│       ├── divergence/     # RSI divergence detection
-│       ├── trendline/      # Trendline detection
-│       └── stockmetrics/   # RS Rating calculation
+├── domain/                     # Pure business logic, ZERO external deps
+│   ├── analysis/               # RSI divergence + trendline detection
+│   │   ├── service/
+│   │   └── valueobject/
+│   ├── config/                 # User configuration (Config aggregate root)
+│   │   ├── aggregate/
+│   │   ├── service/
+│   │   └── valueobject/
+│   ├── metrics/                # Stock metrics + indicators (StockMetrics aggregate)
+│   │   ├── aggregate/
+│   │   ├── service/
+│   │   └── valueobject/
+│   └── shared/                 # Cross-context VOs (valueobject/filter, valueobject/market)
+│       ├── service/
+│       └── valueobject/
 ├── application/
-│   ├── port/
-│   │   ├── inbound/        # Use case interfaces
-│   │   └── outbound/       # Repository/gateway interfaces
-│   ├── service/            # Application services (schedulers, jobs)
-│   └── usecase/            # Business use cases
-├── infrastructure/
-│   ├── adapter/            # External service adapters
-│   ├── mongodb/            # Repository implementations
-│   ├── port/               # Infrastructure interfaces
-│   └── telegram/           # Notification implementation
-└── presentation/http/      # API handlers, middleware
+│   ├── dto/                    # Request/response DTOs
+│   ├── jobs/                   # Scheduled jobs (registered in register.go)
+│   ├── port/                   # inbound (use-case) + outbound (gateway/repo) interfaces
+│   ├── service/                # Application services
+│   └── usecase/                # Business use cases (e.g. analyze/orchestrator.go)
+├── infrastructure/             # Implements outbound ports (✅ external deps)
+│   ├── credentials/            # SSI credential snapshot
+│   ├── cron/                   # Scheduler
+│   ├── http/                   # HTTP client (retry transport, provider pool)
+│   ├── metrics/                # Metrics infrastructure
+│   ├── mongodb/                # Repository implementations
+│   ├── provider/               # Market-data providers (sources/)
+│   └── telegram/               # Notification implementation
+└── presentation/http/          # handler/, middleware/, response/ (Gin)
 ```
 
 ## Key Patterns
 
 ### Aggregate Root
 ```go
-// domain/aggregate/config/trading_config.go
-type TradingConfig struct {
+// domain/config/aggregate/config.go
+type Config struct {
     ID          string
     Watchlist   []string
     Timeframes  []string
     // Business methods here
 }
 
-func (c *TradingConfig) AddSymbol(symbol string) error {
+func (c *Config) AddSymbol(symbol string) error {
     // Business validation
     if c.hasSymbol(symbol) {
         return errors.New("symbol already exists")
@@ -96,14 +108,14 @@ type ConfigRepository struct {
     collection *mongo.Collection
 }
 
-func (r *ConfigRepository) Save(ctx context.Context, config *config.TradingConfig) error {
+func (r *ConfigRepository) Save(ctx context.Context, config *config.Config) error {
     // Implementation details
 }
 ```
 
 ### Use Case
 ```go
-// application/usecase/analyze.go
+// application/usecase/analyze/orchestrator.go
 type AnalyzeUseCase struct {
     marketGateway   outbound.MarketDataGateway
     divergenceSvc   *divergence.Detector

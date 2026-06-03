@@ -113,5 +113,5 @@ cd backend && go test ./infrastructure/credentials ./infrastructure/provider/sou
 ```
 
 ## Related pages
-- [Market data providers and resilience](../providers-and-resilience.md)
-- [Jobs and scheduling](../jobs-and-scheduling.md)
+- [Market data providers and resilience](providers-and-resilience.md)
+- [Jobs and scheduling](jobs-and-scheduling.md)

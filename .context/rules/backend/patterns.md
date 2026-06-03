@@ -80,7 +80,7 @@ func NewWatchlistType(value string) (WatchlistType, error) {
 
 ## Jobs (`application/jobs/`)
 
-- Registered in `registry.go` with cron schedule
+- Registered in `register.go` with cron schedule
 - Naming: `{action}_{target}.go` (e.g., `analyze_bearish.go`, `refresh_stock_data.go`)
 - Delegate to use cases, no direct infrastructure access
 

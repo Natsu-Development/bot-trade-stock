@@ -12,8 +12,8 @@
 
 ## ADRs
 
-- [ADR 0001: Use host-side SSI cookie refresh](adr/0001-use-host-side-ssi-cookie-refresh.md)
-- [ADR 0002: Two-track alert + analyze job architecture](adr/0002-two-track-alert-and-analyze-architecture.md)
+- [ADR 0001: Use host-side SSI cookie refresh](adr-0001-use-host-side-ssi-cookie-refresh.md)
+- [ADR 0002: Two-track alert + analyze job architecture](adr-0002-two-track-alert-and-analyze-architecture.md)
 
 ## debugging
 

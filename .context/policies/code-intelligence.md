@@ -2,11 +2,11 @@
 
 Mandatory pre- and post-edit workflow when changing code in this repository. Applies to every agent, runtime, and human contributor.
 
-This file is the **single source of truth** for GitNexus and gopls usage. Top-level operating contracts (`AGENTS.md`, `CLAUDE.md`) point at this file rather than restating it. When inline blocks in those files disagree with this policy (e.g. after a `gitnexus ai-context` regeneration), this file wins.
+This file is the **single source of truth** for GitNexus and gopls usage. The top-level operating contract (`CLAUDE.md`, plus any per-agent config a tool later adds) points at this file rather than restating it. When inline blocks in those files disagree with this policy (e.g. after a `gitnexus ai-context` regeneration), this file wins.
 
 ## GitNexus — Blast Radius & Graph Awareness
 
-This project is indexed by GitNexus as **bot-trade-stock** (3497 symbols, 8696 relationships, 248 execution flows). The graph is the source of truth for "what will break if I change X?".
+This project is indexed by GitNexus as **bot-trade-stock** (~3,500 symbols / ~8,700 relationships / ~250 execution flows — approximate; the live index is authoritative, query it for exact counts). The graph is the source of truth for "what will break if I change X?".
 
 ### Always
 
@@ -37,7 +37,7 @@ This project is indexed by GitNexus as **bot-trade-stock** (3497 symbols, 8696 r
 
 ### Index freshness
 
-If any GitNexus tool warns the index is stale, run `npx gitnexus@1.6.5 analyze --embeddings` before relying on its output. The version is pinned (`1.6.5`) — both the MCP server and the index must share a schema. See `.omc/wiki/toolchain-setup-gitnexus-lsp-go-lsp.md`.
+If any GitNexus tool warns the index is stale, run `npx gitnexus@1.6.5 analyze --embeddings` before relying on its output. The version is pinned (`1.6.5`) — both the MCP server and the index must share a schema, so a floating `@latest` risks a schema mismatch with the on-disk index.
 
 ## gopls — Go Semantic Correctness
 
@@ -82,7 +82,7 @@ For `backend/**/*.go`, gopls is the source of truth for "is this Go valid, where
 
 **Post-edit (automatic):**
 
-The `PostToolUse` hook in `.claude/settings.json` runs `scripts/go-check.sh` on every `Edit|Write|MultiEdit` to a `*.go` file (gofmt / go vet / golangci-lint / TODO scan) and on `go.mod` (`go mod verify` / `govulncheck`). The hook fires at the Claude Code harness level — **it covers OMC sub-agent edits within the same session**. Findings come back as a single `additionalContext` JSON block. See `.context/runbooks/go-hooks.md` for the dispatcher contract.
+The `PostToolUse` hook in `.claude/settings.json` runs `scripts/go-check.sh` on every `Edit|Write|MultiEdit` to a `*.go` file (gofmt / go vet / golangci-lint / TODO scan) and on `go.mod` (`go mod verify` / `govulncheck`). The hook fires at the editor/agent-harness level — **it covers sub-agent edits within the same session**. Findings come back as a single `additionalContext` JSON block. See `.context/runbooks/go-hooks.md` for the dispatcher contract.
 
 **Pre-edit (NOT automatic — agent responsibility):**
 
@@ -96,25 +96,16 @@ Consequence: when work is delegated to OMC sub-agents (`executor`, `code-reviewe
 
 ## Delegation contract
 
-When delegating Go edits to OMC sub-agents, the task prompt **must** include this preamble:
+Sub-agent prompts carry no GitNexus references of their own, so every code-edit delegation **must** include the graph-aware preamble. **The authoritative, phase-specific preambles are assembled by [`../../scripts/delegate.sh`](../../scripts/delegate.sh) from [`delegation-playbook.md`](delegation-playbook.md)** — use those rather than hand-writing one.
 
-```
-Before editing any Go symbol in backend/**/*.go:
-1. Run `mcp__gitnexus__impact({target: "<symbolName>", direction: "upstream"})`.
-2. Report direct callers, affected flows, and risk level.
-3. Refuse to proceed on HIGH/CRITICAL risk without explicit confirmation.
+At minimum, every code-edit delegation must inline:
+- `gitnexus_impact` (direction `upstream`) **before** editing a symbol → report callers / flows / risk; stop on HIGH/CRITICAL for confirmation.
+- `gitnexus_detect_changes()` **before** completing → flag any unexpected symbol or flow.
 
-Before completing the task:
-4. Run `mcp__gitnexus__detect_changes()`.
-5. Report only the symbols/flows that should have changed; flag anything unexpected.
-
-Read .context/policies/code-intelligence.md for the full policy.
-```
-
-Without this preamble, the sub-agent will edit without impact analysis. The `PostToolUse` hook protects code quality (formatting, lint, vuln); it does not enforce graph-aware editing.
+Without this, the sub-agent edits without impact analysis. The `PostToolUse` hook protects code quality (formatting, lint, vuln); it does **not** enforce graph-aware editing.
 
 ## Related
 
 - Path-specific Go coding rules: [`../rules/backend/`](../rules/backend/)
 - Go save-time check dispatcher: [`../runbooks/go-hooks.md`](../runbooks/go-hooks.md)
-- Toolchain version pinning: `.omc/wiki/toolchain-setup-gitnexus-lsp-go-lsp.md`
+- Toolchain version pinning rationale: see the "Index freshness" section above

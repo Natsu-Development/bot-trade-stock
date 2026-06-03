@@ -476,9 +476,9 @@ keep quote price handling in one layer (infra) and drop the domain abstraction.
 
 ## Related pages
 
-- [Jobs and scheduling](../jobs-and-scheduling.md) — cron lanes, timeouts,
+- [Jobs and scheduling](jobs-and-scheduling.md) — cron lanes, timeouts,
   per-job schedules.
-- [Backend architecture](../backend-architecture.md) — DDD layers, port/
+- [Backend architecture](backend-architecture.md) — DDD layers, port/
   adapter boundaries, where alert + analyze sit.
 - [ADR 0001: Use host-side SSI cookie refresh](0001-use-host-side-ssi-cookie-refresh.md) —
   the `ssi-quote` provider this track depends on; the SIGHUP-driven

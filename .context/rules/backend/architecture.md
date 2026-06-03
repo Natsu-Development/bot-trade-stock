@@ -18,7 +18,8 @@ paths:
 |-------|---------|---------------|
 | `domain/` | Core business logic, bounded contexts | ❌ None |
 | `application/` | Use cases, jobs, DTOs, ports | ❌ None (only interfaces) |
-| `infrastructure/` | Handlers, repositories, providers | ✅ Yes |
+| `infrastructure/` | Repositories, providers, external adapters (Mongo, HTTP, Telegram, cron) | ✅ Yes |
+| `presentation/http/` | HTTP handlers, middleware, router | ✅ Yes |
 | `cmd/` | Entrypoint | ✅ Yes |
 | `pkg/` | Shared utilities | ⚠️ Minimal |
 
@@ -51,8 +52,8 @@ paths:
 | Use cases | `application/usecase/` | `analyze_divergence.go` |
 | Jobs | `application/jobs/` | `refresh_stock_data.go` |
 | DTOs | `application/dto/` | `AnalyzeRequest` |
-| Handlers | `infrastructure/handler/` | `config_handler.go` |
-| Repositories | `infrastructure/repository/` | `config_repository.go` |
+| Handlers | `presentation/http/handler/` | `stock.go`, `config.go` |
+| Repositories | `infrastructure/mongodb/` | `config_repository.go` |
 | Providers | `infrastructure/provider/sources/` | `vietcap.go` |
 
 ## Interface rules (path-specific summary)

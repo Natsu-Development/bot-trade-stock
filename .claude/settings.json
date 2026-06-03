@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/go-check.sh",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)}/scripts/go-check.sh\"",
             "timeout": 60,
             "statusMessage": "Running Go checks (gofmt/vet/lint or mod verify/vuln)…"
           }

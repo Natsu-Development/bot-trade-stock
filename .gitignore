@@ -44,6 +44,10 @@ x``
 .gitnexus/
 .codex/
 
+# OMC-managed wiki bookkeeping (wiki/ is symlinked into .omc/wiki; OMC regenerates these)
+wiki/log.md
+wiki/environment.md
+
 # Playwright test files
 e2e/node_modules/
 e2e/playwright-report/

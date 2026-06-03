@@ -1,216 +1,132 @@
 # Production Patterns
 
-## Graceful Shutdown
+Production-readiness patterns for **this** stack: **Gin** (HTTP), **zap** (logging), **MongoDB**
+(storage), **robfig/cron** (scheduling), `golang.org/x/sync` (concurrency). Where the codebase
+already implements a pattern, the location is cited — extend those rather than re-introducing a
+parallel mechanism.
+
+## Graceful shutdown
+
+`cmd/server/main.go` builds a `wire.App`, starts the Gin server, then blocks on `waitForShutdown`
+(SIGINT / SIGTERM / SIGHUP) and calls `srv.Shutdown()` bounded by `cfg.HTTPShutdownTimeout`. All
+lifecycle events log through `zap.L()`.
 
 ```go
-func main() {
-    srv := &http.Server{Addr: ":8080", Handler: mux}
-
-    go func() {
-        if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-            slog.Error("server error", "err", err)
-        }
-    }()
-
-    quit := make(chan os.Signal, 1)
-    signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-    <-quit
-
-    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-    defer cancel()
-
-    if err := srv.Shutdown(ctx); err != nil {
-        slog.Error("forced shutdown", "err", err)
-    }
-    slog.Info("server stopped")
+srv.Start()                              // non-blocking; logs "HTTP server starting"
+waitForShutdown(app)                     // blocks on SIGINT/SIGTERM/SIGHUP
+zap.L().Info("Shutting down...")
+if err := srv.Shutdown(); err != nil {   // bounded by HTTPShutdownTimeout
+    zap.L().Error("Server shutdown error", zap.Error(err))
 }
 ```
 
-## Structured Logging (slog, Go 1.21+)
+SIGHUP additionally hot-reloads SSI credentials without a restart — see ADR
+`wiki/adr/0001-use-host-side-ssi-cookie-refresh.md`.
+
+## Structured logging — zap (NOT slog)
+
+The project standard is **`go.uber.org/zap`** via the global `zap.L()` (see `rules/backend/style.md`).
+Do not introduce `log/slog`.
 
 ```go
-// Setup
-logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-    Level: slog.LevelInfo,
-}))
-slog.SetDefault(logger)
-
-// Usage
-slog.Info("request", "method", r.Method, "path", r.URL.Path, "status", status, "duration", duration)
-slog.Error("db query failed", "err", err, "query", query)
-
-// With context (request-scoped fields)
-logger := slog.With("request_id", reqID, "user_id", userID)
-logger.Info("processing order", "order_id", orderID)
+zap.L().Info("request",
+    zap.String("method", c.Request.Method),
+    zap.String("path", c.FullPath()),
+    zap.Int("status", status),
+    zap.Duration("duration", elapsed),
+)
+zap.L().Error("db query failed", zap.Error(err), zap.String("collection", "metrics"))
 ```
 
-## Middleware Pattern
+- Use typed fields (`zap.String`, `zap.Int`, `zap.Error`) — never `fmt.Sprintf` into the message.
+- Attach request-scoped fields with `logger := zap.L().With(zap.String("request_id", id))`.
+
+## Gin middleware
+
+Middleware lives in `presentation/http/middleware/`. Use `gin.HandlerFunc`:
 
 ```go
-type Middleware func(http.Handler) http.Handler
-
-func Logging(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func RequestLogger() gin.HandlerFunc {
+    return func(c *gin.Context) {
         start := time.Now()
-        next.ServeHTTP(w, r)
-        slog.Info("request", "method", r.Method, "path", r.URL.Path, "duration", time.Since(start))
-    })
+        c.Next()
+        zap.L().Info("request",
+            zap.String("path", c.FullPath()),
+            zap.Int("status", c.Writer.Status()),
+            zap.Duration("duration", time.Since(start)),
+        )
+    }
 }
 
-func Auth(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        token := r.Header.Get("Authorization")
-        if token == "" {
-            http.Error(w, "unauthorized", http.StatusUnauthorized)
-            return
-        }
-        // validate token, add user to context...
-        next.ServeHTTP(w, r)
-    })
-}
-
-// Chain
-handler := Logging(Auth(mux))
+// register: router.Use(RequestLogger(), gin.Recovery())
 ```
 
-## Health Check
+`gin.Recovery()` provides panic recovery; wrap it (or add a custom recovery) so the stack is logged
+through `zap` and the client gets a 500 via the `presentation/http/response` envelope.
+
+## Health check
 
 ```go
-func HealthHandler(w http.ResponseWriter, r *http.Request) {
-    checks := map[string]string{
-        "status": "ok",
-        "db":     "ok",
+// GET /health — registered in presentation/http/router.go
+func (h *HealthHandler) Health(c *gin.Context) {
+    if err := h.mongo.Ping(c.Request.Context(), nil); err != nil {
+        c.JSON(http.StatusServiceUnavailable, gin.H{"status": "degraded", "db": "down"})
+        return
     }
-    if err := db.Ping(); err != nil {
-        checks["db"] = "unhealthy"
-        w.WriteHeader(http.StatusServiceUnavailable)
-    }
-    json.NewEncoder(w).Encode(checks)
+    c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 ```
 
-## Rate Limiting (Per-IP)
+## MongoDB connection
+
+Storage is MongoDB via the official driver — there is no `database/sql`. Construct the client once
+at startup, reuse it, and set pool bounds on the client options.
 
 ```go
-import "golang.org/x/time/rate"
+opts := options.Client().
+    ApplyURI(cfg.MongoURI).
+    SetMaxPoolSize(cfg.MongoMaxPool).
+    SetServerSelectionTimeout(5 * time.Second)
 
-type IPRateLimiter struct {
-    mu       sync.Mutex
-    limiters map[string]*rate.Limiter
-    rps      int
-    burst    int
-}
-
-func (rl *IPRateLimiter) GetLimiter(ip string) *rate.Limiter {
-    rl.mu.Lock()
-    defer rl.mu.Unlock()
-    l, exists := rl.limiters[ip]
-    if !exists {
-        l = rate.NewLimiter(rate.Limit(rl.rps), rl.burst)
-        rl.limiters[ip] = l
-    }
-    return l
-}
-
-func RateLimit(limiter *IPRateLimiter) Middleware {
-    return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            if !limiter.GetLimiter(r.RemoteAddr).Allow() {
-                http.Error(w, "too many requests", http.StatusTooManyRequests)
-                return
-            }
-            next.ServeHTTP(w, r)
-        })
-    }
-}
-```
-
-## Panic Recovery
-
-```go
-func Recovery(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        defer func() {
-            if err := recover(); err != nil {
-                slog.Error("panic recovered", "err", err, "stack", string(debug.Stack()))
-                http.Error(w, "internal server error", http.StatusInternalServerError)
-            }
-        }()
-        next.ServeHTTP(w, r)
-    })
-}
-```
-
-## Database Connection Pool
-
-```go
-db, err := sql.Open("postgres", connStr)
+client, err := mongo.Connect(ctx, opts)
 if err != nil { return err }
-
-db.SetMaxOpenConns(25)
-db.SetMaxIdleConns(5)
-db.SetConnMaxLifetime(5 * time.Minute)
-db.SetConnMaxIdleTime(1 * time.Minute)
-
-// Always use context
-ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-defer cancel()
-row := db.QueryRowContext(ctx, "SELECT ...")
+if err := client.Ping(ctx, nil); err != nil { return err }
+// repositories take a *mongo.Collection (see infrastructure/mongodb/)
 ```
 
-## Circuit Breaker
+Always pass a `context.Context` with a deadline to driver calls.
 
-```go
-type CircuitBreaker struct {
-    mu          sync.Mutex
-    failures    int
-    maxFailures int
-    state       string  // "closed", "open", "half-open"
-    lastFailure time.Time
-    cooldown    time.Duration
-}
+## External-API resilience (already implemented)
 
-func (cb *CircuitBreaker) Execute(fn func() error) error {
-    cb.mu.Lock()
-    if cb.state == "open" {
-        if time.Since(cb.lastFailure) > cb.cooldown {
-            cb.state = "half-open"
-        } else {
-            cb.mu.Unlock()
-            return errors.New("circuit breaker open")
-        }
-    }
-    cb.mu.Unlock()
+External market data is the main systemic risk; the codebase already mitigates it — extend these,
+don't reinvent:
 
-    err := fn()
+- **Provider pool with failover** — `infrastructure/provider/pool.go` (`ProviderPool.FetchData`).
+- **AIMD rate control + retry** — `infrastructure/http/retry_transport.go`.
+- **`singleflight`** dedupes concurrent `Refresh` calls (`golang.org/x/sync/singleflight`).
+- **Bounded fan-out** — `errgroup` with `SetLimit`.
+- **Lock-free hot reads** — `StockMetrics` published via `atomic.Pointer`; the 15s alert job reads
+  without locking (the published map is immutable — preserve that on any change).
 
-    cb.mu.Lock()
-    defer cb.mu.Unlock()
-    if err != nil {
-        cb.failures++
-        cb.lastFailure = time.Now()
-        if cb.failures >= cb.maxFailures {
-            cb.state = "open"
-        }
-        return err
-    }
-    cb.failures = 0
-    cb.state = "closed"
-    return nil
-}
-```
+The two-track alert + analyze design is recorded in ADR
+`wiki/adr/0002-two-track-alert-and-analyze-architecture.md`. Add a new circuit breaker only if a
+flaky dependency isn't already covered by the pool / retry transport.
 
-## Production Checklist
+## Body-size & request limits
 
-- [ ] Graceful shutdown with signal handling
-- [ ] Structured logging (slog JSON)
-- [ ] Health check endpoint (`/health` or `/healthz`)
-- [ ] Panic recovery middleware
-- [ ] Request timeouts (read, write, idle)
-- [ ] Database connection pool limits
-- [ ] Rate limiting for public endpoints
-- [ ] CORS configuration if serving web clients
-- [ ] Metrics endpoint (Prometheus `/metrics`)
-- [ ] Context propagation through all layers
-- [ ] Error wrapping with context at each layer
+`POST /stocks/filter` caps the body with `http.MaxBytesReader` before decoding, and the filter tree
+enforces depth/condition caps (`FilterNode.Validate`). Apply the same defense-in-depth to any new
+endpoint that accepts recursive or unbounded input.
+
+## Production checklist
+
+- [ ] Graceful shutdown on SIGINT/SIGTERM (+ SIGHUP for credential reload)
+- [ ] Structured logging via `zap.L()` (no `slog`, no bare `fmt` in messages)
+- [ ] `/health` endpoint pings MongoDB
+- [ ] `gin.Recovery()` (or a custom zap recovery) registered
+- [ ] Request timeouts + body-size caps (`http.MaxBytesReader`) on input-accepting routes
+- [ ] MongoDB client pool bounds set; every driver call takes a `ctx` with a deadline
+- [ ] External calls go through the provider pool / retry transport (no raw `http.Get`)
+- [ ] Context propagated through all layers
+- [ ] Errors wrapped with `%w` where callers inspect; handled once (no log + return)
 - [ ] Race detector clean (`go test -race ./...`)

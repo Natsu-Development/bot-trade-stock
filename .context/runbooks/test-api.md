@@ -24,10 +24,17 @@ curl http://localhost:8080/config/{ID}
 # Analyze stock
 curl http://localhost:8080/analyze/VIC
 
-# Filter stocks with screener
+# Filter stocks with screener (react-querybuilder tree-only schema).
+# Body: a recursive FilterNode under "root" + optional outer-AND "exchanges".
+#   rule  = {field, operator, value}
+#   group = {"combinator":"and"|"or","not"?:bool,"rules":[...]}
+# Fields: rs_1m, rs_3m, rs_6m, rs_9m, rs_52w, volume_vs_sma, current_volume,
+#         volume_sma20, and signal (boolean) fields. Operators: >=, <=, >, <, =
+#   (signal fields use operator "=" with value true/false).
+# Exchanges: HOSE, HNX, UPCOM. An empty root returns all stocks.
 curl -X POST http://localhost:8080/stocks/filter \
   -H "Content-Type: application/json" \
-  -d '{"filters": [{"field": "rs_rating", "operator": "gte", "value": 80}]}'
+  -d '{"root": {"combinator": "and", "rules": [{"field": "rs_52w", "operator": ">=", "value": 80}]}, "exchanges": ["HOSE"]}'
 
 # Refresh metrics
 curl -X POST http://localhost:8080/stocks/refresh
