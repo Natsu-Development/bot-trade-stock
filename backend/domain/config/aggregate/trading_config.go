@@ -35,11 +35,11 @@ type TradingConfig struct {
 	// MetricsFilter holds user-saved screener filter configurations.
 	// Nil = not set, empty array = user cleared their filters.
 	MetricsFilter []valueobject.MetricsFilter `bson:"metrics_filter,omitempty"`
-	// Alerts holds user-configured price/volume alerts.
-	// Nil = not set, empty array = user cleared their alerts.
-	Alerts    []valueobject.StockAlertConfig `bson:"alerts,omitempty"`
-	CreatedAt time.Time                      `bson:"created_at"`
-	UpdatedAt time.Time                      `bson:"updated_at"`
+	// Watchlist holds user-configured price/volume watchlist items.
+	// Nil = not set, empty array = user cleared their watchlist.
+	Watchlist []valueobject.WatchlistItem `bson:"watchlist,omitempty"`
+	CreatedAt time.Time                   `bson:"created_at"`
+	UpdatedAt time.Time                   `bson:"updated_at"`
 }
 
 // NewTradingConfig creates a new TradingConfig with validation.
@@ -141,8 +141,8 @@ func (c *TradingConfig) Merge(update *TradingConfig) (*TradingConfig, error) {
 	}
 
 	// Always merge alerts if provided (even if empty, to allow clearing)
-	if update.Alerts != nil {
-		merged.Alerts = update.Alerts
+	if update.Watchlist != nil {
+		merged.Watchlist = update.Watchlist
 	}
 
 	merged.UpdatedAt = time.Now()
@@ -157,9 +157,9 @@ func (c *TradingConfig) Merge(update *TradingConfig) (*TradingConfig, error) {
 // SymbolsWithEnabledCondition returns the symbols whose Alerts contain an enabled
 // condition of the given type. Used by the analyze-job factories to derive their
 // symbol set from divergence conditions (wrap in a SymbolSelector closure).
-func (c *TradingConfig) SymbolsWithEnabledCondition(t valueobject.AlertType) []market.Symbol {
+func (c *TradingConfig) SymbolsWithEnabledCondition(t valueobject.TriggerType) []market.Symbol {
 	var symbols []market.Symbol
-	for _, alert := range c.Alerts {
+	for _, alert := range c.Watchlist {
 		for _, cond := range alert.Conditions {
 			if cond.Enabled && cond.Type == t {
 				symbols = append(symbols, alert.Symbol)
@@ -205,7 +205,7 @@ func (c *TradingConfig) Validate() error {
 		errs = append(errs, err.Error())
 	}
 
-	for _, alert := range c.Alerts {
+	for _, alert := range c.Watchlist {
 		if err := alert.Validate(); err != nil {
 			errs = append(errs, err.Error())
 		}
@@ -218,31 +218,31 @@ func (c *TradingConfig) Validate() error {
 	return nil
 }
 
-// AddAlert appends or replaces an alert for the given symbol.
+// AddWatchlistItem appends or replaces an alert for the given symbol.
 // If an alert for the same symbol already exists, it is replaced.
-func (c *TradingConfig) AddAlert(alert valueobject.StockAlertConfig) error {
+func (c *TradingConfig) AddWatchlistItem(alert valueobject.WatchlistItem) error {
 	if err := alert.Validate(); err != nil {
 		return err
 	}
 
-	for i, existing := range c.Alerts {
+	for i, existing := range c.Watchlist {
 		if existing.Symbol == alert.Symbol {
-			c.Alerts[i] = alert
+			c.Watchlist[i] = alert
 			c.UpdatedAt = time.Now()
 			return nil
 		}
 	}
-	c.Alerts = append(c.Alerts, alert)
+	c.Watchlist = append(c.Watchlist, alert)
 	c.UpdatedAt = time.Now()
 	return nil
 }
 
-// RemoveAlert removes an alert for the given symbol.
+// RemoveWatchlistItem removes an alert for the given symbol.
 // Idempotent: returns nil if no alert exists for the symbol.
-func (c *TradingConfig) RemoveAlert(symbol market.Symbol) error {
-	for i, existing := range c.Alerts {
+func (c *TradingConfig) RemoveWatchlistItem(symbol market.Symbol) error {
+	for i, existing := range c.Watchlist {
 		if existing.Symbol == symbol {
-			c.Alerts = append(c.Alerts[:i], c.Alerts[i+1:]...)
+			c.Watchlist = append(c.Watchlist[:i], c.Watchlist[i+1:]...)
 			c.UpdatedAt = time.Now()
 			return nil
 		}

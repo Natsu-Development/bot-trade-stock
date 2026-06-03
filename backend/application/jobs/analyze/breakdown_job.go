@@ -67,9 +67,9 @@ func NewBreakdownJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, err
 			configRepo:  deps.ConfigRepo,
 			notifier:    deps.Notifier,
 			disabler:    deps.ConditionDisabler,
-			disableType: configvo.AlertTypeBreakdownMTF,
+			disableType: configvo.TriggerTypeBreakdownMTF,
 			selectSymbols: func(cfg *configagg.TradingConfig) []marketvo.Symbol {
-				return cfg.SymbolsWithEnabledCondition(configvo.AlertTypeBreakdownMTF)
+				return cfg.SymbolsWithEnabledCondition(configvo.TriggerTypeBreakdownMTF)
 			},
 			analyze: func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, bool, error) {
 				return AnalyzeBreakdown(ctx, data, deps.BreakdownUC, interval)

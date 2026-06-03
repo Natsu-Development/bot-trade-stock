@@ -74,7 +74,7 @@ func AnalyzeBearishRSIEarly(ctx context.Context, data *appPrep.DataPrepare, uc *
 
 // NewBearishRSIJobsFromDeps builds, per enabled interval, a CONFIRMED bearish divergence
 // job and an independent EARLY bearish divergence job. Each selects + auto-disables only
-// its own AlertType, so firing one never affects the other's enabled state.
+// its own TriggerType, so firing one never affects the other's enabled state.
 func NewBearishRSIJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, error) {
 	var jobs []inbound.Job
 	jobCfg := deps.Config.BearishJob
@@ -94,9 +94,9 @@ func NewBearishRSIJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, er
 			configRepo:  deps.ConfigRepo,
 			notifier:    deps.Notifier,
 			disabler:    deps.ConditionDisabler,
-			disableType: configvo.AlertTypeBearishDivergence,
+			disableType: configvo.TriggerTypeBearishDivergence,
 			selectSymbols: func(cfg *configagg.TradingConfig) []marketvo.Symbol {
-				return cfg.SymbolsWithEnabledCondition(configvo.AlertTypeBearishDivergence)
+				return cfg.SymbolsWithEnabledCondition(configvo.TriggerTypeBearishDivergence)
 			},
 			analyze: func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, bool, error) {
 				return AnalyzeBearishRSI(ctx, data, deps.BearishRSIUC, interval)
@@ -113,9 +113,9 @@ func NewBearishRSIJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, er
 			configRepo:  deps.ConfigRepo,
 			notifier:    deps.Notifier,
 			disabler:    deps.ConditionDisabler,
-			disableType: configvo.AlertTypeBearishDivergenceEarly,
+			disableType: configvo.TriggerTypeBearishDivergenceEarly,
 			selectSymbols: func(cfg *configagg.TradingConfig) []marketvo.Symbol {
-				return cfg.SymbolsWithEnabledCondition(configvo.AlertTypeBearishDivergenceEarly)
+				return cfg.SymbolsWithEnabledCondition(configvo.TriggerTypeBearishDivergenceEarly)
 			},
 			analyze: func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, bool, error) {
 				return AnalyzeBearishRSIEarly(ctx, data, deps.BearishRSIUC, interval)

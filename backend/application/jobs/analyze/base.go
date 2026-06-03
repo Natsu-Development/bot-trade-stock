@@ -75,7 +75,7 @@ type AnalysisJob struct {
 	// disableType is the condition type this job auto-disables on a fired signal.
 	// Set per factory (bullish_divergence / bearish_divergence); identity is
 	// (symbol, type) since divergence conditions carry no reference.
-	disableType configvo.AlertType
+	disableType configvo.TriggerType
 }
 
 func (j *AnalysisJob) Metadata() inbound.JobMetadata {
@@ -159,7 +159,7 @@ func (j *AnalysisJob) analyzeSymbol(ctx context.Context, symbol string, cfg *con
 
 	// Auto-disable the fired divergence condition via the scoped per-condition write
 	// so concurrent tick-job disables on the same config are never clobbered.
-	cond := configvo.AlertCondition{Type: j.disableType}
+	cond := configvo.TriggerCondition{Type: j.disableType}
 	if err := j.disabler.Disable(ctx, string(cfg.ID), symbol, cond); err != nil {
 		zap.L().Error("Failed to persist divergence auto-disable",
 			zap.String("symbol", symbol),

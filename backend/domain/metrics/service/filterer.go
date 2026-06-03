@@ -6,70 +6,95 @@ import (
 	filtervo "backend/domain/shared/valueobject/filter"
 )
 
-// Matches checks if a stock matches the filter criteria.
-func Matches(stock *metricsagg.StockMetrics, filter *filtervo.StockFilter) bool {
-	// Check exchange filter first (always AND with other conditions)
-	if len(filter.Exchanges) > 0 && !matchesExchanges(stock, filter.Exchanges) {
+// Matches reports whether a stock satisfies the filter. Exchanges are a hard
+// outer AND (never negated); the rest is a flat two-level scope.
+func Matches(stock *metricsagg.StockMetrics, f *filtervo.StockFilter) bool {
+	// Check exchange filter first (always AND with other conditions, never negated).
+	if len(f.Exchanges) > 0 && !matchesExchanges(stock, f.Exchanges) {
 		return false
 	}
 
-	// If no field conditions, exchange match is sufficient
-	if len(filter.Conditions) == 0 {
-		return true
+	res := evalScope(stock, f.Match, f.Conditions, f.Groups)
+	if f.Negate {
+		return !res
 	}
-
-	// Apply AND or OR logic
-	if filter.Logic == filtervo.LogicOR {
-		return matchesAny(stock, filter.Conditions)
-	}
-	return matchesAll(stock, filter.Conditions) // Default to AND
+	return res
 }
 
-// matchesAll returns true if ALL conditions match (AND logic).
-func matchesAll(stock *metricsagg.StockMetrics, conditions []filtervo.FilterCondition) bool {
-	for _, condition := range conditions {
-		if !matchesCondition(stock, condition) {
+// evalScope combines a level's conditions + groups under one combinator
+// (short-circuits). Shared by the top level and each group (groups pass nil groups).
+func evalScope(stock *metricsagg.StockMetrics, m filtervo.MatchMode, conds []filtervo.Condition, groups []filtervo.Group) bool {
+	if len(conds) == 0 && len(groups) == 0 {
+		return true // empty scope = match-all; caller applies Negate
+	}
+
+	if m == filtervo.MatchOr { // OR
+		for _, c := range conds {
+			if evalCondition(stock, c) {
+				return true
+			}
+		}
+		for _, g := range groups {
+			if evalGroup(stock, g) {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, c := range conds { // AND (default)
+		if !evalCondition(stock, c) {
+			return false
+		}
+	}
+	for _, g := range groups {
+		if !evalGroup(stock, g) {
 			return false
 		}
 	}
 	return true
 }
 
-// matchesAny returns true if ANY condition matches (OR logic).
-func matchesAny(stock *metricsagg.StockMetrics, conditions []filtervo.FilterCondition) bool {
-	for _, condition := range conditions {
-		if matchesCondition(stock, condition) {
-			return true
-		}
+// evalGroup evaluates one group (conditions only, no sub-groups), applying Negate.
+func evalGroup(stock *metricsagg.StockMetrics, g filtervo.Group) bool {
+	res := evalScope(stock, g.Match, g.Conditions, nil)
+	if g.Negate {
+		return !res
 	}
-	return false
+	return res
 }
 
-// matchesCondition checks if a single condition matches.
-func matchesCondition(stock *metricsagg.StockMetrics, condition filtervo.FilterCondition) bool {
-	// Handle signal fields (boolean) with = operator
-	if condition.Field.IsSignal() {
-		return matchesSignalField(stock, condition)
+// evalCondition evaluates a single leaf condition against a stock.
+//   - signal field: direct boolean comparison;
+//   - moving-average field: compare current price vs the MA value;
+//   - numeric field: compare the field value vs the condition value.
+func evalCondition(stock *metricsagg.StockMetrics, c filtervo.Condition) bool {
+	switch {
+	case c.Field.IsSignal():
+		return getSignalFieldValue(stock, c.Field) == c.BoolValue()
+	case c.Field.IsMovingAverage():
+		return comparePriceVsMA(stock.CurrentPrice, getFieldValue(stock, c.Field), c.Op)
+	default:
+		return compareNum(getFieldValue(stock, c.Field), c.Op, c.Val())
 	}
+}
 
-	fieldValue := getFieldValue(stock, condition.Field)
-
-	// For moving average fields, compare current price against MA value
-	if condition.Field.IsMovingAverage() {
-		return comparePriceVsMA(stock.CurrentPrice, fieldValue, condition.Operator)
-	}
-
-	switch condition.Operator {
+// compareNum applies a comparison operator between two numbers.
+func compareNum(fieldValue float64, op filtervo.FilterOperator, value float64) bool {
+	switch op {
 	case filtervo.OperatorGreaterThanOrEqual:
-		return fieldValue >= condition.Value
+		return fieldValue >= value
 	case filtervo.OperatorLessThanOrEqual:
-		return fieldValue <= condition.Value
+		return fieldValue <= value
 	case filtervo.OperatorGreaterThan:
-		return fieldValue > condition.Value
+		return fieldValue > value
 	case filtervo.OperatorLessThan:
-		return fieldValue < condition.Value
+		return fieldValue < value
 	case filtervo.OperatorEqual:
-		return fieldValue == condition.Value
+		// exact float == is intentional: pre-existing behaviour carried over by the filter revamp.
+		// these metrics are never exactly equal in practice, so this branch is effectively unreachable.
+		// epsilon-comparison semantics are deliberately out of scope.
+		return fieldValue == value
 	default:
 		return false
 	}
@@ -87,7 +112,10 @@ func comparePriceVsMA(currentPrice, maValue float64, operator filtervo.FilterOpe
 	case filtervo.OperatorLessThan:
 		return currentPrice < maValue // Price below MA
 	case filtervo.OperatorEqual:
-		return currentPrice == maValue // Price equals MA
+		// exact float == is intentional: pre-existing behaviour carried over by the filter revamp.
+		// price never exactly equals an MA value in practice, so this branch is effectively unreachable.
+		// epsilon-comparison semantics are deliberately out of scope.
+		return currentPrice == maValue // price equals MA
 	default:
 		return false
 	}
@@ -141,20 +169,6 @@ func matchesExchanges(stock *metricsagg.StockMetrics, exchanges []string) bool {
 			return true
 		}
 	}
-	return false
-}
-
-// matchesSignalField checks if a signal (boolean) field matches the condition.
-// Uses direct boolean comparison - no numeric transformation.
-func matchesSignalField(stock *metricsagg.StockMetrics, condition filtervo.FilterCondition) bool {
-	boolValue := getSignalFieldValue(stock, condition.Field)
-
-	// Direct boolean comparison - only = operator is meaningful
-	if condition.Operator == filtervo.OperatorEqual {
-		return boolValue == condition.GetBoolValue()
-	}
-
-	// Other operators not supported for boolean fields
 	return false
 }
 

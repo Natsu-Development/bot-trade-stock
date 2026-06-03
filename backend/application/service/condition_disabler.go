@@ -23,7 +23,7 @@ func NewConditionDisabler(repo outbound.ConfigRepository) *ConditionDisabler {
 
 // Disable sets the matching condition's enabled flag to false via the scoped
 // per-condition update, never a whole-doc write.
-func (d *ConditionDisabler) Disable(ctx context.Context, configID, symbol string, cond configvo.AlertCondition) error {
+func (d *ConditionDisabler) Disable(ctx context.Context, configID, symbol string, cond configvo.TriggerCondition) error {
 	if err := d.repo.SetConditionEnabled(ctx, configID, symbol, cond, false); err != nil {
 		return fmt.Errorf("disable condition %s for %s: %w", cond.Type, symbol, err)
 	}

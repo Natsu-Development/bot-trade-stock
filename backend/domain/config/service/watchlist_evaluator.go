@@ -9,53 +9,53 @@ import (
 	marketvo "backend/domain/shared/valueobject/market"
 )
 
-// EvaluationResult carries the formatted output of a fired alert condition.
+// EvaluationResult carries the formatted output of a fired trigger condition.
 // Layer-neutral; the application layer projects it into outbound.Field.
 type EvaluationResult struct {
 	Label string
 	Value string
 }
 
-// AlertEvaluator evaluates alert conditions against market data + cached metrics.
+// WatchlistEvaluator evaluates trigger conditions against market data + cached metrics.
 // Stateless today; struct shape is reserved for future caches/strategies/registries
-// as the number of AlertType variants grows.
-type AlertEvaluator struct{}
+// as the number of TriggerType variants grows.
+type WatchlistEvaluator struct{}
 
-// NewAlertEvaluator constructs a new AlertEvaluator. Wire calls this once at startup
-// and injects the singleton into the alert job.
-func NewAlertEvaluator() *AlertEvaluator {
-	return &AlertEvaluator{}
+// NewWatchlistEvaluator constructs a new WatchlistEvaluator. Wire calls this once at startup
+// and injects the singleton into the watchlist job.
+func NewWatchlistEvaluator() *WatchlistEvaluator {
+	return &WatchlistEvaluator{}
 }
 
 // Evaluate returns (result, true) when the condition fires; (zero, false) otherwise.
-// SINGLE switch over AlertType in the whole codebase — both the fire/no-fire decision
+// SINGLE switch over TriggerType in the whole codebase — both the fire/no-fire decision
 // AND the value formatting live here. Callers (application, infra) never re-inspect type.
 //
-// prevQuote is used only by AlertTypeTransactionVolumeSpike — pass a zero-value
+// prevQuote is used only by TriggerTypeTransactionVolumeSpike — pass a zero-value
 // MarketQuote for other types.
 // metrics may be nil; volume_spike returns (zero, false) in that case.
-func (e *AlertEvaluator) Evaluate(
-	cond configvo.AlertCondition,
+func (e *WatchlistEvaluator) Evaluate(
+	cond configvo.TriggerCondition,
 	quote marketvo.MarketQuote,
 	prevQuote marketvo.MarketQuote,
 	metrics *metricsagg.StockMetrics,
 ) (EvaluationResult, bool) {
 	switch cond.Type {
-	case configvo.AlertTypePriceAbove:
+	case configvo.TriggerTypePriceAbove:
 		if quote.MatchedPrice > cond.Threshold {
 			return EvaluationResult{
 				Label: configvo.LabelPriceAbove,
 				Value: fmt.Sprintf("%.2f > %.2f", quote.MatchedPrice, cond.Threshold),
 			}, true
 		}
-	case configvo.AlertTypePriceBelow:
+	case configvo.TriggerTypePriceBelow:
 		if quote.MatchedPrice < cond.Threshold {
 			return EvaluationResult{
 				Label: configvo.LabelPriceBelow,
 				Value: fmt.Sprintf("%.2f < %.2f", quote.MatchedPrice, cond.Threshold),
 			}, true
 		}
-	case configvo.AlertTypeVolumeSpike:
+	case configvo.TriggerTypeVolumeSpike:
 		if metrics == nil || metrics.VolumeSMA20 <= 0 {
 			return EvaluationResult{}, false
 		}
@@ -67,7 +67,7 @@ func (e *AlertEvaluator) Evaluate(
 					pct, cond.Threshold, quote.TotalTradedQty, metrics.VolumeSMA20),
 			}, true
 		}
-	case configvo.AlertTypeTransactionVolumeSpike:
+	case configvo.TriggerTypeTransactionVolumeSpike:
 		delta, valid := quote.MatchedVolumeDelta(prevQuote)
 		if !valid || delta < int64(cond.Threshold) {
 			return EvaluationResult{}, false
@@ -83,7 +83,7 @@ func (e *AlertEvaluator) Evaluate(
 			Value: fmt.Sprintf("%s %d shares ≥ %.0f @ %.2f (book: bid %d / ask %d)",
 				dir, delta, cond.Threshold, quote.MatchedPrice, bidDepth, askDepth),
 		}, true
-	case configvo.AlertTypeTrendlineBreakout:
+	case configvo.TriggerTypeTrendlineBreakout:
 		// POTENTIAL ONLY — fire in the approach zone on the not-yet-broken side.
 		// Price strictly above ResistanceLevel (broken through) does NOT fire.
 		if metrics == nil || metrics.ResistanceLevel <= 0 {
@@ -97,7 +97,7 @@ func (e *AlertEvaluator) Evaluate(
 				Value: fmt.Sprintf("%.2f approaching resistance %.2f", quote.MatchedPrice, level),
 			}, true
 		}
-	case configvo.AlertTypeTrendlineBreakdown:
+	case configvo.TriggerTypeTrendlineBreakdown:
 		// POTENTIAL ONLY — fire in the approach zone on the not-yet-broken side.
 		// Price strictly below SupportLevel (broken through) does NOT fire.
 		if metrics == nil || metrics.SupportLevel <= 0 {
@@ -111,7 +111,7 @@ func (e *AlertEvaluator) Evaluate(
 				Value: fmt.Sprintf("%.2f approaching support %.2f", quote.MatchedPrice, level),
 			}, true
 		}
-	case configvo.AlertTypePriceCrossAbove:
+	case configvo.TriggerTypePriceCrossAbove:
 		ma, ok := resolveMA(cond.Reference, metrics)
 		if !ok || prevQuote.MatchedPrice <= 0 {
 			return EvaluationResult{}, false
@@ -122,7 +122,7 @@ func (e *AlertEvaluator) Evaluate(
 				Value: fmt.Sprintf("%s %.2f: %.2f → %.2f", cond.Reference, ma, prevQuote.MatchedPrice, quote.MatchedPrice),
 			}, true
 		}
-	case configvo.AlertTypePriceCrossBelow:
+	case configvo.TriggerTypePriceCrossBelow:
 		ma, ok := resolveMA(cond.Reference, metrics)
 		if !ok || prevQuote.MatchedPrice <= 0 {
 			return EvaluationResult{}, false

@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	ErrInvalidAlertType = errors.New("alert type must be one of: 'price_above', 'price_below', " +
+	ErrInvalidTriggerType = errors.New("alert type must be one of: 'price_above', 'price_below', " +
 		"'volume_spike', 'transaction_volume_spike', 'trendline_breakout', 'trendline_breakdown', " +
 		"'price_cross_above', 'price_cross_below', 'bullish_divergence', 'bearish_divergence', " +
 		"'bullish_divergence_early', 'bearish_divergence_early', " +
@@ -20,30 +20,30 @@ var (
 	ErrInvalidMAReference    = errors.New("alert reference must be one of: 'ema9', 'ema21', 'ema50', 'sma200'")
 )
 
-// AlertType identifies the kind of alert condition.
-type AlertType string
+// TriggerType identifies the kind of alert condition.
+type TriggerType string
 
 const (
-	AlertTypePriceAbove             AlertType = "price_above"
-	AlertTypePriceBelow             AlertType = "price_below"
-	AlertTypeVolumeSpike            AlertType = "volume_spike"
-	AlertTypeTransactionVolumeSpike AlertType = "transaction_volume_spike"
-	AlertTypeTrendlineBreakout      AlertType = "trendline_breakout"
-	AlertTypeTrendlineBreakdown     AlertType = "trendline_breakdown"
-	AlertTypePriceCrossAbove        AlertType = "price_cross_above"
-	AlertTypePriceCrossBelow        AlertType = "price_cross_below"
-	AlertTypeBullishDivergence      AlertType = "bullish_divergence"
-	AlertTypeBearishDivergence      AlertType = "bearish_divergence"
+	TriggerTypePriceAbove             TriggerType = "price_above"
+	TriggerTypePriceBelow             TriggerType = "price_below"
+	TriggerTypeVolumeSpike            TriggerType = "volume_spike"
+	TriggerTypeTransactionVolumeSpike TriggerType = "transaction_volume_spike"
+	TriggerTypeTrendlineBreakout      TriggerType = "trendline_breakout"
+	TriggerTypeTrendlineBreakdown     TriggerType = "trendline_breakdown"
+	TriggerTypePriceCrossAbove        TriggerType = "price_cross_above"
+	TriggerTypePriceCrossBelow        TriggerType = "price_cross_below"
+	TriggerTypeBullishDivergence      TriggerType = "bullish_divergence"
+	TriggerTypeBearishDivergence      TriggerType = "bearish_divergence"
 	// Early (forming/unconfirmed) divergence types. Independent of the confirmed
 	// types above: each is its own per-symbol condition with its own enabled flag,
 	// so firing/auto-disabling one never affects the other.
-	AlertTypeBullishDivergenceEarly AlertType = "bullish_divergence_early"
-	AlertTypeBearishDivergenceEarly AlertType = "bearish_divergence_early"
+	TriggerTypeBullishDivergenceEarly TriggerType = "bullish_divergence_early"
+	TriggerTypeBearishDivergenceEarly TriggerType = "bearish_divergence_early"
 	// Multi-timeframe trendline types are owned by the analyze jobs (breakout/
 	// breakdown), which scan all configured intervals — distinct from the
 	// day-interval potential trendline tick alerts above.
-	AlertTypeBreakoutMTF  AlertType = "trendline_breakout_mtf"
-	AlertTypeBreakdownMTF AlertType = "trendline_breakdown_mtf"
+	TriggerTypeBreakoutMTF  TriggerType = "trendline_breakout_mtf"
+	TriggerTypeBreakdownMTF TriggerType = "trendline_breakdown_mtf"
 )
 
 // MAReference identifies which cached moving average a price-cross condition resolves against.
@@ -56,7 +56,7 @@ const (
 	MAReferenceSMA200 MAReference = "sma200"
 )
 
-// Canonical display labels for each AlertType. Single source of truth for
+// Canonical display labels for each TriggerType. Single source of truth for
 // notification rendering (telegram notifier reads them via configvo.Label*).
 const (
 	LabelPriceAbove             = "Price Above"
@@ -75,20 +75,20 @@ const (
 	LabelBreakdownMTF           = "Trendline Breakdown (All Timeframes)"
 )
 
-// NewAlertType creates a validated AlertType.
-func NewAlertType(value string) (AlertType, error) {
+// NewTriggerType creates a validated TriggerType.
+func NewTriggerType(value string) (TriggerType, error) {
 	normalized := strings.ToLower(strings.TrimSpace(value))
-	at := AlertType(normalized)
+	at := TriggerType(normalized)
 	switch at {
-	case AlertTypePriceAbove, AlertTypePriceBelow, AlertTypeVolumeSpike, AlertTypeTransactionVolumeSpike,
-		AlertTypeTrendlineBreakout, AlertTypeTrendlineBreakdown,
-		AlertTypePriceCrossAbove, AlertTypePriceCrossBelow,
-		AlertTypeBullishDivergence, AlertTypeBearishDivergence,
-		AlertTypeBullishDivergenceEarly, AlertTypeBearishDivergenceEarly,
-		AlertTypeBreakoutMTF, AlertTypeBreakdownMTF:
+	case TriggerTypePriceAbove, TriggerTypePriceBelow, TriggerTypeVolumeSpike, TriggerTypeTransactionVolumeSpike,
+		TriggerTypeTrendlineBreakout, TriggerTypeTrendlineBreakdown,
+		TriggerTypePriceCrossAbove, TriggerTypePriceCrossBelow,
+		TriggerTypeBullishDivergence, TriggerTypeBearishDivergence,
+		TriggerTypeBullishDivergenceEarly, TriggerTypeBearishDivergenceEarly,
+		TriggerTypeBreakoutMTF, TriggerTypeBreakdownMTF:
 		return at, nil
 	default:
-		return "", ErrInvalidAlertType
+		return "", ErrInvalidTriggerType
 	}
 }
 
@@ -106,29 +106,29 @@ func NewMAReference(value string) (MAReference, error) {
 
 // IsDivergence reports whether the type is one of the RSI-divergence types,
 // which are evaluated by the analyze jobs (fresh history), not the tick path.
-func (t AlertType) IsDivergence() bool {
-	return t == AlertTypeBullishDivergence || t == AlertTypeBearishDivergence ||
-		t == AlertTypeBullishDivergenceEarly || t == AlertTypeBearishDivergenceEarly
+func (t TriggerType) IsDivergence() bool {
+	return t == TriggerTypeBullishDivergence || t == TriggerTypeBearishDivergence ||
+		t == TriggerTypeBullishDivergenceEarly || t == TriggerTypeBearishDivergenceEarly
 }
 
 // IsTrendlineMTF reports whether the type is one of the multi-timeframe trendline
 // types, which the breakout/breakdown analyze jobs evaluate across all configured
 // intervals — not the day-interval potential trendline tick alerts.
-func (t AlertType) IsTrendlineMTF() bool {
-	return t == AlertTypeBreakoutMTF || t == AlertTypeBreakdownMTF
+func (t TriggerType) IsTrendlineMTF() bool {
+	return t == TriggerTypeBreakoutMTF || t == TriggerTypeBreakdownMTF
 }
 
 // IsAnalyzeOnly reports whether the type is owned exclusively by the analyze jobs
 // (RSI divergence + multi-timeframe trendline). The tick alert job skips these.
-func (t AlertType) IsAnalyzeOnly() bool {
+func (t TriggerType) IsAnalyzeOnly() bool {
 	return t.IsDivergence() || t.IsTrendlineMTF()
 }
 
 // RequiresThreshold reports whether the type needs a positive threshold
 // (the 4 price/volume types). Trendline, price-cross and divergence types do not.
-func (t AlertType) RequiresThreshold() bool {
+func (t TriggerType) RequiresThreshold() bool {
 	switch t {
-	case AlertTypePriceAbove, AlertTypePriceBelow, AlertTypeVolumeSpike, AlertTypeTransactionVolumeSpike:
+	case TriggerTypePriceAbove, TriggerTypePriceBelow, TriggerTypeVolumeSpike, TriggerTypeTransactionVolumeSpike:
 		return true
 	default:
 		return false
@@ -137,33 +137,33 @@ func (t AlertType) RequiresThreshold() bool {
 
 // RequiresReference reports whether the type needs a valid MA reference
 // (the 2 price-cross types).
-func (t AlertType) RequiresReference() bool {
-	return t == AlertTypePriceCrossAbove || t == AlertTypePriceCrossBelow
+func (t TriggerType) RequiresReference() bool {
+	return t == TriggerTypePriceCrossAbove || t == TriggerTypePriceCrossBelow
 }
 
-// AlertCondition defines a single alert condition for a stock alert.
+// TriggerCondition defines a single trigger condition for a watchlist item.
 // Condition identity for dedup/scoped updates is (Type, Reference): a symbol may
 // hold price_cross_above@ema9 and price_cross_above@ema50 as distinct conditions.
-type AlertCondition struct {
-	Type      AlertType `bson:"type"`
-	Threshold float64   `bson:"threshold"`
-	Reference string    `bson:"reference,omitempty" json:"reference,omitempty"`
-	Enabled   bool      `bson:"enabled"`
+type TriggerCondition struct {
+	Type      TriggerType `bson:"type"`
+	Threshold float64     `bson:"threshold"`
+	Reference string      `bson:"reference,omitempty" json:"reference,omitempty"`
+	Enabled   bool        `bson:"enabled"`
 }
 
-// NewAlertCondition creates a validated AlertCondition.
+// NewTriggerCondition creates a validated TriggerCondition.
 // threshold is required (>0) only for the 4 price/volume types; reference is
 // required (and validated) only for the 2 price-cross types. Both are ignored otherwise.
-func NewAlertCondition(alertType string, threshold float64, reference string, enabled bool) (AlertCondition, error) {
-	at, err := NewAlertType(alertType)
+func NewTriggerCondition(alertType string, threshold float64, reference string, enabled bool) (TriggerCondition, error) {
+	at, err := NewTriggerType(alertType)
 	if err != nil {
-		return AlertCondition{}, err
+		return TriggerCondition{}, err
 	}
-	cond := AlertCondition{Type: at, Threshold: threshold, Enabled: enabled}
+	cond := TriggerCondition{Type: at, Threshold: threshold, Enabled: enabled}
 	if enabled && at.RequiresReference() {
 		ref, err := NewMAReference(reference)
 		if err != nil {
-			return AlertCondition{}, err
+			return TriggerCondition{}, err
 		}
 		cond.Reference = string(ref)
 	} else {
@@ -174,20 +174,20 @@ func NewAlertCondition(alertType string, threshold float64, reference string, en
 	// the rules (threshold/reference). The alert type is parsed twice by design
 	// (here to normalize, in Validate to gate).
 	if err := cond.Validate(); err != nil {
-		return AlertCondition{}, err
+		return TriggerCondition{}, err
 	}
 	return cond, nil
 }
 
-// Validate checks AlertCondition invariants.
+// Validate checks TriggerCondition invariants.
 // Disabled conditions are paused placeholders: they keep the user's draft value
 // but do not need fire-time inputs until re-enabled. For enabled conditions,
 // threshold is required only for the 4 price/volume types and reference is
 // required+valid only for the 2 price-cross types. This per-type relaxation is load-bearing:
-// TradingConfig.Validate runs alert.Validate() on every PUT, so an unconditional
+// TradingConfig.Validate runs item.Validate() on every PUT, so an unconditional
 // threshold reject would make every divergence/trendline/price-cross condition unsavable.
-func (c AlertCondition) Validate() error {
-	at, err := NewAlertType(string(c.Type))
+func (c TriggerCondition) Validate() error {
+	at, err := NewTriggerType(string(c.Type))
 	if err != nil {
 		return err
 	}
@@ -205,30 +205,30 @@ func (c AlertCondition) Validate() error {
 	return nil
 }
 
-// StockAlertConfig groups conditions for a single symbol on a user's config.
-// A fully-disabled alert (every condition.Enabled == false) is a paused state,
-// not an invalid state — operators may keep alerts around without firing them.
-type StockAlertConfig struct {
-	Symbol     market.Symbol    `bson:"symbol"`
-	Conditions []AlertCondition `bson:"conditions"`
+// WatchlistItem groups conditions for a single symbol on a user's config.
+// A fully-disabled item (every condition.Enabled == false) is a paused state,
+// not an invalid state — operators may keep watchlist items around without firing them.
+type WatchlistItem struct {
+	Symbol     market.Symbol      `bson:"symbol"`
+	Conditions []TriggerCondition `bson:"conditions"`
 }
 
-// NewStockAlertConfig creates a validated StockAlertConfig.
-func NewStockAlertConfig(symbol market.Symbol, conditions []AlertCondition) (StockAlertConfig, error) {
-	cfg := StockAlertConfig{
+// NewWatchlistItem creates a validated WatchlistItem.
+func NewWatchlistItem(symbol market.Symbol, conditions []TriggerCondition) (WatchlistItem, error) {
+	cfg := WatchlistItem{
 		Symbol:     symbol,
 		Conditions: conditions,
 	}
 	if err := cfg.Validate(); err != nil {
-		return StockAlertConfig{}, err
+		return WatchlistItem{}, err
 	}
 	return cfg, nil
 }
 
-// Validate checks StockAlertConfig invariants, including the duplicate-(Type,Reference)
+// Validate checks WatchlistItem invariants, including the duplicate-(Type,Reference)
 // guard: two conditions sharing the same (Type, Reference) are rejected so the scoped
 // arrayFilter never matches two conditions and fire-once stays correct.
-func (a StockAlertConfig) Validate() error {
+func (a WatchlistItem) Validate() error {
 	if a.Symbol == "" {
 		return market.ErrInvalidSymbol
 	}

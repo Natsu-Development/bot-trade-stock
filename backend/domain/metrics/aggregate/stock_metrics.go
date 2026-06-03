@@ -43,7 +43,7 @@ type StockMetrics struct {
 	// below latestClose. Both are read directly from the refresh job's
 	// GenerateResistanceSignals / GenerateSupportSignals output (via
 	// nearestLevelFromSignals) and consumed exclusively by the tick-time
-	// potential-breakout/breakdown alert evaluator (AlertTypeTrendlineBreakout
+	// potential-breakout/breakdown watchlist evaluator (TriggerTypeTrendlineBreakout
 	// / Breakdown). A *_Potential signal exists only for an intact line inside
 	// its approach band, so a broken or far-from-price line yields 0 here,
 	// which the evaluator treats as "no alert."

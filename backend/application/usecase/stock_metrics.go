@@ -252,7 +252,7 @@ func (uc *StockMetricsUseCase) Filter(ctx context.Context, filter *filtervo.Stoc
 	}
 
 	// If no filters, return all
-	if filter == nil || len(filter.Conditions) == 0 {
+	if filter == nil || filter.IsEmpty() {
 		return &dto.StockMetricsResult{
 			TotalStocksAnalyzed: len(uc.cachedMetrics),
 			StocksMatching:      len(uc.cachedMetrics),

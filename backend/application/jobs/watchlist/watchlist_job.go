@@ -1,5 +1,5 @@
-// Package alert provides the stock price/volume alert job.
-package alert
+// Package watchlist provides the watchlist price/volume job.
+package watchlist
 
 import (
 	"context"
@@ -21,19 +21,19 @@ import (
 )
 
 func init() {
-	registry.RegisterFactory("stock_alert", NewStockAlertJobFromDeps)
+	registry.RegisterFactory("watchlist", NewWatchlistJobFromDeps)
 }
 
-// StockAlertJob evaluates user-configured price/volume conditions against
+// WatchlistJob evaluates user-configured price/volume conditions against
 // real-time market quotes and notifies on match.
-type StockAlertJob struct {
+type WatchlistJob struct {
 	schedule       string
 	timeout        time.Duration
 	configRepo     outbound.ConfigRepository
 	quoteProvider  outbound.QuoteProvider
 	metricsManager inbound.StockMetricsManager
 	notifier       outbound.Notifier
-	evaluator      *alertservice.AlertEvaluator
+	evaluator      *alertservice.WatchlistEvaluator
 	disabler       *appService.ConditionDisabler
 
 	// marketTz is HoSE-local (injected from JobDependencies.MarketTimezone)
@@ -51,9 +51,9 @@ type StockAlertJob struct {
 	prevQuotes   map[string]marketvo.MarketQuote
 }
 
-// NewStockAlertJobFromDeps builds the alert job if enabled in config.
-func NewStockAlertJobFromDeps(deps registry.JobDependencies) ([]inbound.Job, error) {
-	cfg := deps.Config.StockAlert
+// NewWatchlistJobFromDeps builds the watchlist job if enabled in config.
+func NewWatchlistJobFromDeps(deps registry.JobDependencies) ([]inbound.Job, error) {
+	cfg := deps.Config.Watchlist
 
 	ic, ok := cfg.Intervals["default"]
 	if !ok || !ic.Enabled || ic.Schedule == "" {
@@ -61,26 +61,26 @@ func NewStockAlertJobFromDeps(deps registry.JobDependencies) ([]inbound.Job, err
 	}
 
 	if deps.QuoteProvider == nil {
-		return nil, fmt.Errorf("stock alert job requires a quote provider")
+		return nil, fmt.Errorf("watchlist job requires a quote provider")
 	}
-	if deps.AlertEvaluator == nil {
-		return nil, fmt.Errorf("stock alert job requires an alert evaluator")
+	if deps.WatchlistEvaluator == nil {
+		return nil, fmt.Errorf("watchlist job requires a watchlist evaluator")
 	}
 	if deps.ConditionDisabler == nil {
-		return nil, fmt.Errorf("stock alert job requires a condition disabler")
+		return nil, fmt.Errorf("watchlist job requires a condition disabler")
 	}
 	if deps.MarketTimezone == nil {
-		return nil, fmt.Errorf("stock alert job requires a market timezone")
+		return nil, fmt.Errorf("watchlist job requires a market timezone")
 	}
 
-	return []inbound.Job{&StockAlertJob{
+	return []inbound.Job{&WatchlistJob{
 		schedule:          ic.Schedule,
 		timeout:           cfg.Timeout,
 		configRepo:        deps.ConfigRepo,
 		quoteProvider:     deps.QuoteProvider,
 		metricsManager:    deps.StockMetricsManager,
 		notifier:          deps.Notifier,
-		evaluator:         deps.AlertEvaluator,
+		evaluator:         deps.WatchlistEvaluator,
 		disabler:          deps.ConditionDisabler,
 		marketTz:          deps.MarketTimezone,
 		ignoreSessionGate: cfg.IgnoreSessionGate,
@@ -90,9 +90,9 @@ func NewStockAlertJobFromDeps(deps registry.JobDependencies) ([]inbound.Job, err
 }
 
 // Metadata returns job metadata for scheduler registration.
-func (j *StockAlertJob) Metadata() inbound.JobMetadata {
+func (j *WatchlistJob) Metadata() inbound.JobMetadata {
 	return inbound.JobMetadata{
-		Name:     "stock-alert",
+		Name:     "watchlist",
 		Schedule: j.schedule,
 		Timeout:  j.timeout,
 	}
@@ -100,12 +100,12 @@ func (j *StockAlertJob) Metadata() inbound.JobMetadata {
 
 // Execute fetches quotes + configs and fires matching alerts.
 // Stock metrics are read lock-free from the manager's shared lookup map.
-func (j *StockAlertJob) Execute(ctx context.Context) error {
+func (j *WatchlistJob) Execute(ctx context.Context) error {
 	// Skip ticks outside the HoSE intraday quote window (ATO and lunch are
 	// no-data periods; the provider would return stale data). Weekday gating
-	// stays the cron's responsibility (STOCK_ALERT_SCHEDULE field-6 = "1-5").
+	// stays the cron's responsibility (WATCHLIST_SCHEDULE field-6 = "1-5").
 	if !j.ignoreSessionGate && !marketvo.IsHoSEActiveQuoteWindow(j.now(), j.marketTz) {
-		zap.L().Debug("stock alert job skipped: outside HoSE active quote window")
+		zap.L().Debug("watchlist job skipped: outside HoSE active quote window")
 		return nil
 	}
 
@@ -141,19 +141,19 @@ func (j *StockAlertJob) Execute(ctx context.Context) error {
 	return nil
 }
 
-func (j *StockAlertJob) processConfig(
+func (j *WatchlistJob) processConfig(
 	ctx context.Context,
 	cfg *configagg.TradingConfig,
 	quotes map[string]marketvo.MarketQuote,
 	prevQuotes map[string]marketvo.MarketQuote,
 	metricsBySymbol map[string]*metricsagg.StockMetrics,
 ) {
-	if len(cfg.Alerts) == 0 {
+	if len(cfg.Watchlist) == 0 {
 		return
 	}
 
-	for i := range cfg.Alerts {
-		alert := &cfg.Alerts[i]
+	for i := range cfg.Watchlist {
+		alert := &cfg.Watchlist[i]
 		quote, ok := quotes[string(alert.Symbol)]
 		if !ok {
 			continue
@@ -161,7 +161,7 @@ func (j *StockAlertJob) processConfig(
 		prev := prevQuotes[string(alert.Symbol)] // zero-value if first observation
 
 		var matched []outbound.Field
-		var firedConds []configvo.AlertCondition
+		var firedConds []configvo.TriggerCondition
 		for ci := range alert.Conditions {
 			cond := alert.Conditions[ci]
 			if !cond.Enabled || cond.Type.IsAnalyzeOnly() {
@@ -183,7 +183,7 @@ func (j *StockAlertJob) processConfig(
 
 		msg := buildMessage(alert.Symbol, quote, matched)
 		if err := j.notifier.Send(ctx, cfg.Telegram, msg); err != nil {
-			zap.L().Error("Failed to send stock alert notification",
+			zap.L().Error("Failed to send watchlist notification",
 				zap.String("symbol", string(alert.Symbol)),
 				zap.String("config_id", string(cfg.ID)),
 				zap.Error(err),
@@ -195,7 +195,7 @@ func (j *StockAlertJob) processConfig(
 		// stale whole-doc snapshot never reverts the analyze jobs' concurrent disables.
 		for _, cond := range firedConds {
 			if err := j.disabler.Disable(ctx, string(cfg.ID), string(alert.Symbol), cond); err != nil {
-				zap.L().Error("Failed to persist alert auto-disable",
+				zap.L().Error("Failed to persist watchlist auto-disable",
 					zap.String("symbol", string(alert.Symbol)),
 					zap.String("config_id", string(cfg.ID)),
 					zap.String("type", string(cond.Type)),
@@ -207,10 +207,10 @@ func (j *StockAlertJob) processConfig(
 }
 
 // evaluateCondition projects the domain evaluator's result into an outbound.Field.
-// No fire/no-fire logic and no AlertType switch here — all of that lives in the
-// AlertEvaluator domain service.
-func (j *StockAlertJob) evaluateCondition(
-	cond configvo.AlertCondition,
+// No fire/no-fire logic and no TriggerType switch here — all of that lives in the
+// WatchlistEvaluator domain service.
+func (j *WatchlistJob) evaluateCondition(
+	cond configvo.TriggerCondition,
 	quote marketvo.MarketQuote,
 	prev marketvo.MarketQuote,
 	metrics *metricsagg.StockMetrics,

@@ -2,7 +2,6 @@
 package dto
 
 import (
-	"fmt"
 	"time"
 
 	configagg "backend/domain/config/aggregate"
@@ -23,7 +22,7 @@ type TradingConfigRequest struct {
 	SignalDaysThreshold int                   `json:"signal_days_threshold"`
 	Telegram            ConfigTelegram        `json:"telegram"`
 	MetricsFilter       []ConfigMetricsFilter `json:"metrics_filter,omitempty"`
-	Alerts              []ConfigStockAlert    `json:"alerts,omitempty"`
+	Watchlist           []ConfigWatchlistItem `json:"watchlist,omitempty"`
 }
 
 // TradingConfigResponse is the DTO for trading configuration responses.
@@ -38,7 +37,7 @@ type TradingConfigResponse struct {
 	SignalDaysThreshold int                   `json:"signal_days_threshold"`
 	Telegram            ConfigTelegram        `json:"telegram"`
 	MetricsFilter       []ConfigMetricsFilter `json:"metrics_filter,omitempty"`
-	Alerts              []ConfigStockAlert    `json:"alerts,omitempty"`
+	Watchlist           []ConfigWatchlistItem `json:"watchlist,omitempty"`
 	CreatedAt           string                `json:"created_at"`
 	UpdatedAt           string                `json:"updated_at"`
 }
@@ -62,65 +61,26 @@ type ConfigTelegram struct {
 	ChatID   string `json:"chat_id,omitempty"`
 }
 
-// ConfigMetricsFilter represents saved screener filter presets for config.
+// ConfigMetricsFilter is a saved screener preset on the wire: a named,
+// timestamped flat StockFilter (match/conditions/groups/exchanges inline).
 type ConfigMetricsFilter struct {
-	Name       string                  `json:"name"`
-	Conditions []ConfigFilterCondition `json:"filters"`
-	Logic      string                  `json:"logic"`
-	Exchanges  []string                `json:"exchanges,omitempty"`
-	CreatedAt  string                  `json:"created_at"`
+	Name                 string `json:"name"`
+	filtervo.StockFilter `json:",inline"`
+	CreatedAt            string `json:"created_at"`
 }
 
-// ConfigStockAlert represents a single stock alert configuration for a symbol.
-type ConfigStockAlert struct {
-	Symbol     string                 `json:"symbol"`
-	Conditions []ConfigAlertCondition `json:"conditions"`
+// ConfigWatchlistItem represents a single stock alert configuration for a symbol.
+type ConfigWatchlistItem struct {
+	Symbol     string                   `json:"symbol"`
+	Conditions []ConfigTriggerCondition `json:"conditions"`
 }
 
-// ConfigAlertCondition represents one alert condition (type + threshold + reference + enabled flag).
-type ConfigAlertCondition struct {
+// ConfigTriggerCondition represents one alert condition (type + threshold + reference + enabled flag).
+type ConfigTriggerCondition struct {
 	Type      string  `json:"type"`
 	Threshold float64 `json:"threshold"`
 	Reference string  `json:"reference,omitempty"`
 	Enabled   bool    `json:"enabled"`
-}
-
-// ConfigFilterCondition represents a single filter condition for config.
-// Value accepts number or boolean (converted to 0/1 for boolean fields).
-type ConfigFilterCondition struct {
-	Field    string      `json:"field"`
-	Operator string      `json:"op"`
-	Value    interface{} `json:"value,omitempty"`
-}
-
-// ToFilterCondition converts DTO to domain FilterCondition.
-// Converts boolean values to 0/1 for storage.
-func (c ConfigFilterCondition) ToFilterCondition() (filtervo.FilterCondition, error) {
-	// Validate field and operator
-	_, err := filtervo.NewFilterField(c.Field)
-	if err != nil {
-		return filtervo.FilterCondition{}, err
-	}
-
-	_, err = filtervo.NewFilterOperator(c.Operator)
-	if err != nil {
-		return filtervo.FilterCondition{}, err
-	}
-
-	// Convert value to float64 using domain helper
-	var numVal float64
-	switch v := c.Value.(type) {
-	case bool:
-		numVal = filtervo.BoolToFloat(v)
-	case float64:
-		numVal = v
-	case int:
-		numVal = float64(v)
-	default:
-		return filtervo.FilterCondition{}, fmt.Errorf("invalid value type for field %s", c.Field)
-	}
-
-	return filtervo.NewFilterCondition(c.Field, c.Operator, numVal)
 }
 
 // ToTradingConfigResponse converts a domain TradingConfig to response DTO.
@@ -153,19 +113,25 @@ func ToTradingConfigResponse(cfg *configagg.TradingConfig) *TradingConfigRespons
 		UpdatedAt: cfg.UpdatedAt.Format(time.RFC3339),
 	}
 
-	// Convert metrics filters
+	// Convert metrics filters. Skip empty presets: a stale pre-flat doc
+	// (old "root"/"combinator", no flat keys) decodes to an empty StockFilter, and
+	// surfacing it would present a garbage "return-all" preset to the client
+	// (read-side safety net; OPS also $unset the field once at cutover).
 	if len(cfg.MetricsFilter) > 0 {
-		resp.MetricsFilter = make([]ConfigMetricsFilter, len(cfg.MetricsFilter))
-		for i, mf := range cfg.MetricsFilter {
-			resp.MetricsFilter[i] = toConfigMetricsFilter(mf)
+		resp.MetricsFilter = make([]ConfigMetricsFilter, 0, len(cfg.MetricsFilter))
+		for _, mf := range cfg.MetricsFilter {
+			if mf.IsEmpty() {
+				continue
+			}
+			resp.MetricsFilter = append(resp.MetricsFilter, toConfigMetricsFilter(mf))
 		}
 	}
 
 	// Convert alerts
-	if len(cfg.Alerts) > 0 {
-		resp.Alerts = make([]ConfigStockAlert, len(cfg.Alerts))
-		for i, a := range cfg.Alerts {
-			resp.Alerts[i] = toConfigStockAlert(a)
+	if len(cfg.Watchlist) > 0 {
+		resp.Watchlist = make([]ConfigWatchlistItem, len(cfg.Watchlist))
+		for i, a := range cfg.Watchlist {
+			resp.Watchlist[i] = toConfigWatchlistItem(a)
 		}
 	}
 
@@ -233,18 +199,18 @@ func ToTradingConfigAggregate(req TradingConfigRequest) (*configagg.TradingConfi
 	// Convert alerts
 	// Use Alerts != nil to distinguish "not provided" from "explicitly empty"
 	// so that sending alerts: [] can clear all alerts.
-	var alerts []configvo.StockAlertConfig
-	if req.Alerts != nil && len(req.Alerts) > 0 {
-		alerts = make([]configvo.StockAlertConfig, len(req.Alerts))
-		for i, a := range req.Alerts {
-			converted, err := toStockAlertConfigVO(a)
+	var alerts []configvo.WatchlistItem
+	if req.Watchlist != nil && len(req.Watchlist) > 0 {
+		alerts = make([]configvo.WatchlistItem, len(req.Watchlist))
+		for i, a := range req.Watchlist {
+			converted, err := toWatchlistItemVO(a)
 			if err != nil {
 				return nil, err
 			}
 			alerts[i] = converted
 		}
-	} else if req.Alerts != nil {
-		alerts = []configvo.StockAlertConfig{}
+	} else if req.Watchlist != nil {
+		alerts = []configvo.WatchlistItem{}
 	}
 
 	cfg := &configagg.TradingConfig{
@@ -257,7 +223,7 @@ func ToTradingConfigAggregate(req TradingConfigRequest) (*configagg.TradingConfi
 		SignalDaysThreshold: req.SignalDaysThreshold,
 		Telegram:            telegram,
 		MetricsFilter:       metricsFilter,
-		Alerts:              alerts,
+		Watchlist:           alerts,
 	}
 
 	// Set ID if provided
@@ -272,106 +238,62 @@ func ToTradingConfigAggregate(req TradingConfigRequest) (*configagg.TradingConfi
 	return cfg, nil
 }
 
-// toConfigMetricsFilter converts a domain MetricsFilter to DTO.
+// toConfigMetricsFilter converts a domain MetricsFilter to its response DTO.
+// The flat StockFilter projects natively (match/conditions/groups/exchanges);
+// empty presets are skipped by the caller, not here.
 func toConfigMetricsFilter(mf configvo.MetricsFilter) ConfigMetricsFilter {
-	dto := ConfigMetricsFilter{
-		Name:      mf.Name,
-		Logic:     string(mf.Logic),
-		CreatedAt: mf.CreatedAt.Format(time.RFC3339),
+	return ConfigMetricsFilter{
+		Name:        mf.Name,
+		StockFilter: mf.StockFilter,
+		CreatedAt:   mf.CreatedAt.Format(time.RFC3339),
 	}
-
-	dto.Conditions = make([]ConfigFilterCondition, len(mf.Conditions))
-	for i, c := range mf.Conditions {
-		// For response, convert back to bool for signal fields
-		if c.IsBooleanField() {
-			dto.Conditions[i] = ConfigFilterCondition{
-				Field:    string(c.Field),
-				Operator: string(c.Operator),
-				Value:    c.GetBoolValue(), // Returns true/false for JSON
-			}
-		} else {
-			dto.Conditions[i] = ConfigFilterCondition{
-				Field:    string(c.Field),
-				Operator: string(c.Operator),
-				Value:    c.Value,
-			}
-		}
-	}
-
-	dto.Exchanges = make([]string, len(mf.Exchanges))
-	for i, e := range mf.Exchanges {
-		dto.Exchanges[i] = string(e)
-	}
-
-	return dto
 }
 
-// toConfigMetricsFilterVO converts a DTO to domain MetricsFilter.
+// toConfigMetricsFilterVO validates the flat filter and builds a domain MetricsFilter.
 func toConfigMetricsFilterVO(dto ConfigMetricsFilter) (configvo.MetricsFilter, error) {
-	logic, err := filtervo.Validate(dto.Logic)
-	if err != nil {
+	f := dto.StockFilter
+	if err := f.Validate(); err != nil {
 		return configvo.MetricsFilter{}, err
 	}
-
-	conditions := make([]filtervo.FilterCondition, len(dto.Conditions))
-	for i, c := range dto.Conditions {
-		condition, err := c.ToFilterCondition()
-		if err != nil {
-			return configvo.MetricsFilter{}, err
-		}
-		conditions[i] = condition
-	}
-
-	exchanges := make([]marketvo.Exchange, len(dto.Exchanges))
-	for i, e := range dto.Exchanges {
-		exchange, err := marketvo.NewExchange(e)
-		if err != nil {
-			return configvo.MetricsFilter{}, err
-		}
-		exchanges[i] = exchange
-	}
-
 	return configvo.MetricsFilter{
-		Name:       dto.Name,
-		Conditions: conditions,
-		Logic:      logic,
-		Exchanges:  exchanges,
-		CreatedAt:  time.Now(),
+		Name:        dto.Name,
+		StockFilter: f,
+		CreatedAt:   time.Now(),
 	}, nil
 }
 
-// toConfigStockAlert converts a domain StockAlertConfig to DTO.
-func toConfigStockAlert(a configvo.StockAlertConfig) ConfigStockAlert {
-	conditions := make([]ConfigAlertCondition, len(a.Conditions))
+// toConfigWatchlistItem converts a domain WatchlistItem to DTO.
+func toConfigWatchlistItem(a configvo.WatchlistItem) ConfigWatchlistItem {
+	conditions := make([]ConfigTriggerCondition, len(a.Conditions))
 	for i, c := range a.Conditions {
-		conditions[i] = ConfigAlertCondition{
+		conditions[i] = ConfigTriggerCondition{
 			Type:      string(c.Type),
 			Threshold: c.Threshold,
 			Reference: c.Reference,
 			Enabled:   c.Enabled,
 		}
 	}
-	return ConfigStockAlert{
+	return ConfigWatchlistItem{
 		Symbol:     string(a.Symbol),
 		Conditions: conditions,
 	}
 }
 
-// toStockAlertConfigVO converts a DTO to domain StockAlertConfig with validation.
-func toStockAlertConfigVO(dto ConfigStockAlert) (configvo.StockAlertConfig, error) {
+// toWatchlistItemVO converts a DTO to domain WatchlistItem with validation.
+func toWatchlistItemVO(dto ConfigWatchlistItem) (configvo.WatchlistItem, error) {
 	symbol, err := marketvo.NewSymbol(dto.Symbol)
 	if err != nil {
-		return configvo.StockAlertConfig{}, err
+		return configvo.WatchlistItem{}, err
 	}
 
-	conditions := make([]configvo.AlertCondition, len(dto.Conditions))
+	conditions := make([]configvo.TriggerCondition, len(dto.Conditions))
 	for i, c := range dto.Conditions {
-		cond, err := configvo.NewAlertCondition(c.Type, c.Threshold, c.Reference, c.Enabled)
+		cond, err := configvo.NewTriggerCondition(c.Type, c.Threshold, c.Reference, c.Enabled)
 		if err != nil {
-			return configvo.StockAlertConfig{}, err
+			return configvo.WatchlistItem{}, err
 		}
 		conditions[i] = cond
 	}
 
-	return configvo.NewStockAlertConfig(symbol, conditions)
+	return configvo.NewWatchlistItem(symbol, conditions)
 }

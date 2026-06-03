@@ -74,7 +74,7 @@ func AnalyzeBullishRSIEarly(ctx context.Context, data *appPrep.DataPrepare, uc *
 
 // NewBullishRSIJobsFromDeps builds, per enabled interval, a CONFIRMED bullish divergence
 // job and an independent EARLY bullish divergence job. Each selects + auto-disables only
-// its own AlertType, so firing one never affects the other's enabled state.
+// its own TriggerType, so firing one never affects the other's enabled state.
 func NewBullishRSIJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, error) {
 	var jobs []inbound.Job
 	jobCfg := deps.Config.BullishJob
@@ -94,9 +94,9 @@ func NewBullishRSIJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, er
 			configRepo:  deps.ConfigRepo,
 			notifier:    deps.Notifier,
 			disabler:    deps.ConditionDisabler,
-			disableType: configvo.AlertTypeBullishDivergence,
+			disableType: configvo.TriggerTypeBullishDivergence,
 			selectSymbols: func(cfg *configagg.TradingConfig) []marketvo.Symbol {
-				return cfg.SymbolsWithEnabledCondition(configvo.AlertTypeBullishDivergence)
+				return cfg.SymbolsWithEnabledCondition(configvo.TriggerTypeBullishDivergence)
 			},
 			analyze: func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, bool, error) {
 				return AnalyzeBullishRSI(ctx, data, deps.BullishRSIUC, interval)
@@ -113,9 +113,9 @@ func NewBullishRSIJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, er
 			configRepo:  deps.ConfigRepo,
 			notifier:    deps.Notifier,
 			disabler:    deps.ConditionDisabler,
-			disableType: configvo.AlertTypeBullishDivergenceEarly,
+			disableType: configvo.TriggerTypeBullishDivergenceEarly,
 			selectSymbols: func(cfg *configagg.TradingConfig) []marketvo.Symbol {
-				return cfg.SymbolsWithEnabledCondition(configvo.AlertTypeBullishDivergenceEarly)
+				return cfg.SymbolsWithEnabledCondition(configvo.TriggerTypeBullishDivergenceEarly)
 			},
 			analyze: func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, bool, error) {
 				return AnalyzeBullishRSIEarly(ctx, data, deps.BullishRSIUC, interval)

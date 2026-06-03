@@ -52,17 +52,17 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 	// Notifier
 	notifier := telegram.NewNotifier()
 
-	// SSI iboard-query adapter for real-time quotes (alert job). Observed via
+	// SSI iboard-query adapter for real-time quotes (watchlist job). Observed via
 	// ProviderMetrics under {provider="ssi-quote"} but NOT joined to the pool.
 	quoteProvider, err := sources.NewSSIQueryProvider(infra.HTTPClient, infra.ProviderMetrics, infra.CredStore)
 	if err != nil {
 		return nil, fmt.Errorf("init ssi-quote provider: %w", err)
 	}
 
-	// Stateless domain service that owns alert fire/no-fire + value formatting.
-	alertEvaluator := alertservice.NewAlertEvaluator()
+	// Stateless domain service that owns watchlist fire/no-fire + value formatting.
+	alertEvaluator := alertservice.NewWatchlistEvaluator()
 
-	// Shared scoped-write seam used by both the tick alert job and the analyze jobs
+	// Shared scoped-write seam used by both the tick watchlist job and the analyze jobs
 	// to auto-disable fired conditions without whole-doc clobber.
 	conditionDisabler := appService.NewConditionDisabler(configRepo)
 
@@ -100,7 +100,7 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 
 	// Build job dependencies. MarketTimezone re-uses the cron-scheduler's
 	// loaded *time.Location so the binary has a single source of truth for
-	// "what is Vietnam time?" — consumed by StockAlertJob's HoSE session gate
+	// "what is Vietnam time?" — consumed by WatchlistJob's HoSE session gate
 	// (see backend/domain/shared/valueobject/market/session.go).
 	jobDeps := jobsRegistry.JobDependencies{
 		Preparer:            dataPreparer,
@@ -112,7 +112,7 @@ func NewAppServices(cfg *config.InfraConfig, infra *Infra) (*AppServices, error)
 		Notifier:            notifier,
 		ConfigRepo:          configRepo,
 		QuoteProvider:       quoteProvider,
-		AlertEvaluator:      alertEvaluator,
+		WatchlistEvaluator:  alertEvaluator,
 		ConditionDisabler:   conditionDisabler,
 		Config:              cfg,
 		MarketTimezone:      loc,

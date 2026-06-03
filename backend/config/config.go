@@ -23,7 +23,7 @@ type JobConfig struct {
 	// regardless of the HoSE intraday session window. Intended for local
 	// development; production should leave this false so ATO (09:00-09:15)
 	// and lunch (11:30-13:00) ticks are skipped. Currently consumed only by
-	// StockAlertJob (env: STOCK_ALERT_IGNORE_SESSION_GATE).
+	// WatchlistJob (env: WATCHLIST_IGNORE_SESSION_GATE).
 	IgnoreSessionGate bool
 }
 
@@ -53,7 +53,7 @@ type InfraConfig struct {
 	BreakoutJob  JobConfig
 	BreakdownJob JobConfig
 	StockRefresh JobConfig
-	StockAlert   JobConfig
+	Watchlist    JobConfig
 
 	// Logging Configuration
 	LogLevel    string
@@ -104,7 +104,7 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	cfg.BreakoutJob = loadJobTypeConfig("BREAKOUT", []string{"1H", "1W"}, &errors)
 	cfg.BreakdownJob = loadJobTypeConfig("BREAKDOWN", []string{"1H", "1W"}, &errors)
 	cfg.StockRefresh = loadStockRefreshConfig(&errors)
-	cfg.StockAlert = loadStockAlertConfig(&errors)
+	cfg.Watchlist = loadWatchlistConfig(&errors)
 
 	// Logging Configuration
 	cfg.LogLevel = getLogLevelEnv("LOG_LEVEL", &errors)
@@ -168,15 +168,15 @@ func loadStockRefreshConfig(errors *[]string) JobConfig {
 	}
 }
 
-// loadStockAlertConfig loads stock alert job configuration.
-func loadStockAlertConfig(errors *[]string) JobConfig {
+// loadWatchlistConfig loads watchlist job configuration.
+func loadWatchlistConfig(errors *[]string) JobConfig {
 	return JobConfig{
-		Timeout:           time.Duration(getNumberEnv("STOCK_ALERT_TIMEOUT_MINUTES", errors)) * time.Minute,
-		IgnoreSessionGate: getBoolEnv("STOCK_ALERT_IGNORE_SESSION_GATE", errors),
+		Timeout:           time.Duration(getNumberEnv("WATCHLIST_TIMEOUT_MINUTES", errors)) * time.Minute,
+		IgnoreSessionGate: getBoolEnv("WATCHLIST_IGNORE_SESSION_GATE", errors),
 		Intervals: map[string]IntervalConfig{
 			"default": {
-				Enabled:  getBoolEnv("STOCK_ALERT_ENABLED", errors),
-				Schedule: getStringEnv("STOCK_ALERT_SCHEDULE", errors),
+				Enabled:  getBoolEnv("WATCHLIST_ENABLED", errors),
+				Schedule: getStringEnv("WATCHLIST_SCHEDULE", errors),
 			},
 		},
 	}

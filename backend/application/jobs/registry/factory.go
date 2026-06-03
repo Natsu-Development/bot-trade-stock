@@ -31,17 +31,17 @@ type JobDependencies struct {
 	StockMetricsManager inbound.StockMetricsManager
 
 	// Shared dependencies
-	Notifier          outbound.Notifier
-	ConfigRepo        outbound.ConfigRepository
-	QuoteProvider     outbound.QuoteProvider
-	AlertEvaluator    *alertservice.AlertEvaluator
-	ConditionDisabler *appService.ConditionDisabler
-	Config            *config.InfraConfig
+	Notifier           outbound.Notifier
+	ConfigRepo         outbound.ConfigRepository
+	QuoteProvider      outbound.QuoteProvider
+	WatchlistEvaluator *alertservice.WatchlistEvaluator
+	ConditionDisabler  *appService.ConditionDisabler
+	Config             *config.InfraConfig
 
 	// MarketTimezone is the HoSE-local timezone (Asia/Ho_Chi_Minh by default,
 	// loaded once at startup from CRON_TIMEZONE in wire/app.go).
 	// Job factories that gate on HoSE trading sessions (currently only
-	// StockAlertJob) read it via this injected field rather than calling
+	// WatchlistJob) read it via this injected field rather than calling
 	// time.LoadLocation themselves, keeping the binary's view of "Vietnam
 	// time" single-sourced.
 	MarketTimezone *time.Location

@@ -3,53 +3,53 @@
 // all contexts agree on and use consistently.
 package filter
 
-import (
-	"errors"
+import marketvo "backend/domain/shared/valueobject/market"
 
-	marketvo "backend/domain/shared/valueobject/market"
-)
-
-var (
-	// ErrInvalidStockFilter is returned when stock filter validation fails.
-	ErrInvalidStockFilter = errors.New("invalid stock filter")
-)
-
-// StockFilter represents runtime filter criteria for stock screening.
-// Logic defaults to AND if empty.
-// Use NewStockFilter factory method for validation.
+// StockFilter is the flat, two-level screener filter (wire == BSON == domain):
+// a top-level Match over Conditions and Groups (each Group is one level of
+// Conditions; no sub-groups), with an outer-AND Exchanges list.
 type StockFilter struct {
-	Conditions []FilterCondition `json:"filters"`
-	Logic      FilterLogic       `json:"logic"` // "and" or "or"
-	Exchanges  []string          `json:"exchanges,omitempty"`
+	Match      MatchMode   `json:"match"                bson:"match"`
+	Negate     bool        `json:"negate,omitempty"     bson:"negate,omitempty"`
+	Conditions []Condition `json:"conditions,omitempty" bson:"conditions,omitempty"`
+	Groups     []Group     `json:"groups,omitempty"     bson:"groups,omitempty"`
+	Exchanges  []string    `json:"exchanges,omitempty"  bson:"exchanges,omitempty"`
 }
 
-// NewStockFilter creates a validated stock filter.
-// FilterConditions are already validated via NewFilterCondition(), so we only validate logic and exchanges here.
-func NewStockFilter(conditions []FilterCondition, logic string, exchanges []string) (*StockFilter, error) {
-	// Validate logic (defaults to AND if empty)
-	filterLogic, err := Validate(logic)
-	if err != nil && logic != "" {
-		return nil, ErrInvalidStockFilter
-	}
-	if logic == "" {
-		filterLogic = LogicAND // Default
-	}
+// IsEmpty reports whether the filter has no conditions, no groups, and no exchanges.
+func (f StockFilter) IsEmpty() bool {
+	return len(f.Conditions) == 0 && len(f.Groups) == 0 && len(f.Exchanges) == 0
+}
 
-	// Validate exchanges
-	for _, e := range exchanges {
-		if _, err := marketvo.NewExchange(e); err != nil {
-			return nil, ErrInvalidStockFilter
+// Validate normalizes empty Match values to MatchAnd (top level + each group),
+// validates every condition (field-kind + signal-'=' + value-presence), enforces
+// the global condition cap, and validates exchanges. It mutates the receiver to
+// persist normalized combinators.
+func (f *StockFilter) Validate() error {
+	if f.Match == "" {
+		f.Match = MatchAnd
+	}
+	n := 0
+	for i := range f.Conditions {
+		if err := f.Conditions[i].validate(); err != nil {
+			return err
 		}
 	}
-
-	return &StockFilter{
-		Conditions: conditions,
-		Logic:      filterLogic,
-		Exchanges:  exchanges,
-	}, nil
-}
-
-// IsEmpty returns true if the filter has no conditions or exchanges.
-func (sf *StockFilter) IsEmpty() bool {
-	return len(sf.Conditions) == 0 && len(sf.Exchanges) == 0
+	n += len(f.Conditions)
+	for i := range f.Groups {
+		gn, err := f.Groups[i].validate()
+		if err != nil {
+			return err
+		}
+		n += gn
+	}
+	if n > MaxFilterConditions {
+		return ErrTooManyConditions
+	}
+	for _, e := range f.Exchanges {
+		if _, err := marketvo.NewExchange(e); err != nil {
+			return ErrInvalidStockFilter
+		}
+	}
+	return nil
 }

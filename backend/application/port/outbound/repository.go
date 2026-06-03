@@ -22,7 +22,7 @@ type ConfigRepository interface {
 	// SetConditionEnabled scopes a single-condition enabled toggle to the matching
 	// (symbol, type, reference) via an arrayFilter, avoiding whole-doc clobber when
 	// multiple jobs disable different conditions in the same config concurrently.
-	SetConditionEnabled(ctx context.Context, configID, symbol string, cond configvo.AlertCondition, enabled bool) error
+	SetConditionEnabled(ctx context.Context, configID, symbol string, cond configvo.TriggerCondition, enabled bool) error
 }
 
 // StockMetricsRepository defines the interface for stock metrics persistence.

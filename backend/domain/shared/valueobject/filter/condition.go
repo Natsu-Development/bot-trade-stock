@@ -1,55 +1,48 @@
 // Package filter provides shared immutable value objects for screener filter bounded contexts.
 package filter
 
-// BoolToFloat converts boolean to float64 for filter value storage.
-// true → 1.0, false → 0.0.
-func BoolToFloat(b bool) float64 {
-	if b {
-		return 1
+// Condition is a single leaf comparison. The Field's kind drives Op/Value usage:
+//   - numeric field: Op + Value (a number) required;
+//   - moving-average field: Op required, Value unused (compares price vs the MA);
+//   - signal field: Op must be "=", Value is a bool (nil coerces to false).
+//
+// Value reuses FilterValue (number | bool→1/0) so JSON+BSON marshal natively.
+type Condition struct {
+	Field FilterField    `json:"field"           bson:"field"`
+	Op    FilterOperator `json:"op,omitempty"    bson:"op,omitempty"`
+	Value *FilterValue   `json:"value,omitempty" bson:"value,omitempty"`
+}
+
+// Val returns the numeric value (0 when unset).
+func (c Condition) Val() float64 {
+	if c.Value == nil {
+		return 0
 	}
-	return 0
+	return float64(*c.Value)
 }
 
-// FloatToBool converts float64 to boolean.
-// 0 → false, non-zero → true.
-func FloatToBool(v float64) bool {
-	return v != 0
-}
+// BoolValue returns the value as a boolean (0/nil → false, non-zero → true).
+func (c Condition) BoolValue() bool { return FloatToBool(c.Val()) }
 
-// FilterCondition represents a single filter condition for runtime queries.
-// All values stored as float64: numeric = actual value, boolean = 0 (false) / 1 (true).
-type FilterCondition struct {
-	Field    FilterField
-	Operator FilterOperator
-	Value    float64
-}
-
-// IsBooleanField returns true if this condition is for a signal (boolean) field.
-func (fc FilterCondition) IsBooleanField() bool {
-	return fc.Field.IsSignal()
-}
-
-// GetBoolValue returns the value as boolean (0=false, non-zero=true).
-func (fc FilterCondition) GetBoolValue() bool {
-	return FloatToBool(fc.Value)
-}
-
-// NewFilterCondition creates a validated filter condition.
-// For boolean fields, use 0 for false and 1 for true.
-func NewFilterCondition(field string, operator string, value float64) (FilterCondition, error) {
-	ff, err := NewFilterField(field)
-	if err != nil {
-		return FilterCondition{}, err
+// validate enforces the per-field-kind invariants for one condition.
+func (c Condition) validate() error {
+	switch {
+	case c.Field.IsSignal():
+		if c.Op != OperatorEqual {
+			return ErrSignalOperatorUnsupported
+		}
+		// Value optional: nil coerces to false (existing contract).
+	case c.Field.IsMovingAverage():
+		if c.Op == "" {
+			return ErrMissingOperator
+		}
+	default: // numeric
+		if c.Op == "" {
+			return ErrMissingOperator
+		}
+		if c.Value == nil {
+			return ErrMissingValue
+		}
 	}
-
-	op, err := NewFilterOperator(operator)
-	if err != nil {
-		return FilterCondition{}, err
-	}
-
-	return FilterCondition{
-		Field:    ff,
-		Operator: op,
-		Value:    value,
-	}, nil
+	return nil
 }

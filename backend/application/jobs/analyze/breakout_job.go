@@ -67,9 +67,9 @@ func NewBreakoutJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, erro
 			configRepo:  deps.ConfigRepo,
 			notifier:    deps.Notifier,
 			disabler:    deps.ConditionDisabler,
-			disableType: configvo.AlertTypeBreakoutMTF,
+			disableType: configvo.TriggerTypeBreakoutMTF,
 			selectSymbols: func(cfg *configagg.TradingConfig) []marketvo.Symbol {
-				return cfg.SymbolsWithEnabledCondition(configvo.AlertTypeBreakoutMTF)
+				return cfg.SymbolsWithEnabledCondition(configvo.TriggerTypeBreakoutMTF)
 			},
 			analyze: func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, bool, error) {
 				return AnalyzeBreakout(ctx, data, deps.BreakoutUC, interval)

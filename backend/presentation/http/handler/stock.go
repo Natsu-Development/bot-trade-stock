@@ -59,26 +59,54 @@ func (h *StockHandler) GetCacheInfo(c *gin.Context) {
 	})
 }
 
+// maxFilterBodyBytes bounds the POST /stocks/filter request body before decoding
+// (defense in depth against oversized payloads; the condition cap in
+// StockFilter.Validate is the second line).
+const maxFilterBodyBytes = 256 << 10 // 256 KiB
+
 // FilterStocks handles POST /stocks/filter request.
-// Returns cached stock metrics filtered by advanced filter conditions with AND/OR logic.
+// Returns cached stock metrics filtered by a flat, two-level AND/OR/NOT filter.
 //
-// Available fields: rs_1m, rs_3m, rs_6m, rs_9m, rs_52w, volume_vs_sma, current_volume, volume_sma20
+// Body shape (flat, two-level): a top-level "match" ("and"|"or") over
+// "conditions" and "groups" (each group is one level of conditions; no
+// sub-groups), plus an optional outer-AND "exchanges" list. A condition is
+// {field, op, value}; a group is {"match":"and"|"or","negate"?:bool,"conditions":[...]}.
+// Signal (boolean) fields use op "=" with value true/false.
+//
+// Available fields: rs_1m, rs_3m, rs_6m, rs_9m, rs_52w, volume_vs_sma, current_volume, volume_sma20, signal fields
 // Available operators: >=, <=, >, <, =
-// Logic: "and" (all conditions must match) or "or" (any condition must match)
 // Exchanges: optional filter by exchanges (HOSE, HNX, UPCOM)
 func (h *StockHandler) FilterStocks(c *gin.Context) {
+	// Cap the body before decoding so oversized/deeply-nested payloads are
+	// rejected at read time rather than after allocating the whole tree.
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxFilterBodyBytes)
+
 	var req dto.StockFilterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{
+				"error":          "Request body too large",
+				"details":        err.Error(),
+				"max_bytes":      maxFilterBodyBytes,
+				"max_conditions": filtervo.MaxFilterConditions,
+			})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Invalid request body",
 			"details": err.Error(),
 			"example": map[string]interface{}{
-				"filters": []map[string]interface{}{
-					{"field": "rs_52w", "op": ">=", "value": 80},
-					{"field": "volume_vs_sma", "op": ">=", "value": 50},
+				"match": "and",
+				"conditions": []map[string]interface{}{
+					{"field": "rs_52w", "op": ">=", "value": 70},
 				},
-				"logic":     "and",
-				"exchanges": []string{"HOSE", "HNX"},
+				"groups": []map[string]interface{}{
+					{"match": "or", "conditions": []map[string]interface{}{
+						{"field": "has_breakout_confirmed", "op": "=", "value": true},
+					}},
+				},
+				"exchanges": []string{"HOSE"},
 			},
 		})
 		return
@@ -94,6 +122,7 @@ func (h *StockHandler) FilterStocks(c *gin.Context) {
 			"valid_fields":    filtervo.ValidFilterFields(),
 			"valid_operators": filtervo.ValidFilterOperators(),
 			"valid_exchanges": exchangesList(),
+			"max_conditions":  filtervo.MaxFilterConditions,
 		}
 		c.JSON(http.StatusBadRequest, resp)
 		return
