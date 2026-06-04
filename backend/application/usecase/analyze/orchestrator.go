@@ -10,7 +10,6 @@ import (
 	appPrep "backend/application/usecase/analyze/prep"
 	appRsi "backend/application/usecase/analyze/rsi"
 	appTrendline "backend/application/usecase/analyze/trendline"
-	configagg "backend/domain/config/aggregate"
 	marketvo "backend/domain/shared/valueobject/market"
 
 	"go.uber.org/zap"
@@ -48,13 +47,6 @@ func NewAnalyzer(
 	}
 }
 
-// GetConfig fetches a trading configuration by ID without running analysis.
-// Used by handlers to retrieve config values (e.g., LookbackDay) for query parameter calculation.
-// Delegates to ConfigManager to avoid code duplication.
-func (uc *AnalyzeUseCase) GetConfig(ctx context.Context, configID string) (*configagg.TradingConfig, error) {
-	return uc.configManager.GetConfig(ctx, configID)
-}
-
 // Execute performs all analysis for a symbol.
 // Composes results from specialized use cases into a unified result.
 // Returns a plain DTO with combined divergences and computed trendline data points.
@@ -71,28 +63,28 @@ func (uc *AnalyzeUseCase) Execute(
 	)
 
 	// Prepare data ONCE - all use cases share the same prepared data
-	data, err := uc.preparer.Prepare(ctx, q, configID)
+	prepared, err := uc.preparer.Prepare(ctx, q, configID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Run specialized use cases with prepared data (no I/O in use cases)
-	bullishResult, err := uc.bullishUsecase.Execute(data)
+	bullishResult, err := uc.bullishUsecase.Execute(prepared)
 	if err != nil {
 		return nil, err
 	}
 
-	bearishResult, err := uc.bearishUsecase.Execute(data)
+	bearishResult, err := uc.bearishUsecase.Execute(prepared)
 	if err != nil {
 		return nil, err
 	}
 
-	breakdownTrendlines, breakdownSignals, err := uc.breakdownUsecase.Execute(data)
+	breakdownTrendlines, breakdownSignals, err := uc.breakdownUsecase.Execute(prepared)
 	if err != nil {
 		return nil, err
 	}
 
-	breakoutTrendlines, breakoutSignals, err := uc.breakoutUsecase.Execute(data)
+	breakoutTrendlines, breakoutSignals, err := uc.breakoutUsecase.Execute(prepared)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +93,7 @@ func (uc *AnalyzeUseCase) Execute(
 	divergences := append(bullishResult, bearishResult...)
 	trendlines := append(breakdownTrendlines, breakoutTrendlines...)
 	signals := append(breakdownSignals, breakoutSignals...)
-	priceHistoryDTOs := dto.ToMarketDataDTOs(data.DataFull)
+	priceHistoryDTOs := dto.ToMarketDataDTOs(prepared.Data)
 
 	// Build result
 	result := &dto.AnalysisResult{

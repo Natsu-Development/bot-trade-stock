@@ -16,8 +16,8 @@ type MarketDataQuery struct {
 }
 
 // NewMarketDataQueryFromStrings creates a validated MarketDataQuery from raw string values.
-// startDate is automatically calculated as (endDate - lookbackDay).
-func NewMarketDataQueryFromStrings(symbolStr, endDate, intervalStr string, lookbackDay LookbackDay) (MarketDataQuery, error) {
+// startDate is automatically calculated as (endDate - fetchSpan).
+func NewMarketDataQueryFromStrings(symbolStr, endDate, intervalStr string, fetchSpan FetchSpanDays) (MarketDataQuery, error) {
 	symbol, err := NewSymbol(symbolStr)
 	if err != nil {
 		return MarketDataQuery{}, fmt.Errorf("invalid symbol: %w", err)
@@ -28,8 +28,8 @@ func NewMarketDataQueryFromStrings(symbolStr, endDate, intervalStr string, lookb
 		return MarketDataQuery{}, fmt.Errorf("invalid interval: %w", err)
 	}
 
-	// Normalize endDate (defaults to today) and calculate startDate from lookback
-	startDate, endDateParsed, err := calculateDateRange(endDate, lookbackDay)
+	// Normalize endDate (defaults to today) and calculate startDate from the fetch span
+	startDate, endDateParsed, err := calculateDateRange(endDate, fetchSpan)
 	if err != nil {
 		return MarketDataQuery{}, fmt.Errorf("invalid date range: %w", err)
 	}
@@ -42,8 +42,8 @@ func NewMarketDataQueryFromStrings(symbolStr, endDate, intervalStr string, lookb
 	}, nil
 }
 
-// calculateDateRange validates endDate and calculates startDate from lookbackDay.
-func calculateDateRange(endDate string, lookbackDay LookbackDay) (time.Time, time.Time, error) {
+// calculateDateRange validates endDate and calculates startDate from fetchSpan.
+func calculateDateRange(endDate string, fetchSpan FetchSpanDays) (time.Time, time.Time, error) {
 	if endDate == "" {
 		endDate = time.Now().Format("2006-01-02")
 	}
@@ -53,16 +53,12 @@ func calculateDateRange(endDate string, lookbackDay LookbackDay) (time.Time, tim
 		return time.Time{}, time.Time{}, fmt.Errorf("invalid end_date format '%s': must be YYYY-MM-DD", endDate)
 	}
 
-	// Calculate startDate from lookbackDay
-	parsedStartDate := parsedEndDate.AddDate(0, 0, -int(lookbackDay))
+	// Calculate startDate from fetchSpan
+	parsedStartDate := parsedEndDate.AddDate(0, 0, -int(fetchSpan))
 
 	today := time.Now().Truncate(24 * time.Hour)
 	if parsedEndDate.After(today) {
 		return time.Time{}, time.Time{}, errors.New("end_date cannot be in the future")
-	}
-
-	if parsedEndDate.Sub(parsedStartDate) > time.Duration(MaxLookbackDay)*24*time.Hour {
-		return time.Time{}, time.Time{}, fmt.Errorf("date range cannot exceed %d days", MaxLookbackDay)
 	}
 
 	return parsedStartDate, parsedEndDate, nil

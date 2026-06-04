@@ -50,6 +50,10 @@ type StockMetricsUseCase struct {
 	// Concurrency limit for batch fetching
 	concurrency int
 
+	// windowBars is the operator-set bar count (ANALYSIS_WINDOW_BARS), scaled
+	// into the daily fetch span for the all-equity metrics batch.
+	windowBars int
+
 	// RAM cache
 	cachedMetrics []*metricsagg.StockMetrics
 	cachedAt      time.Time
@@ -80,6 +84,7 @@ func NewStockMetricsUseCase(
 	repository outbound.StockMetricsRepository,
 	configRepo outbound.ConfigRepository,
 	concurrency int,
+	windowBars int,
 ) *StockMetricsUseCase {
 	return &StockMetricsUseCase{
 		gateway:     gateway,
@@ -87,6 +92,7 @@ func NewStockMetricsUseCase(
 		calculator:  metricsservice.NewCalculator(),
 		configRepo:  configRepo,
 		concurrency: concurrency,
+		windowBars:  windowBars,
 	}
 }
 
@@ -143,7 +149,7 @@ func (uc *StockMetricsUseCase) refresh(ctx context.Context) (*dto.StockMetricsRe
 			droppedCount++
 			continue
 		}
-		query, err := marketvo.NewMarketDataQueryFromStrings(sym, "", "1D", marketvo.LookbackDay(systemConfig.LookbackDay))
+		query, err := marketvo.NewMarketDataQueryFromStrings(sym, "", "1D", marketvo.FetchSpanForBars(marketvo.Interval1D, uc.windowBars))
 		if err != nil {
 			zap.L().Warn("Invalid query", zap.String("symbol", sym), zap.Error(err))
 			continue
@@ -398,7 +404,6 @@ func (uc *StockMetricsUseCase) computeSignals(
 ) {
 	rsiPeriod := int(cfg.RSIPeriod)
 	pivotPeriod := int(cfg.PivotPeriod)
-	indicesRecent := int(cfg.IndicesRecent)
 	proximityPct := cfg.Trendline.ProximityDecimal()
 	rangeMin := cfg.Divergence.RangeMin
 	rangeMax := cfg.Divergence.RangeMax
@@ -409,25 +414,19 @@ func (uc *StockMetricsUseCase) computeSignals(
 		return
 	}
 
-	// 1. Calculate RSI
+	// 1. Calculate RSI over the full fetched window. Analysis runs on the same
+	// window (no post-RSI trim) — RSI=0 warmup bars are inert in pivot detection.
 	dataWithRSI := sharedservice.CalculateRSI(priceHistory, rsiPeriod)
-	if len(dataWithRSI) < indicesRecent {
-		return
-	}
 
-	// 2. Slice recent data
-	startIndex := len(dataWithRSI) - indicesRecent
-	recentData := dataWithRSI[startIndex:]
-
-	// 3. Find pivots
+	// 2. Find pivots
 	// RSI pivots for divergence detection (must use FieldRSI)
-	rsiHighPivots := analysissvc.FindHighPivots(recentData, analysisvo.FieldRSI, pivotPeriod)
-	rsiLowPivots := analysissvc.FindLowPivots(recentData, analysisvo.FieldRSI, pivotPeriod)
+	rsiHighPivots := analysissvc.FindHighPivots(dataWithRSI, analysisvo.FieldRSI, pivotPeriod)
+	rsiLowPivots := analysissvc.FindLowPivots(dataWithRSI, analysisvo.FieldRSI, pivotPeriod)
 	// Price pivots for trendline building (uses FieldHigh/FieldLow)
-	priceHighPivots := analysissvc.FindHighPivots(recentData, analysisvo.FieldHigh, pivotPeriod)
-	priceLowPivots := analysissvc.FindLowPivots(recentData, analysisvo.FieldLow, pivotPeriod)
+	priceHighPivots := analysissvc.FindHighPivots(dataWithRSI, analysisvo.FieldHigh, pivotPeriod)
+	priceLowPivots := analysissvc.FindLowPivots(dataWithRSI, analysisvo.FieldLow, pivotPeriod)
 
-	// 4. Detect divergences using config values
+	// 3. Detect divergences using config values
 	bullishDivergences := analysissvc.FindBullishDivergences(rsiLowPivots, rangeMin, rangeMax)
 	bearishDivergences := analysissvc.FindBearishDivergences(rsiHighPivots, rangeMin, rangeMax)
 
@@ -446,15 +445,15 @@ func (uc *StockMetricsUseCase) computeSignals(
 		}
 	}
 
-	// 5. Build trendlines using config maxLines
+	// 4. Build trendlines using config maxLines
 	supportTrendlines := analysissvc.BuildSupportTrendlines(priceLowPivots, maxLines)
 	resistanceTrendlines := analysissvc.BuildResistanceTrendlines(priceHighPivots, maxLines)
 
-	// 6. Generate signals
-	breakdownSignals := analysissvc.GenerateSupportSignals(supportTrendlines, recentData, proximityPct)
-	breakoutSignals := analysissvc.GenerateResistanceSignals(resistanceTrendlines, recentData, proximityPct)
+	// 5. Generate signals
+	breakdownSignals := analysissvc.GenerateSupportSignals(supportTrendlines, dataWithRSI, proximityPct)
+	breakoutSignals := analysissvc.GenerateResistanceSignals(resistanceTrendlines, dataWithRSI, proximityPct)
 
-	// 7. Extract signal types with date threshold check
+	// 6. Extract signal types with date threshold check
 	for _, s := range breakdownSignals {
 		if isSignalWithinDays(s.Time, signalThreshold) {
 			switch s.Type {
@@ -477,11 +476,11 @@ func (uc *StockMetricsUseCase) computeSignals(
 		}
 	}
 
-	// 8. Read each direction's tick-time POTENTIAL alert level straight from the
+	// 7. Read each direction's tick-time POTENTIAL alert level straight from the
 	// signals GenerateResistanceSignals / GenerateSupportSignals produced at
-	// step 6 — see nearestLevelFromSignals for why a *_Potential signal's
+	// step 5 — see nearestLevelFromSignals for why a *_Potential signal's
 	// PriceLine is exactly the level the evaluator can fire on.
-	latestClose := recentData[len(recentData)-1].Close
+	latestClose := dataWithRSI[len(dataWithRSI)-1].Close
 	metrics.ResistanceLevel = nearestLevelFromSignals(breakoutSignals, analysisvo.BreakoutPotential, latestClose)
 	metrics.SupportLevel = nearestLevelFromSignals(breakdownSignals, analysisvo.BreakdownPotential, latestClose)
 	metrics.TrendlineProximity = proximityPct

@@ -3,6 +3,7 @@ package wire
 import (
 	"net/http"
 
+	"backend/config"
 	presHTTP "backend/presentation/http"
 	presHandler "backend/presentation/http/handler"
 
@@ -15,13 +16,13 @@ type Presentation struct {
 }
 
 // NewPresentation initializes all presentation layer dependencies.
-func NewPresentation(app *AppServices) *Presentation {
+func NewPresentation(cfg *config.InfraConfig, app *AppServices) *Presentation {
 	zap.L().Info("Initializing presentation layer")
 
 	// Handlers
 	configHandler := presHandler.NewConfigHandler(app.ConfigUC)
 	stockHandler := presHandler.NewStockHandler(app.StockMetrics)
-	analyzeHandler := presHandler.NewAnalyzeHandler(app.Analyzer)
+	analyzeHandler := presHandler.NewAnalyzeHandler(app.Analyzer, cfg.AnalysisWindowBars)
 
 	// Router
 	router := presHTTP.NewRouter(configHandler, stockHandler, analyzeHandler)

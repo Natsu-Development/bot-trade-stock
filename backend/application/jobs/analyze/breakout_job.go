@@ -63,6 +63,7 @@ func NewBreakoutJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, erro
 			timeout:     jobCfg.Timeout,
 			concurrency: jobCfg.Concurrency,
 			namePrefix:  "breakout",
+			windowBars:  deps.Config.AnalysisWindowBars,
 			preparer:    deps.Preparer,
 			configRepo:  deps.ConfigRepo,
 			notifier:    deps.Notifier,

@@ -63,6 +63,7 @@ func NewBreakdownJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, err
 			timeout:     jobCfg.Timeout,
 			concurrency: jobCfg.Concurrency,
 			namePrefix:  "breakdown",
+			windowBars:  deps.Config.AnalysisWindowBars,
 			preparer:    deps.Preparer,
 			configRepo:  deps.ConfigRepo,
 			notifier:    deps.Notifier,

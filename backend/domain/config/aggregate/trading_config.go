@@ -20,13 +20,8 @@ type TradingConfig struct {
 	ID          valueobject.ConfigID    `bson:"_id"`
 	RSIPeriod   valueobject.RSIPeriod   `bson:"rsi_period"`
 	PivotPeriod valueobject.PivotPeriod `bson:"pivot_period"`
-	// LookbackDay specifies how many days of historical data to fetch for analysis.
-	// Used to calculate the start date: time.Now().AddDate(0, 0, -int(LookbackDay))
-	LookbackDay market.LookbackDay     `bson:"lookback_day"`
-	Divergence  valueobject.Divergence `bson:"divergence"`
-	Trendline   valueobject.Trendline  `bson:"trendline"`
-	// IndicesRecent specifies the number of recent indices to track.
-	IndicesRecent valueobject.IndicesRecent `bson:"indices_recent"`
+	Divergence  valueobject.Divergence  `bson:"divergence"`
+	Trendline   valueobject.Trendline   `bson:"trendline"`
 	// SignalDaysThreshold is the configured recency window (in days): a
 	// trendline/RSI-divergence signal only counts when its most recent point falls
 	// within this many days, not across the whole analyzed range.
@@ -48,20 +43,16 @@ func NewTradingConfig(
 	id valueobject.ConfigID,
 	rsiPeriod valueobject.RSIPeriod,
 	pivotPeriod valueobject.PivotPeriod,
-	lookbackDay market.LookbackDay,
 	divergence valueobject.Divergence,
 	trendline valueobject.Trendline,
-	indicesRecent valueobject.IndicesRecent,
 	signalDaysThreshold int,
 ) (*TradingConfig, error) {
 	cfg := &TradingConfig{
 		ID:                  id,
 		RSIPeriod:           rsiPeriod,
 		PivotPeriod:         pivotPeriod,
-		LookbackDay:         lookbackDay,
 		Divergence:          divergence,
 		Trendline:           trendline,
-		IndicesRecent:       indicesRecent,
 		SignalDaysThreshold: signalDaysThreshold,
 		Telegram:            valueobject.Telegram{Enabled: false},
 		CreatedAt:           time.Now(),
@@ -84,20 +75,12 @@ func (c *TradingConfig) Merge(update *TradingConfig) (*TradingConfig, error) {
 	// Override primitive VOs if explicitly set
 	var emptyRSI valueobject.RSIPeriod
 	var emptyPivot valueobject.PivotPeriod
-	var emptyOffset market.LookbackDay
-	var emptyIndices valueobject.IndicesRecent
 
 	if update.RSIPeriod != emptyRSI {
 		merged.RSIPeriod = update.RSIPeriod
 	}
 	if update.PivotPeriod != emptyPivot {
 		merged.PivotPeriod = update.PivotPeriod
-	}
-	if update.LookbackDay != emptyOffset {
-		merged.LookbackDay = update.LookbackDay
-	}
-	if update.IndicesRecent != emptyIndices {
-		merged.IndicesRecent = update.IndicesRecent
 	}
 	// Zero is the sentinel for "not provided" — matches the pattern used for
 	// every sibling VO above and preserves the partial-PUT semantics promised
@@ -185,11 +168,6 @@ func (c *TradingConfig) Validate() error {
 		return shared.NewValidationError("pivot_period is required")
 	}
 
-	// IndicesRecent is optional, but if set must be valid
-	var emptyIndices valueobject.IndicesRecent
-	if c.IndicesRecent != emptyIndices && c.IndicesRecent < 1 {
-		errs = append(errs, "indices_recent must be a positive integer")
-	}
 	if c.SignalDaysThreshold < MinSignalDaysThreshold || c.SignalDaysThreshold > MaxSignalDaysThreshold {
 		errs = append(errs, "signal_days_threshold must be between 1 and 365")
 	}

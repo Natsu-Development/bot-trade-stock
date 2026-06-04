@@ -7,7 +7,6 @@ import (
 	"context"
 
 	"backend/application/dto"
-	"backend/domain/config/aggregate"
 	marketvo "backend/domain/shared/valueobject/market"
 )
 
@@ -19,6 +18,4 @@ import (
 // The presentation layer is responsible for converting to API response format.
 type Analyzer interface {
 	Execute(ctx context.Context, q marketvo.MarketDataQuery, configID string) (*dto.AnalysisResult, error)
-	// GetConfig fetches a trading configuration by ID without running analysis.
-	GetConfig(ctx context.Context, configID string) (*aggregate.TradingConfig, error)
 }

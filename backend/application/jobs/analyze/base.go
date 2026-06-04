@@ -66,6 +66,7 @@ type AnalysisJob struct {
 	timeout       time.Duration
 	concurrency   int
 	namePrefix    string
+	windowBars    int
 	preparer      *appPrep.Preparer
 	configRepo    outbound.ConfigRepository
 	notifier      outbound.Notifier
@@ -116,9 +117,8 @@ func (j *AnalysisJob) processConfig(ctx context.Context, cfg *configagg.TradingC
 }
 
 func (j *AnalysisJob) analyzeSymbol(ctx context.Context, symbol string, cfg *configagg.TradingConfig) {
-	// Scale LookbackDay by interval cadence so weekly/monthly jobs fetch enough
-	// bars for the RSI/pivot/divergence pipeline. See ADR in
-	// .omc/plans/analyze-interval-autoscale.md.
+	// Scale the operator-set window bar count by interval cadence so
+	// weekly/monthly jobs fetch enough bars for the RSI/pivot/divergence pipeline.
 	interval, err := marketvo.NewInterval(j.interval)
 	if err != nil {
 		zap.L().Error("Invalid job interval",
@@ -128,9 +128,9 @@ func (j *AnalysisJob) analyzeSymbol(ctx context.Context, symbol string, cfg *con
 		)
 		return
 	}
-	effectiveLookback := marketvo.EffectiveLookbackDays(interval, cfg.LookbackDay)
+	span := marketvo.FetchSpanForBars(interval, j.windowBars)
 
-	query, err := marketvo.NewMarketDataQueryFromStrings(symbol, "", j.interval, effectiveLookback)
+	query, err := marketvo.NewMarketDataQueryFromStrings(symbol, "", j.interval, span)
 	if err != nil {
 		zap.L().Error("Failed to create query", zap.String("symbol", symbol), zap.Error(err))
 		return

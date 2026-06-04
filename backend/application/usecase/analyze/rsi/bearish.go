@@ -19,13 +19,13 @@ func NewBearishRSIUseCase() *BearishRSIUseCase {
 
 // Execute performs CONFIRMED bearish divergence analysis on prepared data.
 // Pure analysis - no I/O, receives prepared data directly.
-func (uc *BearishRSIUseCase) Execute(data *appPrep.DataPrepare) ([]dto.DivergenceDTO, error) {
-	pivotPeriod := int(data.Config.PivotPeriod)
-	pivots := analysisservice.FindHighPivots(data.DataRecent, analysisvo.FieldRSI, pivotPeriod)
+func (uc *BearishRSIUseCase) Execute(prepared *appPrep.DataPrepare) ([]dto.DivergenceDTO, error) {
+	pivotPeriod := int(prepared.Config.PivotPeriod)
+	pivots := analysisservice.FindHighPivots(prepared.Data, analysisvo.FieldRSI, pivotPeriod)
 	divergences := analysisservice.FindBearishDivergences(
 		pivots,
-		data.Config.Divergence.RangeMin,
-		data.Config.Divergence.RangeMax,
+		prepared.Config.Divergence.RangeMin,
+		prepared.Config.Divergence.RangeMax,
 	)
 	return dto.ToDivergenceDTOs(divergences), nil
 }
@@ -33,13 +33,13 @@ func (uc *BearishRSIUseCase) Execute(data *appPrep.DataPrepare) ([]dto.Divergenc
 // ExecuteEarly performs EARLY (forming) bearish divergence analysis using the current
 // bar. Returns an empty slice when no early divergence is forming, so the caller does
 // not fire. Independent of Execute (the confirmed path).
-func (uc *BearishRSIUseCase) ExecuteEarly(data *appPrep.DataPrepare) ([]dto.DivergenceDTO, error) {
-	if len(data.DataRecent) == 0 {
+func (uc *BearishRSIUseCase) ExecuteEarly(prepared *appPrep.DataPrepare) ([]dto.DivergenceDTO, error) {
+	if len(prepared.Data) == 0 {
 		return nil, nil
 	}
-	pivotPeriod := int(data.Config.PivotPeriod)
-	pivots := analysisservice.FindHighPivots(data.DataRecent, analysisvo.FieldRSI, pivotPeriod)
-	early := analysisservice.FindEarlyBearishDivergence(pivots, data.DataRecent[len(data.DataRecent)-1])
+	pivotPeriod := int(prepared.Config.PivotPeriod)
+	pivots := analysisservice.FindHighPivots(prepared.Data, analysisvo.FieldRSI, pivotPeriod)
+	early := analysisservice.FindEarlyBearishDivergence(pivots, prepared.Data[len(prepared.Data)-1])
 	if early.Type == "" {
 		return nil, nil
 	}

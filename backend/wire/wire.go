@@ -33,7 +33,7 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	}
 
 	// Presentation layer
-	presentation := NewPresentation(services)
+	presentation := NewPresentation(cfg, services)
 
 	zap.L().Info("Application initialized successfully")
 

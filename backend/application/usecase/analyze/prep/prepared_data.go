@@ -13,11 +13,12 @@ import (
 
 // DataPrepare contains all data needed for analysis.
 // Shared across all specialized use cases to avoid duplicate fetching.
+// Data holds the full post-RSI window; analysis and chart now use the same slice
+// (no post-RSI trim), so one field serves both.
 type DataPrepare struct {
-	Symbol     string
-	Config     *configagg.TradingConfig
-	DataRecent []marketvo.MarketData
-	DataFull   []marketvo.MarketData
+	Symbol string
+	Config *configagg.TradingConfig
+	Data   []marketvo.MarketData
 }
 
 // Preparer handles common data preparation for all use cases.
@@ -38,7 +39,7 @@ func NewPreparer(
 	}
 }
 
-// Prepare fetches config, market data, calculates RSI, and slices recent data.
+// Prepare fetches config, market data, and calculates RSI.
 // Returns DataPrepare containing everything needed for analysis.
 func (p *Preparer) Prepare(
 	ctx context.Context,
@@ -69,18 +70,9 @@ func (p *Preparer) Prepare(
 		return nil, fmt.Errorf("insufficient data for RSI calculation: need at least %d data points", rsiPeriod+1)
 	}
 
-	// 4. Slice recent data AFTER RSI calculation
-	indicesRecent := int(config.IndicesRecent)
-	if len(dataWithRSI) < indicesRecent {
-		return nil, fmt.Errorf("insufficient RSI data: required %d, got %d", indicesRecent, len(dataWithRSI))
-	}
-	startIndex := len(dataWithRSI) - indicesRecent
-	dataRecent := dataWithRSI[startIndex:]
-
 	return &DataPrepare{
-		Symbol:     symbol,
-		Config:     config,
-		DataRecent: dataRecent,
-		DataFull:   dataWithRSI,
+		Symbol: symbol,
+		Config: config,
+		Data:   dataWithRSI,
 	}, nil
 }

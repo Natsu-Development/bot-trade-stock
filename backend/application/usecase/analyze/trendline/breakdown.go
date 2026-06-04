@@ -20,24 +20,24 @@ func NewBreakdownUseCase() *BreakdownUseCase {
 // Execute performs support trendline analysis on prepared data.
 // Pure analysis - no I/O, receives prepared data directly.
 // Detects Bounce signals from support trendlines.
-func (uc *BreakdownUseCase) Execute(data *appPrep.DataPrepare) ([]dto.TrendlineDTO, []dto.SignalDTO, error) {
+func (uc *BreakdownUseCase) Execute(prepared *appPrep.DataPrepare) ([]dto.TrendlineDTO, []dto.SignalDTO, error) {
 	// Call domain services directly
-	pivotPeriod := int(data.Config.PivotPeriod)
+	pivotPeriod := int(prepared.Config.PivotPeriod)
 
 	// Find price low pivots for support trendlines
-	priceLowPivots := analysisservice.FindLowPivots(data.DataRecent, analysisvo.FieldLow, pivotPeriod)
+	priceLowPivots := analysisservice.FindLowPivots(prepared.Data, analysisvo.FieldLow, pivotPeriod)
 
 	// Build support trendlines
-	trendlines := analysisservice.BuildSupportTrendlines(priceLowPivots, data.Config.Trendline.MaxLines)
+	trendlines := analysisservice.BuildSupportTrendlines(priceLowPivots, prepared.Config.Trendline.MaxLines)
 
 	// Generate bounce signals
 	signals := analysisservice.GenerateSupportSignals(
 		trendlines,
-		data.DataRecent,
-		data.Config.Trendline.ProximityDecimal(),
+		prepared.Data,
+		prepared.Config.Trendline.ProximityDecimal(),
 	)
 
-	trendlineDTOs := dto.ToTrendlineDTOs(data.DataRecent, trendlines)
+	trendlineDTOs := dto.ToTrendlineDTOs(prepared.Data, trendlines)
 	signalDTOs := dto.ToSignalDTOs(signals)
 
 	return trendlineDTOs, signalDTOs, nil

@@ -43,6 +43,12 @@ type InfraConfig struct {
 	MaxProviderRPS     int    // Hard ceiling for adaptive token bucket
 	PrimaryProvider    string // Primary provider name (e.g., "vietcap")
 
+	// Analysis Configuration
+	// AnalysisWindowBars is the operator-set number of bars the analyze pipeline
+	// targets. Interval-scaled into a calendar-day fetch span via
+	// market.FetchSpanForBars. Required (no default) — fail-fast on unset.
+	AnalysisWindowBars int
+
 	// MongoDB Configuration
 	MongoDBURI      string
 	MongoDBDatabase string
@@ -88,6 +94,9 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	cfg.DefaultProviderRPS = getNumberEnv("DEFAULT_PROVIDER_RPS", &errors)
 	cfg.MaxProviderRPS = getNumberEnv("MAX_PROVIDER_RPS", &errors)
 	cfg.PrimaryProvider = getStringEnv("PRIMARY_PROVIDER", &errors)
+
+	// Analysis Configuration (required, no default)
+	cfg.AnalysisWindowBars = getNumberEnv("ANALYSIS_WINDOW_BARS", &errors)
 
 	// MongoDB Configuration
 	cfg.MongoDBURI = getStringEnv("MONGODB_URI", &errors)

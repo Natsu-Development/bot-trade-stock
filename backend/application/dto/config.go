@@ -15,10 +15,8 @@ type TradingConfigRequest struct {
 	ID                  string                `json:"id,omitempty"`
 	RSIPeriod           int                   `json:"rsi_period"`
 	PivotPeriod         int                   `json:"pivot_period"`
-	LookbackDay         int                   `json:"lookback_day"`
 	Divergence          ConfigDivergence      `json:"divergence"`
 	Trendline           ConfigTrendline       `json:"trendline"`
-	IndicesRecent       int                   `json:"indices_recent"`
 	SignalDaysThreshold int                   `json:"signal_days_threshold"`
 	Telegram            ConfigTelegram        `json:"telegram"`
 	MetricsFilter       []ConfigMetricsFilter `json:"metrics_filter,omitempty"`
@@ -30,10 +28,8 @@ type TradingConfigResponse struct {
 	ID                  string                `json:"id"`
 	RSIPeriod           int                   `json:"rsi_period"`
 	PivotPeriod         int                   `json:"pivot_period"`
-	LookbackDay         int                   `json:"lookback_day"`
 	Divergence          ConfigDivergence      `json:"divergence"`
 	Trendline           ConfigTrendline       `json:"trendline"`
-	IndicesRecent       int                   `json:"indices_recent"`
 	SignalDaysThreshold int                   `json:"signal_days_threshold"`
 	Telegram            ConfigTelegram        `json:"telegram"`
 	MetricsFilter       []ConfigMetricsFilter `json:"metrics_filter,omitempty"`
@@ -93,8 +89,6 @@ func ToTradingConfigResponse(cfg *configagg.TradingConfig) *TradingConfigRespons
 		ID:                  string(cfg.ID),
 		RSIPeriod:           int(cfg.RSIPeriod),
 		PivotPeriod:         int(cfg.PivotPeriod),
-		LookbackDay:         int(cfg.LookbackDay),
-		IndicesRecent:       int(cfg.IndicesRecent),
 		SignalDaysThreshold: cfg.SignalDaysThreshold,
 		Divergence: ConfigDivergence{
 			RangeMin: cfg.Divergence.RangeMin,
@@ -148,16 +142,6 @@ func ToTradingConfigAggregate(req TradingConfigRequest) (*configagg.TradingConfi
 	}
 
 	pivotPeriod, err := configvo.NewPivotPeriod(req.PivotPeriod)
-	if err != nil {
-		return nil, err
-	}
-
-	lookbackDay, err := marketvo.NewLookbackDay(req.LookbackDay)
-	if err != nil {
-		return nil, err
-	}
-
-	indicesRecent, err := configvo.NewIndicesRecent(req.IndicesRecent)
 	if err != nil {
 		return nil, err
 	}
@@ -216,10 +200,8 @@ func ToTradingConfigAggregate(req TradingConfigRequest) (*configagg.TradingConfi
 	cfg := &configagg.TradingConfig{
 		RSIPeriod:           rsiPeriod,
 		PivotPeriod:         pivotPeriod,
-		LookbackDay:         lookbackDay,
 		Divergence:          divergence,
 		Trendline:           trendline,
-		IndicesRecent:       indicesRecent,
 		SignalDaysThreshold: req.SignalDaysThreshold,
 		Telegram:            telegram,
 		MetricsFilter:       metricsFilter,

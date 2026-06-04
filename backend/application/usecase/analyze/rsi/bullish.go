@@ -19,13 +19,13 @@ func NewBullishRSIUseCase() *BullishRSIUseCase {
 
 // Execute performs bullish divergence analysis on prepared data.
 // Pure analysis - no I/O, receives prepared data directly.
-func (uc *BullishRSIUseCase) Execute(data *appPrep.DataPrepare) ([]dto.DivergenceDTO, error) {
-	pivotPeriod := int(data.Config.PivotPeriod)
-	pivots := analysisservice.FindLowPivots(data.DataRecent, analysisvo.FieldRSI, pivotPeriod)
+func (uc *BullishRSIUseCase) Execute(prepared *appPrep.DataPrepare) ([]dto.DivergenceDTO, error) {
+	pivotPeriod := int(prepared.Config.PivotPeriod)
+	pivots := analysisservice.FindLowPivots(prepared.Data, analysisvo.FieldRSI, pivotPeriod)
 	divergences := analysisservice.FindBullishDivergences(
 		pivots,
-		data.Config.Divergence.RangeMin,
-		data.Config.Divergence.RangeMax,
+		prepared.Config.Divergence.RangeMin,
+		prepared.Config.Divergence.RangeMax,
 	)
 	return dto.ToDivergenceDTOs(divergences), nil
 }
@@ -33,13 +33,13 @@ func (uc *BullishRSIUseCase) Execute(data *appPrep.DataPrepare) ([]dto.Divergenc
 // ExecuteEarly performs EARLY (forming) bullish divergence analysis using the current
 // bar. Returns an empty slice when no early divergence is forming, so the caller does
 // not fire. Independent of Execute (the confirmed path).
-func (uc *BullishRSIUseCase) ExecuteEarly(data *appPrep.DataPrepare) ([]dto.DivergenceDTO, error) {
-	if len(data.DataRecent) == 0 {
+func (uc *BullishRSIUseCase) ExecuteEarly(prepared *appPrep.DataPrepare) ([]dto.DivergenceDTO, error) {
+	if len(prepared.Data) == 0 {
 		return nil, nil
 	}
-	pivotPeriod := int(data.Config.PivotPeriod)
-	pivots := analysisservice.FindLowPivots(data.DataRecent, analysisvo.FieldRSI, pivotPeriod)
-	early := analysisservice.FindEarlyBullishDivergence(pivots, data.DataRecent[len(data.DataRecent)-1])
+	pivotPeriod := int(prepared.Config.PivotPeriod)
+	pivots := analysisservice.FindLowPivots(prepared.Data, analysisvo.FieldRSI, pivotPeriod)
+	early := analysisservice.FindEarlyBullishDivergence(pivots, prepared.Data[len(prepared.Data)-1])
 	if early.Type == "" {
 		return nil, nil
 	}
