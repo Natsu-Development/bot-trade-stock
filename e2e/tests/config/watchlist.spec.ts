@@ -2,15 +2,15 @@ import { test, expect, Page, Locator } from '@playwright/test'
 import { navigateToPage, waitForPageHeading, resetTestConfig } from '../helpers'
 
 /**
- * E2E coverage for the redesigned (Binance/exchange-style) Stock Alerts section
+ * E2E coverage for the redesigned (Binance/exchange-style) Watchlist section
  * on the Config page. Verifies the collapsed table layout, the three-channel
  * color/state encoding (STATUS badge / category-count chips / expanded
  * enabled-disabled detail), expand-collapse interaction, and that the redesign
  * is presentation-only (PUT /config payload shape unchanged).
  *
  * Race-safety: tests run fullyParallel and share one backend config for
- * e2e_test_user. Like the sibling config.spec.ts, every alert here is built
- * through the editor into per-page LOCAL draft state (never persisted, never
+ * e2e_test_user. Like the sibling config.spec.ts, every watchlist entry here is
+ * built through the editor into per-page LOCAL draft state (never persisted, never
  * reloaded), so a sibling's resetTestConfig can't wipe state mid-test. The one
  * Save test fulfills the PUT locally (route mock) so it never mutates shared
  * backend state either.
@@ -24,28 +24,28 @@ async function goToConfigPage(page: Page) {
 }
 
 async function openEditor(page: Page): Promise<Locator> {
-  await page.getByRole('button', { name: 'Add Alert' }).click()
+  await page.getByRole('button', { name: 'Add Symbol' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
   return dialog
 }
 
 async function pickSymbol(dialog: Locator, symbol: string) {
-  await dialog.locator('#alert-symbol').fill(symbol)
+  await dialog.locator('#watchlist-symbol').fill(symbol)
   await dialog.getByRole('option', { name: symbol, exact: true }).click()
 }
 
-async function createAlert(dialog: Locator) {
-  await dialog.getByRole('button', { name: 'Create Alert' }).click()
+async function addToWatchlist(dialog: Locator) {
+  await dialog.getByRole('button', { name: 'Add to Watchlist' }).click()
   await expect(dialog).not.toBeVisible()
 }
 
 /** The collapsed summary row for a symbol (excludes the column header, which has no symbol text). */
-function alertRow(page: Page, symbol: string): Locator {
-  return page.locator('.alert-row-grid').filter({ hasText: symbol })
+function watchlistRow(page: Page, symbol: string): Locator {
+  return page.locator('.watchlist-row-grid').filter({ hasText: symbol })
 }
 
-test.describe('Config — Stock Alerts (redesigned section)', () => {
+test.describe('Config — Watchlist (redesigned section)', () => {
   test.beforeEach(async ({ page }) => {
     await resetTestConfig()
     await goToConfigPage(page)
@@ -59,19 +59,19 @@ test.describe('Config — Stock Alerts (redesigned section)', () => {
     await expect(page.getByRole('heading', { name: 'Divergence Parameters' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Trendline Parameters' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Telegram Notifications' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Stock Alerts' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Watchlist' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Reset Defaults' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Save Config' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Add Alert' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Add Symbol' })).toBeVisible()
   })
 
   // ----------------------------------------------------------------------
   // Empty state: no rows, no column header, no expand controls
   // ----------------------------------------------------------------------
   test('empty state hides the table chrome (header + expand/collapse controls)', async ({ page }) => {
-    await expect(page.getByText('No alerts configured')).toBeVisible()
+    await expect(page.getByText('Your watchlist is empty')).toBeVisible()
 
-    // Expand-all / Collapse-all controls are hidden when there are no alerts.
+    // Expand-all / Collapse-all controls are hidden when the watchlist is empty.
     await expect(page.getByRole('button', { name: 'Expand all' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Collapse all' })).toHaveCount(0)
 
@@ -90,12 +90,12 @@ test.describe('Config — Stock Alerts (redesigned section)', () => {
     await dialog.getByRole('switch', { name: 'Enable Price above' }).click()
     await dialog.getByRole('textbox', { name: 'Volume spike threshold' }).fill('200')
     await dialog.getByRole('switch', { name: 'Enable Volume spike' }).click()
-    await createAlert(dialog)
+    await addToWatchlist(dialog)
 
     // Column header appears now that a row exists.
     await expect(page.getByText('Watching', { exact: true })).toBeVisible()
 
-    const row = alertRow(page, SYMBOL)
+    const row = watchlistRow(page, SYMBOL)
     await expect(row).toBeVisible()
     await expect(row).toContainText('ACTIVE')
     await expect(row).toContainText('PRICE 1')
@@ -105,7 +105,7 @@ test.describe('Config — Stock Alerts (redesigned section)', () => {
     // The old per-condition "pill wall" text must NOT be in the collapsed view.
     await expect(page.getByText(/price > 100\.00 kVND/)).toHaveCount(0)
     // Detail region is not rendered while collapsed.
-    await expect(page.locator('#alert-detail-FPT')).toHaveCount(0)
+    await expect(page.locator('#watchlist-detail-FPT')).toHaveCount(0)
   })
 
   // ----------------------------------------------------------------------
@@ -121,9 +121,9 @@ test.describe('Config — Stock Alerts (redesigned section)', () => {
     await dialog.getByRole('switch', { name: 'Enable Volume spike' }).click()
     await dialog.getByRole('button', { name: 'Enable EMA 21 for Price crosses above MA' }).click()
     await dialog.getByRole('switch', { name: 'Enable Trendline breakout (potential)' }).click()
-    await createAlert(dialog)
+    await addToWatchlist(dialog)
 
-    const row = alertRow(page, SYMBOL)
+    const row = watchlistRow(page, SYMBOL)
     await expect(row).toContainText('PRICE 1')
     await expect(row).toContainText('TREND 1')
     await expect(row).not.toContainText('Σ') // four chips → not summarized
@@ -149,9 +149,9 @@ test.describe('Config — Stock Alerts (redesigned section)', () => {
     await dialog.getByRole('button', { name: 'Enable EMA 21 for Price crosses above MA' }).click()
     await dialog.getByRole('switch', { name: 'Enable Trendline breakout (potential)' }).click()
     await dialog.getByRole('switch', { name: 'Enable Bullish RSI divergence', exact: true }).click()
-    await createAlert(dialog)
+    await addToWatchlist(dialog)
 
-    const row = alertRow(page, SYMBOL)
+    const row = watchlistRow(page, SYMBOL)
     await expect(row).toContainText('Σ 5 on')
     await expect(row).toContainText('5/5')
     await expect(row).not.toContainText('PRICE 1') // individual chips replaced by the summary
@@ -168,9 +168,9 @@ test.describe('Config — Stock Alerts (redesigned section)', () => {
     await dialog.getByRole('textbox', { name: 'Price above threshold' }).fill('100')
     await dialog.getByRole('switch', { name: 'Enable Price above' }).click()
     await dialog.getByRole('textbox', { name: 'Price below threshold' }).fill('90')
-    await createAlert(dialog)
+    await addToWatchlist(dialog)
 
-    const row = alertRow(page, SYMBOL)
+    const row = watchlistRow(page, SYMBOL)
     await expect(row).toContainText('PRICE 1') // only the enabled one is counted
     await expect(row).toContainText('1/2') // 1 enabled of 2 total
 
@@ -189,7 +189,7 @@ test.describe('Config — Stock Alerts (redesigned section)', () => {
     await expect(detail.getByText('disabled')).toBeVisible() // the price-below row
     await expect(detail).toContainText(/price > 100\.00 kVND/)
     await expect(detail).toContainText(/price < 90\.00 kVND/)
-    await expect(detail.getByRole('button', { name: 'Edit alert for FPT in modal' })).toBeVisible()
+    await expect(detail.getByRole('button', { name: 'Edit watchlist entry for FPT in modal' })).toBeVisible()
 
     // Collapse again.
     await chevron.click()
@@ -198,16 +198,16 @@ test.describe('Config — Stock Alerts (redesigned section)', () => {
   })
 
   // ----------------------------------------------------------------------
-  // Status badge: PAUSED for an all-disabled alert
+  // Status badge: PAUSED for an all-disabled watchlist entry
   // ----------------------------------------------------------------------
-  test('a fully-disabled alert is PAUSED with "Σ 0 on" and 0/total', async ({ page }) => {
+  test('a fully-disabled watchlist entry is PAUSED with "Σ 0 on" and 0/total', async ({ page }) => {
     const dialog = await openEditor(page)
     await pickSymbol(dialog, SYMBOL)
     // Type a threshold but never enable the switch → a single disabled condition.
     await dialog.getByRole('textbox', { name: 'Price above threshold' }).fill('100')
-    await createAlert(dialog)
+    await addToWatchlist(dialog)
 
-    const row = alertRow(page, SYMBOL)
+    const row = watchlistRow(page, SYMBOL)
     await expect(row).toContainText('PAUSED')
     await expect(row).not.toContainText('ACTIVE')
     await expect(row).toContainText('Σ 0 on')
@@ -222,7 +222,7 @@ test.describe('Config — Stock Alerts (redesigned section)', () => {
     await pickSymbol(dialog, SYMBOL)
     await dialog.getByRole('textbox', { name: 'Price above threshold' }).fill('100')
     await dialog.getByRole('switch', { name: 'Enable Price above' }).click()
-    await createAlert(dialog)
+    await addToWatchlist(dialog)
 
     const expandAll = page.getByRole('button', { name: 'Expand all' })
     const collapseAll = page.getByRole('button', { name: 'Collapse all' })
@@ -248,52 +248,55 @@ test.describe('Config — Stock Alerts (redesigned section)', () => {
     await pickSymbol(dialog, SYMBOL)
     await dialog.getByRole('textbox', { name: 'Price above threshold' }).fill('100')
     await dialog.getByRole('switch', { name: 'Enable Price above' }).click()
-    await createAlert(dialog)
+    await addToWatchlist(dialog)
 
     // Row edit icon → editor.
-    await page.getByRole('button', { name: 'Edit alert for FPT' }).click()
+    await page.getByRole('button', { name: 'Edit watchlist entry for FPT' }).click()
     const editor = page.getByRole('dialog')
-    await expect(editor.getByRole('heading', { name: /Edit Alert/ })).toBeVisible()
+    await expect(editor.getByRole('heading', { name: /Edit Watchlist Entry/ })).toBeVisible()
     await editor.getByRole('button', { name: 'Cancel' }).click()
     await expect(editor).not.toBeVisible()
 
     // Detail "Edit in modal" → editor.
     await page.getByRole('button', { name: /conditions for FPT/i }).click()
-    await page.getByRole('button', { name: 'Edit alert for FPT in modal' }).click()
-    await expect(page.getByRole('dialog').getByRole('heading', { name: /Edit Alert/ })).toBeVisible()
+    await page.getByRole('button', { name: 'Edit watchlist entry for FPT in modal' }).click()
+    await expect(page.getByRole('dialog').getByRole('heading', { name: /Edit Watchlist Entry/ })).toBeVisible()
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
   })
 
   // ----------------------------------------------------------------------
   // Delete removes the row (and self-heals expand state)
   // ----------------------------------------------------------------------
-  test('deleting the only alert returns to the empty state', async ({ page }) => {
+  test('deleting the only watchlist entry returns to the empty state', async ({ page }) => {
     const dialog = await openEditor(page)
     await pickSymbol(dialog, SYMBOL)
     await dialog.getByRole('textbox', { name: 'Price above threshold' }).fill('100')
     await dialog.getByRole('switch', { name: 'Enable Price above' }).click()
-    await createAlert(dialog)
+    await addToWatchlist(dialog)
 
-    await expect(alertRow(page, SYMBOL)).toBeVisible()
+    await expect(watchlistRow(page, SYMBOL)).toBeVisible()
 
     // Expand it first, then delete — the expanded detail must not ghost.
     await page.getByRole('button', { name: /conditions for FPT/i }).click()
     await expect(page.getByRole('region', { name: 'Conditions for FPT' })).toBeVisible()
 
-    page.once('dialog', (d) => d.accept()) // window.confirm
-    await page.getByRole('button', { name: 'Delete alert for FPT' }).click()
+    // Removal opens the themed confirm modal (replaces window.confirm).
+    await page.getByRole('button', { name: 'Remove watchlist entry for FPT' }).click()
+    const confirmModal = page.getByRole('dialog')
+    await expect(confirmModal.getByText('Remove from watchlist?')).toBeVisible()
+    await confirmModal.getByRole('button', { name: 'Remove', exact: true }).click()
 
-    await expect(alertRow(page, SYMBOL)).toHaveCount(0)
+    await expect(watchlistRow(page, SYMBOL)).toHaveCount(0)
     await expect(page.getByRole('region', { name: 'Conditions for FPT' })).toHaveCount(0)
-    await expect(page.getByText('No alerts configured')).toBeVisible()
+    await expect(page.getByText('Your watchlist is empty')).toBeVisible()
   })
 
   // ----------------------------------------------------------------------
-  // Presentation-only guarantee: PUT /config alert payload shape is unchanged
+  // Presentation-only guarantee: PUT /config watchlist payload shape is unchanged
   // ----------------------------------------------------------------------
-  test('saving sends the unchanged alert payload shape (no presentation fields leak)', async ({ page }) => {
+  test('saving sends the unchanged watchlist payload shape (no presentation fields leak)', async ({ page }) => {
     // Mock the PUT so we capture the body without mutating shared backend state.
-    let putBody: { alerts?: Array<{ symbol: string; conditions: Record<string, unknown>[] }> } | null = null
+    let putBody: { watchlist?: Array<{ symbol: string; conditions: Record<string, unknown>[] }> } | null = null
     await page.route('**/config/**', async (route) => {
       const req = route.request()
       if (req.method() === 'PUT') {
@@ -313,14 +316,14 @@ test.describe('Config — Stock Alerts (redesigned section)', () => {
     await pickSymbol(dialog, SYMBOL)
     await dialog.getByRole('textbox', { name: 'Price above threshold' }).fill('100')
     await dialog.getByRole('switch', { name: 'Enable Price above' }).click()
-    await createAlert(dialog)
+    await addToWatchlist(dialog)
 
     await page.getByRole('button', { name: 'Save Config' }).click()
     await expect(page.getByText('Configuration saved successfully!')).toBeVisible()
 
     expect(putBody).not.toBeNull()
-    const alerts = putBody!.alerts ?? []
-    const fpt = alerts.find((a) => a.symbol === SYMBOL)
+    const watchlist = putBody!.watchlist ?? []
+    const fpt = watchlist.find((a) => a.symbol === SYMBOL)
     expect(fpt).toBeTruthy()
     expect(fpt!.conditions.length).toBe(1)
     const cond = fpt!.conditions[0]
