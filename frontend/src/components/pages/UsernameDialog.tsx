@@ -1,6 +1,15 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, DialogIcon } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogBody,
+  DialogFooter,
+  DialogIcon,
+} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Icons } from '../icons/Icons'
 
 interface UsernameDialogProps {
@@ -20,21 +29,24 @@ export function UsernameDialog({ isOpen, setConfigId }: UsernameDialogProps) {
     }
   }, [isOpen])
 
-  const handleSubmit = useCallback(async (e?: React.FormEvent) => {
-    e?.preventDefault()
-    if (!username.trim() || isSubmitting) return
+  const handleSubmit = useCallback(
+    async (e?: React.FormEvent) => {
+      e?.preventDefault()
+      if (!username.trim() || isSubmitting) return
 
-    setIsSubmitting(true)
-    setError(null)
+      setIsSubmitting(true)
+      setError(null)
 
-    const success = await setConfigId(username.trim())
+      const success = await setConfigId(username.trim())
 
-    if (!success) {
-      setError('Failed to set up your configuration. Please try again.')
-    }
+      if (!success) {
+        setError('Failed to set up your configuration. Please try again.')
+      }
 
-    setIsSubmitting(false)
-  }, [username, isSubmitting, setConfigId])
+      setIsSubmitting(false)
+    },
+    [username, isSubmitting, setConfigId]
+  )
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setUsername(e.target.value)
@@ -47,7 +59,9 @@ export function UsernameDialog({ isOpen, setConfigId }: UsernameDialogProps) {
     <Dialog open={isOpen} onOpenChange={() => {}}>
       <DialogContent size="sm" aria-describedby={undefined}>
         <DialogHeader>
-          <DialogIcon><Icons.Users /></DialogIcon>
+          <DialogIcon>
+            <Icons.Users />
+          </DialogIcon>
           <DialogTitle>Welcome to Trading Bot</DialogTitle>
         </DialogHeader>
 
@@ -60,28 +74,22 @@ export function UsernameDialog({ isOpen, setConfigId }: UsernameDialogProps) {
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col">
-            <div className="mb-4">
-              <label htmlFor="username-input" className="block text-xs font-medium text-[var(--text-secondary)] mb-2 uppercase tracking-wider">
-                Username
-              </label>
-              <input
-                id="username-input"
-                type="text"
-                value={username}
-                onChange={handleInputChange}
-                placeholder="e.g., trader_jane"
-                className="w-full px-4 py-3.5 bg-[var(--bg-elevated)] border border-[var(--border-dim)] rounded-md font-mono text-[15px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-all duration-150 focus:outline-none focus:border-[var(--neon-cyan)] focus:ring-[3px] focus:ring-[var(--neon-cyan-dim)] disabled:opacity-50"
-                autoComplete="username"
-                autoFocus
-                disabled={isSubmitting}
-              />
-              {error && (
-                <div className="flex items-center gap-2 mt-2.5 px-3.5 py-2.5 bg-[var(--neon-bear-dim)] rounded-sm text-[var(--neon-bear)] text-[13px]">
-                  <Icons.Info className="w-4 h-4 flex-shrink-0" />
-                  {error}
-                </div>
-              )}
-            </div>
+            <Input
+              label="Username"
+              type="text"
+              value={username}
+              onChange={handleInputChange}
+              placeholder="e.g., trader_jane"
+              autoComplete="username"
+              autoFocus
+              disabled={isSubmitting}
+            />
+            {error && (
+              <div className="flex items-center gap-2 mt-2.5 px-3.5 py-2.5 bg-[var(--neon-bear-dim)] rounded-sm text-[var(--neon-bear)] text-[13px]">
+                <Icons.Info className="w-4 h-4 flex-shrink-0" />
+                {error}
+              </div>
+            )}
 
             <p className="-mt-2 text-xs text-[var(--text-muted)]">
               Use 2-50 characters (letters, numbers, hyphens, underscores)

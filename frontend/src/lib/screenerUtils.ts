@@ -1,51 +1,10 @@
-import type { DynamicFilter, Stock } from '../types'
-import type { ApiFilterRequest, ApiStockMetrics } from './api'
-import { isValidFilterOperator, isSignalField } from './screenerFilterOptions'
-
-/**
- * Map dynamic filters to API filter format
- * Extracted from Screener component for better testability and reusability
- */
-export function mapFiltersToApiFormat(
-  dynamicFilters: DynamicFilter[],
-  filterLogic: 'and' | 'or'
-): ApiFilterRequest {
-  const filters = dynamicFilters
-    .filter(f => {
-      // Signal fields need boolean values
-      if (isSignalField(f.field)) {
-        return typeof f.value === 'boolean'
-      }
-      // Numeric fields need valid numbers
-      return f.value !== '' && !isNaN(Number(f.value)) && isValidFilterOperator(f.operator)
-    })
-    .map(f => {
-      if (isSignalField(f.field)) {
-        return {
-          field: f.field,
-          op: '=',
-          value: f.value as boolean,
-        }
-      }
-      return {
-        field: f.field,
-        op: f.operator,
-        value: Number(f.value),
-      }
-    })
-
-  return {
-    filters,
-    logic: filterLogic,
-  }
-}
+import type { Stock } from '../types'
+import type { ApiStockMetrics } from './api'
 
 /** Convert a single API metrics row to the dashboard/screener Stock shape */
 export function apiStockMetricsToStock(api: ApiStockMetrics): Stock {
   const volumeVsSma =
-    api.volume_sma20 > 0
-      ? ((api.current_volume - api.volume_sma20) / api.volume_sma20) * 100
-      : 0
+    api.volume_sma20 > 0 ? ((api.current_volume - api.volume_sma20) / api.volume_sma20) * 100 : 0
 
   return {
     symbol: api.symbol,
@@ -114,8 +73,21 @@ const STRING_SORT_FIELDS = new Set<ScreenerSortField>(['symbol', 'exchange'])
 
 /** Table column ids that can be sorted (everything except checkbox + 'signals'). */
 export const SORTABLE_COLUMNS = new Set<ScreenerSortField>([
-  'symbol', 'exchange', 'rs1m', 'rs3m', 'rs6m', 'rs9m', 'rs52w',
-  'volumeVsSma', 'currentVolume', 'price', 'change', 'ema9', 'ema21', 'ema50', 'sma200',
+  'symbol',
+  'exchange',
+  'rs1m',
+  'rs3m',
+  'rs6m',
+  'rs9m',
+  'rs52w',
+  'volumeVsSma',
+  'currentVolume',
+  'price',
+  'change',
+  'ema9',
+  'ema21',
+  'ema50',
+  'sma200',
 ])
 
 export function isSortableColumn(id: string): id is ScreenerSortField {

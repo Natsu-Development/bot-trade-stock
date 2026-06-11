@@ -1,10 +1,10 @@
 import { memo, useMemo } from 'react'
-import type { ApiStockAlert } from '@/lib/api'
-import { countEnabledByCategory } from '@/lib/alertOptions'
-import { CATEGORY_SHORT_CODE } from '@/lib/alertStyles'
+import type { ApiWatchlistItem } from '@/lib/api'
+import { countEnabledByCategory } from '@/lib/watchlistOptions'
+import { CATEGORY_SHORT_CODE } from '@/lib/watchlistStyles'
 
-interface StockAlertCategoryChipsProps {
-  alert: ApiStockAlert
+interface WatchlistCategoryChipsProps {
+  item: ApiWatchlistItem
 }
 
 /**
@@ -25,14 +25,11 @@ const CHIP_CLASS =
  * summary chip where n = total enabled conditions (may be 0 → `Σ 0 on`). The
  * container never wraps (`flex-nowrap` + `overflow-hidden`).
  */
-export const StockAlertCategoryChips = memo(function StockAlertCategoryChips({
-  alert,
-}: StockAlertCategoryChipsProps) {
-  const counts = useMemo(() => countEnabledByCategory(alert), [alert])
-  const totalEnabled = useMemo(
-    () => counts.reduce((n, c) => n + c.count, 0),
-    [counts]
-  )
+export const WatchlistCategoryChips = memo(function WatchlistCategoryChips({
+  item,
+}: WatchlistCategoryChipsProps) {
+  const counts = useMemo(() => countEnabledByCategory(item), [item])
+  const totalEnabled = useMemo(() => counts.reduce((n, c) => n + c.count, 0), [counts])
 
   const summarize = counts.length > MAX_CHIPS
 

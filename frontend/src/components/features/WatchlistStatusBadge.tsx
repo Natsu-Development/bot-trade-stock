@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { cn } from '@/lib/utils'
 
-interface StockAlertStatusBadgeProps {
+interface WatchlistStatusBadgeProps {
   paused: boolean
 }
 
@@ -11,9 +11,9 @@ interface StockAlertStatusBadgeProps {
  * relying on color alone. This is the single paused indicator — it replaces the
  * old amber "0/N active — paused" text + Clock affordance in the row.
  */
-export const StockAlertStatusBadge = memo(function StockAlertStatusBadge({
+export const WatchlistStatusBadge = memo(function WatchlistStatusBadge({
   paused,
-}: StockAlertStatusBadgeProps) {
+}: WatchlistStatusBadgeProps) {
   return (
     <span
       className={cn(

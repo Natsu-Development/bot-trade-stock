@@ -24,9 +24,12 @@ export const StatCard = memo(function StatCard({
       className={cn(
         'relative overflow-hidden p-5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-dim)] animate-[stat-card-in_0.6s_ease-out_backwards]',
         'before:absolute before:top-0 before:left-0 before:right-0 before:h-px before:opacity-0 before:transition-opacity before:duration-300 hover:before:opacity-100',
-        variant === 'default' && 'before:bg-gradient-to-r before:from-transparent before:via-[var(--neon-cyan)] before:to-transparent',
-        variant === 'bullish' && 'before:bg-gradient-to-r before:from-transparent before:via-[var(--neon-bull)] before:to-transparent',
-        variant === 'bearish' && 'before:bg-gradient-to-r before:from-transparent before:via-[var(--neon-bear)] before:to-transparent'
+        variant === 'default' &&
+          'before:bg-gradient-to-r before:from-transparent before:via-[var(--neon-cyan)] before:to-transparent',
+        variant === 'bullish' &&
+          'before:bg-gradient-to-r before:from-transparent before:via-[var(--neon-bull)] before:to-transparent',
+        variant === 'bearish' &&
+          'before:bg-gradient-to-r before:from-transparent before:via-[var(--neon-bear)] before:to-transparent'
       )}
     >
       <div
@@ -49,8 +52,12 @@ export const StatCard = memo(function StatCard({
               'text-[var(--neon-bull)] bg-[var(--neon-bull-dim)]',
             (change.startsWith('-') || change.startsWith('↓')) &&
               'text-[var(--neon-bear)] bg-[var(--neon-bear-dim)]',
-            !(change.startsWith('+') || change.startsWith('↑') || change.startsWith('-') || change.startsWith('↓')) &&
-              'text-[var(--neon-cyan)] bg-[var(--neon-cyan-dim)]'
+            !(
+              change.startsWith('+') ||
+              change.startsWith('↑') ||
+              change.startsWith('-') ||
+              change.startsWith('↓')
+            ) && 'text-[var(--neon-cyan)] bg-[var(--neon-cyan-dim)]'
           )}
         >
           {change}

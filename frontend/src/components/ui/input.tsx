@@ -14,7 +14,10 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className={inputContainerClassName || (label && 'mb-4')}>
         {label && (
-          <label htmlFor={id} className="block text-xs font-medium text-[var(--text-secondary)] mb-2 uppercase tracking-wider">
+          <label
+            htmlFor={id}
+            className="block text-xs font-medium text-[var(--text-secondary)] mb-2 uppercase tracking-wider"
+          >
             {label}
           </label>
         )}

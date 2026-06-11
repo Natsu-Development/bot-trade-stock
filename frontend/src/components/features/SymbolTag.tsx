@@ -23,9 +23,5 @@ export function SymbolTag({ symbol, onRemove }: SymbolTagProps) {
 
 // Wrapper for symbol tags container
 export function SymbolTagsContainer({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex flex-wrap gap-2 mt-2">
-      {children}
-    </div>
-  )
+  return <div className="flex flex-wrap gap-2 mt-2">{children}</div>
 }

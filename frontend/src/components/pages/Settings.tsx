@@ -1,18 +1,25 @@
+import { useState } from 'react'
 import { Header } from '../layout/Header'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select'
 import { SettingsItem, SettingsList } from '../features/SettingsItem'
 import { Switch } from '@/components/ui/switch'
 import { Icons } from '../icons/Icons'
 import { APP_VERSION } from '@/lib/version'
 
 export function Settings() {
+  const [refreshInterval, setRefreshInterval] = useState('1m')
+
   return (
     <div className="animate-slide-in-from-bottom">
-      <Header
-        title="Settings"
-        subtitle="Application preferences and connections"
-      />
+      <Header title="Settings" subtitle="Application preferences and connections" />
 
       <div className="grid-2">
         <div>
@@ -121,12 +128,17 @@ export function Settings() {
                   title="Refresh Interval"
                   description="How often to refresh data"
                   action={
-                    <select className="form-input form-select w-[120px]">
-                      <option>30 sec</option>
-                      <option selected>1 min</option>
-                      <option>5 min</option>
-                      <option>15 min</option>
-                    </select>
+                    <Select value={refreshInterval} onValueChange={setRefreshInterval}>
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="30s">30 sec</SelectItem>
+                        <SelectItem value="1m">1 min</SelectItem>
+                        <SelectItem value="5m">5 min</SelectItem>
+                        <SelectItem value="15m">15 min</SelectItem>
+                      </SelectContent>
+                    </Select>
                   }
                 />
                 <SettingsItem
@@ -146,18 +158,12 @@ export function Settings() {
             </Card.Header>
             <Card.Body>
               <div className="text-center py-5">
-                <div
-                  className="logo mx-auto mb-4 w-14 h-14 text-[20px] flex items-center justify-center rounded-md font-mono font-bold text-[var(--bg-void)] bg-gradient-to-br from-[var(--neon-bull)] to-[var(--neon-cyan)] shadow-[var(--neon-bull-glow)]"
-                >
+                <div className="logo mx-auto mb-4 w-14 h-14 text-[20px] flex items-center justify-center rounded-md font-mono font-bold text-[var(--bg-void)] bg-gradient-to-br from-[var(--neon-bull)] to-[var(--neon-cyan)] shadow-[var(--neon-bull-glow)]">
                   VN
                 </div>
                 <h3 className="mb-1 text-[var(--text-primary)]">VN Trading Terminal</h3>
-                <p className="text-[var(--text-muted)] mb-4">
-                  RSI Divergence Analysis Bot
-                </p>
-                <p className="font-mono text-[var(--text-muted)] text-xs">
-                  Version {APP_VERSION}
-                </p>
+                <p className="text-[var(--text-muted)] mb-4">RSI Divergence Analysis Bot</p>
+                <p className="font-mono text-[var(--text-muted)] text-xs">Version {APP_VERSION}</p>
                 <p className="font-mono text-[var(--text-muted)] text-xs mt-1">
                   Go 1.23 + Python 3.10
                 </p>

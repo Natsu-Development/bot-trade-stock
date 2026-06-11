@@ -2,60 +2,61 @@ import { memo, useCallback, useMemo, useState } from 'react'
 import { Icons } from '../icons/Icons'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { StockAlertRow } from './StockAlertRow'
-import { StockAlertConditionDetail } from './StockAlertConditionDetail'
-import { StockAlertEditorModal } from './StockAlertEditorModal'
-import { alertsEqual } from '@/lib/alertOptions'
-import type { ApiStockAlert } from '@/lib/api'
+import { confirm } from '@/components/ui/confirm-dialog'
+import { WatchlistRow } from './WatchlistRow'
+import { WatchlistConditionDetail } from './WatchlistConditionDetail'
+import { WatchlistEditorModal } from './WatchlistEditorModal'
+import { watchlistEqual } from '@/lib/watchlistOptions'
+import type { ApiWatchlistItem } from '@/lib/api'
 
-interface StockAlertsSectionProps {
-  alerts: ApiStockAlert[]
-  originalAlerts: ApiStockAlert[]
-  onUpdate: (alerts: ApiStockAlert[]) => void
+interface WatchlistSectionProps {
+  items: ApiWatchlistItem[]
+  originalItems: ApiWatchlistItem[]
+  onUpdate: (items: ApiWatchlistItem[]) => void
 }
 
-const detailPanelId = (symbol: string) => `alert-detail-${symbol}`
+const detailPanelId = (symbol: string) => `watchlist-detail-${symbol}`
 
-export const StockAlertsSection = memo(function StockAlertsSection({
-  alerts,
-  originalAlerts,
+export const WatchlistSection = memo(function WatchlistSection({
+  items,
+  originalItems,
   onUpdate,
-}: StockAlertsSectionProps) {
+}: WatchlistSectionProps) {
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
-  // Expand-state is component-local ONLY and is never lifted into the alerts
-  // array, so toggling it cannot trip `isDirty` (alertsEqual is unaffected).
+  // Expand-state is component-local ONLY and is never lifted into the items
+  // array, so toggling it cannot trip `isDirty` (watchlistEqual is unaffected).
   const [expandSet, setExpandSet] = useState<Set<string>>(() => new Set())
 
-  const isDirty = useMemo(() => !alertsEqual(alerts, originalAlerts), [alerts, originalAlerts])
+  const isDirty = useMemo(() => !watchlistEqual(items, originalItems), [items, originalItems])
 
   const conditionTotals = useMemo(() => {
     let active = 0
     let total = 0
-    for (const a of alerts) {
+    for (const a of items) {
       for (const c of a.conditions) {
         total += 1
         if (c.enabled) active += 1
       }
     }
     return { active, total }
-  }, [alerts])
+  }, [items])
 
-  const existingSymbols = useMemo(() => alerts.map((a) => a.symbol), [alerts])
+  const existingSymbols = useMemo(() => items.map((a) => a.symbol), [items])
 
   // Reconcile-from-props (M4): effectively-expanded = expandSet ∩ live symbols.
-  // The incoming `alerts` prop is the single source of truth for which symbols
+  // The incoming `items` prop is the single source of truth for which symbols
   // exist; a stale key (deleted or renamed symbol) is simply never rendered, so
   // delete AND rename self-heal without pruning inside an onUpdate handler.
   const effectivelyExpanded = useMemo(() => {
     const live = new Set<string>()
-    for (const a of alerts) {
+    for (const a of items) {
       if (expandSet.has(a.symbol)) live.add(a.symbol)
     }
     return live
-  }, [expandSet, alerts])
+  }, [expandSet, items])
 
-  const allExpanded = alerts.length > 0 && effectivelyExpanded.size === alerts.length
+  const allExpanded = items.length > 0 && effectivelyExpanded.size === items.length
 
   const handleAdd = useCallback(() => {
     setEditingIndex(null)
@@ -68,12 +69,19 @@ export const StockAlertsSection = memo(function StockAlertsSection({
   }, [])
 
   const handleDelete = useCallback(
-    (index: number) => {
-      const symbol = alerts[index]?.symbol
-      if (!window.confirm(`Delete alert for ${symbol}?`)) return
-      onUpdate(alerts.filter((_, i) => i !== index))
+    async (index: number) => {
+      const symbol = items[index]?.symbol
+      const confirmed = await confirm({
+        title: 'Remove from watchlist?',
+        message: `This will permanently remove ${symbol} from your watchlist.`,
+        confirmText: 'Remove',
+        danger: true,
+        icon: 'Trash2',
+      })
+      if (!confirmed) return
+      onUpdate(items.filter((_, i) => i !== index))
     },
-    [alerts, onUpdate]
+    [items, onUpdate]
   )
 
   const handleToggle = useCallback((symbol: string) => {
@@ -86,24 +94,24 @@ export const StockAlertsSection = memo(function StockAlertsSection({
   }, [])
 
   const handleExpandAll = useCallback(() => {
-    setExpandSet(new Set(alerts.map((a) => a.symbol)))
-  }, [alerts])
+    setExpandSet(new Set(items.map((a) => a.symbol)))
+  }, [items])
 
   const handleCollapseAll = useCallback(() => {
     setExpandSet(new Set())
   }, [])
 
   const handleSaveDraft = useCallback(
-    (draft: ApiStockAlert) => {
+    (draft: ApiWatchlistItem) => {
       if (editingIndex === null) {
-        onUpdate([...alerts, draft])
+        onUpdate([...items, draft])
       } else {
-        onUpdate(alerts.map((a, i) => (i === editingIndex ? draft : a)))
+        onUpdate(items.map((a, i) => (i === editingIndex ? draft : a)))
       }
       setEditorOpen(false)
       setEditingIndex(null)
     },
-    [editingIndex, alerts, onUpdate]
+    [editingIndex, items, onUpdate]
   )
 
   const handleClose = useCallback(() => {
@@ -111,7 +119,7 @@ export const StockAlertsSection = memo(function StockAlertsSection({
     setEditingIndex(null)
   }, [])
 
-  const initialDraft = editingIndex !== null ? alerts[editingIndex] ?? null : null
+  const initialDraft = editingIndex !== null ? (items[editingIndex] ?? null) : null
 
   return (
     <Card className="mb-6">
@@ -121,7 +129,7 @@ export const StockAlertsSection = memo(function StockAlertsSection({
           <div className="flex items-center justify-between mb-4">
             <h3 className="config-section-title !mb-0 flex items-center gap-2">
               <Icons.Bell />
-              <span>Stock Alerts</span>
+              <span>Watchlist</span>
               {isDirty && (
                 <span
                   className="w-2 h-2 rounded-full bg-[var(--neon-cyan)] shadow-[0_0_8px_var(--neon-cyan)]"
@@ -131,16 +139,16 @@ export const StockAlertsSection = memo(function StockAlertsSection({
               )}
             </h3>
             <Button variant="secondary" size="sm" icon="Plus" onClick={handleAdd}>
-              <span>Add Alert</span>
+              <span>Add Symbol</span>
             </Button>
           </div>
 
           {/* Subtitle + stats */}
           <p className="text-sm text-[var(--text-muted)] mb-4">
             Get notified on Telegram when price or volume crosses your thresholds.
-            {alerts.length > 0 && (
+            {items.length > 0 && (
               <span className="ml-2 font-mono text-xs text-[var(--text-muted)]">
-                {alerts.length} alert{alerts.length === 1 ? '' : 's'} &middot;{' '}
+                {items.length} symbol{items.length === 1 ? '' : 's'} &middot;{' '}
                 <span
                   className={
                     conditionTotals.active === 0
@@ -154,30 +162,25 @@ export const StockAlertsSection = memo(function StockAlertsSection({
             )}
           </p>
 
-          {/* Alert list or empty state */}
-          {alerts.length === 0 ? (
+          {/* Watchlist or empty state */}
+          {items.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-center border-2 border-dashed border-[var(--border-dim)] rounded-lg gap-3">
               <Icons.Bell className="w-10 h-10 opacity-30 text-[var(--text-muted)]" />
               <div>
-                <p className="text-sm text-[var(--text-muted)] mb-0.5">No alerts configured</p>
+                <p className="text-sm text-[var(--text-muted)] mb-0.5">Your watchlist is empty</p>
                 <p className="text-xs text-[var(--text-muted)]">
                   Add price or volume triggers for your watched symbols
                 </p>
               </div>
               <Button variant="secondary" size="sm" icon="Plus" onClick={handleAdd}>
-                <span>Add your first alert</span>
+                <span>Add your first symbol</span>
               </Button>
             </div>
           ) : (
             <>
               {/* Expand-all / Collapse-all controls (hidden on empty state) */}
               <div className="flex items-center justify-end gap-2 mb-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleExpandAll}
-                  disabled={allExpanded}
-                >
+                <Button variant="ghost" size="sm" onClick={handleExpandAll} disabled={allExpanded}>
                   <span>Expand all</span>
                 </Button>
                 <Button
@@ -191,26 +194,26 @@ export const StockAlertsSection = memo(function StockAlertsSection({
               </div>
 
               {/* Column header — aligned to the row tracks */}
-              <div className="alert-row-grid px-3 py-1.5 text-[11px] uppercase tracking-wider text-left font-medium text-[var(--text-muted)]">
+              <div className="watchlist-row-grid px-3 py-1.5 text-[11px] uppercase tracking-wider text-left font-medium text-[var(--text-muted)]">
+                <span aria-hidden="true" />
                 <span>Symbol</span>
                 <span>Status</span>
                 <span>Watching</span>
                 <span>On/Total</span>
-                <span aria-hidden="true" />
                 <span className="justify-self-end">Actions</span>
               </div>
 
               <div className="flex flex-col gap-2">
-                {alerts.map((alert, idx) => {
-                  const expanded = effectivelyExpanded.has(alert.symbol)
-                  const panelId = detailPanelId(alert.symbol)
+                {items.map((item, idx) => {
+                  const expanded = effectivelyExpanded.has(item.symbol)
+                  const panelId = detailPanelId(item.symbol)
                   return (
                     <div
-                      key={`${alert.symbol}-${idx}`}
+                      key={item.symbol}
                       className="rounded-md border border-[var(--border-dim)] overflow-hidden bg-[var(--bg-surface)] transition-colors duration-150 hover:border-[var(--border-glow)]"
                     >
-                      <StockAlertRow
-                        alert={alert}
+                      <WatchlistRow
+                        item={item}
                         index={idx}
                         expanded={expanded}
                         panelId={panelId}
@@ -219,8 +222,8 @@ export const StockAlertsSection = memo(function StockAlertsSection({
                         onDelete={handleDelete}
                       />
                       {expanded && (
-                        <StockAlertConditionDetail
-                          alert={alert}
+                        <WatchlistConditionDetail
+                          item={item}
                           index={idx}
                           panelId={panelId}
                           onEdit={handleEdit}
@@ -236,7 +239,7 @@ export const StockAlertsSection = memo(function StockAlertsSection({
 
         {/* Editor modal — rendered via Radix Dialog portal */}
         {editorOpen && (
-          <StockAlertEditorModal
+          <WatchlistEditorModal
             initial={initialDraft}
             existingSymbols={existingSymbols}
             onSave={handleSaveDraft}

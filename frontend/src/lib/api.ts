@@ -1,4 +1,5 @@
 // API client for Trading Bot backend
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
 // localStorage key for config ID persistence (shared with useConfigId)
@@ -57,6 +58,20 @@ export function getConfigId(): string {
   return DEFAULT_CONFIG_ID
 }
 
+/**
+ * Returns the active config ID for /stocks/* requests, or throws when it is the
+ * `'default'` placeholder. Data pages are mount-gated behind login (App.tsx), so
+ * a real config ID is always present; this is a belt-and-suspenders guard for the
+ * dead clearConfigId reset path. The backend 4xx's `'default'` regardless.
+ */
+export function requireConfigId(): string {
+  const id = getConfigId()
+  if (id === 'default') {
+    throw new Error('No config selected: /stocks requests require a logged-in config ID')
+  }
+  return id
+}
+
 // Types for stock metrics
 export interface ApiStockMetrics {
   symbol: string
@@ -93,23 +108,38 @@ export interface ApiStockMetrics {
   has_bearish_rsi?: boolean
 }
 
-export interface ScreenerFilterPreset {
-  name: string
-  filters: Array<{ field: string; op: string; value?: number | boolean }>
-  logic: 'and' | 'or'
+// Flat, two-level filter wire contract (normal form). The payload IS a
+// StockFilter (no `{root}` wrapper): a top-level match over conditions + groups,
+// each group holding only conditions (no sub-groups). Numeric condition → value
+// is a number; signal → value is a bool (op "="); MA → value omitted, op present.
+export interface ApiCondition {
+  field: string
+  op?: string // numeric & MA; signals use "="
+  value?: number | boolean
+  rhs_field?: string // field-vs-field comparison (e.g. ema_9 op ema_21); omits value
+}
+
+export interface ApiGroup {
+  match: 'and' | 'or'
+  negate?: boolean
+  conditions: ApiCondition[]
+}
+
+export interface ApiStockFilter {
+  match: 'and' | 'or'
+  negate?: boolean
+  conditions?: ApiCondition[]
+  groups?: ApiGroup[]
   exchanges?: string[]
+}
+
+// A saved preset is a named, timestamped flat StockFilter (inline keys).
+export interface ScreenerFilterPreset extends ApiStockFilter {
+  name: string
   created_at: string
 }
 
-export interface ApiFilterRequest {
-  filters?: Array<{
-    field: string
-    op: string
-    value?: number | boolean
-  }>
-  logic?: 'and' | 'or'
-  exchanges?: string[]
-}
+export type ApiFilterRequest = ApiStockFilter
 
 export interface ApiCacheInfo {
   cached: boolean
@@ -118,10 +148,9 @@ export interface ApiCacheInfo {
   message?: string
 }
 
-export interface ApiRefreshResult {
+export interface ApiRecomputeResult {
   message: string
   total_stocks: number
-  stocks_ranked: number
   calculated_at: string
 }
 
@@ -142,7 +171,7 @@ export interface ApiTrendlineDataPoint {
 
 export interface ApiTrendlineDisplay {
   type: string
-  data_points: ApiTrendlineDataPoint[]  // Pre-calculated points for each trading date
+  data_points: ApiTrendlineDataPoint[] // Pre-calculated points for each trading date
   start_price: number
   end_price: number
   start_date: string
@@ -152,10 +181,10 @@ export interface ApiTrendlineDisplay {
 
 // Signal from analyze API - contains crossover point for trendline extension
 export interface ApiAnalysisSignal {
-  type: string        // "breakdown_confirmed", "breakout_confirmed", etc.
-  price: number       // Actual price at crossover
-  time: string        // Date of crossover
-  price_line?: number  // Trendline price at crossover (extension point)
+  type: string // "breakdown_confirmed", "breakout_confirmed", etc.
+  price: number // Actual price at crossover
+  time: string // Date of crossover
+  price_line?: number // Trendline price at crossover (extension point)
 }
 
 export interface ApiTradingSignal {
@@ -169,7 +198,7 @@ export interface ApiTradingSignal {
   stop_loss?: number
   trendline?: ApiTrendlineInfo
   interval?: string
-  price_line?: number  // Trendline price at crossover point (from analyze API)
+  price_line?: number // Trendline price at crossover point (from analyze API)
 }
 
 // Helper function to check if a signal is confirmed
@@ -190,6 +219,7 @@ export interface ApiPriceData {
   low: number
   close: number
   volume: number
+  rsi?: number // Per-bar RSI from the analyze response (price_history[].rsi); 0 for warm-up bars
 }
 
 // Divergence DTO matching backend DivergenceDTO
@@ -236,15 +266,14 @@ export interface ApiAnalysisResult {
     interval: string
     current_price: number
   }
-  divergences: ApiDivergence[]  // Combined divergences array with type field
+  divergences: ApiDivergence[] // Combined divergences array with type field
   signals: ApiTradingSignal[]
-  signals_count: number
   price_history: ApiPriceData[]
-  trendlines: ApiTrendlineDisplay[]  // Active trendlines with pre-calculated data points
+  trendlines: ApiTrendlineDisplay[] // Active trendlines with pre-calculated data points
 }
 
-// Stock alert types - mirrors backend dto.ConfigStockAlert
-export type AlertConditionType =
+// Watchlist types - mirrors backend dto.ConfigWatchlistItem
+export type TriggerType =
   | 'price_above'
   | 'price_below'
   | 'volume_spike'
@@ -260,16 +289,16 @@ export type AlertConditionType =
   | 'trendline_breakout_mtf'
   | 'trendline_breakdown_mtf'
 
-export interface ApiAlertCondition {
-  type: AlertConditionType
+export interface ApiTriggerCondition {
+  type: TriggerType
   threshold: number
   enabled: boolean
   reference?: 'ema9' | 'ema21' | 'ema50' | 'sma200'
 }
 
-export interface ApiStockAlert {
+export interface ApiWatchlistItem {
   symbol: string
-  conditions: ApiAlertCondition[]
+  conditions: ApiTriggerCondition[]
 }
 
 // Trading config types - matches backend TradingConfigResponse
@@ -277,7 +306,6 @@ export interface ApiTradingConfig {
   id: string
   rsi_period: number
   pivot_period: number
-  lookback_day: number
   divergence: {
     range_min: number
     range_max: number
@@ -286,7 +314,6 @@ export interface ApiTradingConfig {
     max_lines: number
     proximity_percent: number
   }
-  indices_recent: number
   signal_days_threshold: number
   telegram: {
     enabled: boolean
@@ -294,7 +321,7 @@ export interface ApiTradingConfig {
     chat_id?: string
   }
   metrics_filter?: ScreenerFilterPreset[]
-  alerts?: ApiStockAlert[]
+  watchlist?: ApiWatchlistItem[]
   created_at: string
   updated_at: string
 }
@@ -325,10 +352,7 @@ class ApiClient {
     this.baseUrl = baseUrl
   }
 
-  private async request<T>(
-    endpoint: string,
-    options?: RequestInit
-  ): Promise<T> {
+  private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`
     const response = await fetch(url, {
       headers: {
@@ -351,14 +375,18 @@ class ApiClient {
     return this.request('/stocks/cache-info')
   }
 
-  async refreshStocks(): Promise<ApiRefreshResult> {
-    return this.request('/stocks/refresh', {
+  async recomputeStocks(): Promise<ApiRecomputeResult> {
+    // Central config_id injection: every /stocks/* caller (incl. the arg-less
+    // ones) flows through here, so the id is threaded once. Throws on 'default'.
+    const configId = requireConfigId()
+    return this.request(`/stocks/recompute?config_id=${encodeURIComponent(configId)}`, {
       method: 'POST',
     })
   }
 
   async filterStocks(filter: ApiFilterRequest): Promise<{ stocks: ApiStockMetrics[] }> {
-    return this.request('/stocks/filter', {
+    const configId = requireConfigId()
+    return this.request(`/stocks/filter?config_id=${encodeURIComponent(configId)}`, {
       method: 'POST',
       body: JSON.stringify(filter),
     })
@@ -400,7 +428,7 @@ class ApiClient {
     // Filter signals by type if specified
     let filteredSignals = result.signals
     if (type && type !== 'all') {
-      filteredSignals = result.signals.filter(s => {
+      filteredSignals = result.signals.filter((s) => {
         const signalType = s.type
         switch (type) {
           case 'breakdown':
@@ -449,7 +477,6 @@ class ApiClient {
       id,
       rsi_period: 14,
       pivot_period: 5,
-      lookback_day: 365,
       divergence: {
         range_min: 30,
         range_max: 70,
@@ -458,11 +485,10 @@ class ApiClient {
         max_lines: 5,
         proximity_percent: 3,
       },
-      indices_recent: 5,
       signal_days_threshold: 50,
       telegram: { enabled: false },
       metrics_filter: [],
-      alerts: [],
+      watchlist: [],
     }
     return this.request('/config', {
       method: 'POST',
@@ -476,7 +502,6 @@ class ApiClient {
       body: JSON.stringify(config),
     })
   }
-
 }
 
 // Singleton instance
@@ -487,7 +512,7 @@ export { apiStockMetricsToStock as apiToStock } from './screenerUtils'
 // Re-export api instance methods
 export const api = {
   getCacheInfo: () => apiInstance.getCacheInfo(),
-  refreshStocks: () => apiInstance.refreshStocks(),
+  recomputeStocks: () => apiInstance.recomputeStocks(),
   filterStocks: (f: ApiFilterRequest) => apiInstance.filterStocks(f),
 
   // New unified analysis method
@@ -498,7 +523,13 @@ export const api = {
 
   getSignals: (
     s: string,
-    o?: { type?: 'all' | 'breakdown' | 'breakout' | 'confirmed' | 'watching'; configId?: string; startDate?: string; endDate?: string; interval?: string }
+    o?: {
+      type?: 'all' | 'breakdown' | 'breakout' | 'confirmed' | 'watching'
+      configId?: string
+      startDate?: string
+      endDate?: string
+      interval?: string
+    }
   ) => apiInstance.getSignals(s, o),
   analyzeSignals: (s: string, c?: string, sd?: string, ed?: string, i?: string) =>
     apiInstance.analyzeSignals(s, c, sd, ed, i),

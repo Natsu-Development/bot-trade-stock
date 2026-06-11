@@ -1,13 +1,13 @@
-import type { AlertConditionType, ApiAlertCondition, ApiStockAlert } from './api'
+import type { TriggerType, ApiTriggerCondition, ApiWatchlistItem } from './api'
 
-/** Functional grouping of condition types, mirrors a trading-platform alert builder. */
+/** Functional grouping of condition types, mirrors a trading-platform trigger builder. */
 export type ConditionCategoryId = 'price' | 'volume' | 'ma_cross' | 'trendline' | 'rsi'
 
 /** Directional bias used for color accents (green / red / neutral cyan). */
 export type ConditionSentiment = 'bull' | 'bear' | 'neutral'
 
-export interface AlertConditionTypeOption {
-  value: AlertConditionType
+export interface TriggerTypeOption {
+  value: TriggerType
   label: string
   unit: string
   placeholder: string
@@ -19,13 +19,14 @@ export interface AlertConditionTypeOption {
   sentiment: ConditionSentiment
 }
 
-export const ALERT_CONDITION_TYPES: AlertConditionTypeOption[] = [
+export const TRIGGER_TYPES: TriggerTypeOption[] = [
   {
     value: 'price_above',
     label: 'Price above',
     unit: 'kVND',
     placeholder: '18.5',
-    helper: 'Trigger when last matched price ≥ this value. Enter in thousands of VND (e.g. 18.5 = 18,500 VND).',
+    helper:
+      'Trigger when last matched price ≥ this value. Enter in thousands of VND (e.g. 18.5 = 18,500 VND).',
     hasThreshold: true,
     category: 'price',
     sentiment: 'bull',
@@ -35,7 +36,8 @@ export const ALERT_CONDITION_TYPES: AlertConditionTypeOption[] = [
     label: 'Price below',
     unit: 'kVND',
     placeholder: '17.0',
-    helper: 'Trigger when last matched price ≤ this value. Enter in thousands of VND (e.g. 17.0 = 17,000 VND).',
+    helper:
+      'Trigger when last matched price ≤ this value. Enter in thousands of VND (e.g. 17.0 = 17,000 VND).',
     hasThreshold: true,
     category: 'price',
     sentiment: 'bear',
@@ -129,7 +131,8 @@ export const ALERT_CONDITION_TYPES: AlertConditionTypeOption[] = [
     label: 'Bullish RSI divergence (early)',
     unit: '',
     placeholder: '',
-    helper: 'Fires when an early (forming) bullish RSI divergence is detected — independent of the confirmed one',
+    helper:
+      'Fires when an early (forming) bullish RSI divergence is detected — independent of the confirmed one',
     hasThreshold: false,
     category: 'rsi',
     sentiment: 'bull',
@@ -139,7 +142,8 @@ export const ALERT_CONDITION_TYPES: AlertConditionTypeOption[] = [
     label: 'Bearish RSI divergence (early)',
     unit: '',
     placeholder: '',
-    helper: 'Fires when an early (forming) bearish RSI divergence is detected — independent of the confirmed one',
+    helper:
+      'Fires when an early (forming) bearish RSI divergence is detected — independent of the confirmed one',
     hasThreshold: false,
     category: 'rsi',
     sentiment: 'bear',
@@ -149,7 +153,8 @@ export const ALERT_CONDITION_TYPES: AlertConditionTypeOption[] = [
     label: 'Trendline breakout (all timeframes)',
     unit: '',
     placeholder: '',
-    helper: 'Fires when a potential trendline breakout is detected on any configured timeframe (evaluated by the analyze job)',
+    helper:
+      'Fires when a potential trendline breakout is detected on any configured timeframe (evaluated by the analyze job)',
     hasThreshold: false,
     category: 'trendline',
     sentiment: 'bull',
@@ -159,14 +164,18 @@ export const ALERT_CONDITION_TYPES: AlertConditionTypeOption[] = [
     label: 'Trendline breakdown (all timeframes)',
     unit: '',
     placeholder: '',
-    helper: 'Fires when a potential trendline breakdown is detected on any configured timeframe (evaluated by the analyze job)',
+    helper:
+      'Fires when a potential trendline breakdown is detected on any configured timeframe (evaluated by the analyze job)',
     hasThreshold: false,
     category: 'trendline',
     sentiment: 'bear',
   },
 ]
 
-export const MA_REFERENCE_OPTIONS: Array<{ value: 'ema9' | 'ema21' | 'ema50' | 'sma200'; label: string }> = [
+export const MA_REFERENCE_OPTIONS: Array<{
+  value: 'ema9' | 'ema21' | 'ema50' | 'sma200'
+  label: string
+}> = [
   { value: 'ema9', label: 'EMA 9' },
   { value: 'ema21', label: 'EMA 21' },
   { value: 'ema50', label: 'EMA 50' },
@@ -178,13 +187,18 @@ export interface ConditionCategory {
   label: string
   /** Name of an icon exported by components/icons/Icons. */
   iconName: string
-  types: AlertConditionType[]
+  types: TriggerType[]
 }
 
 /** Ordered categories for the grouped condition picker (TradingView-style builder). */
 export const CONDITION_CATEGORIES: ConditionCategory[] = [
   { id: 'price', label: 'Price', iconName: 'TrendUp', types: ['price_above', 'price_below'] },
-  { id: 'volume', label: 'Volume', iconName: 'BarChart', types: ['volume_spike', 'transaction_volume_spike'] },
+  {
+    id: 'volume',
+    label: 'Volume',
+    iconName: 'BarChart',
+    types: ['volume_spike', 'transaction_volume_spike'],
+  },
   {
     id: 'ma_cross',
     label: 'Moving Average',
@@ -195,26 +209,40 @@ export const CONDITION_CATEGORIES: ConditionCategory[] = [
     id: 'trendline',
     label: 'Trendline',
     iconName: 'Chart',
-    types: ['trendline_breakout', 'trendline_breakdown', 'trendline_breakout_mtf', 'trendline_breakdown_mtf'],
+    types: [
+      'trendline_breakout',
+      'trendline_breakdown',
+      'trendline_breakout_mtf',
+      'trendline_breakdown_mtf',
+    ],
   },
   {
     id: 'rsi',
     label: 'RSI Divergence',
     iconName: 'Zap',
-    types: ['bullish_divergence', 'bullish_divergence_early', 'bearish_divergence', 'bearish_divergence_early'],
+    types: [
+      'bullish_divergence',
+      'bullish_divergence_early',
+      'bearish_divergence',
+      'bearish_divergence_early',
+    ],
   },
 ]
 
-export function getConditionCategory(type: AlertConditionType): ConditionCategory | undefined {
+export function getConditionCategory(type: TriggerType): ConditionCategory | undefined {
   return CONDITION_CATEGORIES.find((c) => c.types.includes(type))
 }
 
-export function getConditionSentiment(type: AlertConditionType): ConditionSentiment {
+export function getConditionSentiment(type: TriggerType): ConditionSentiment {
   return getConditionOption(type)?.sentiment ?? 'neutral'
 }
 
 export function getMAReferenceLabel(reference?: string): string {
-  return MA_REFERENCE_OPTIONS.find((r) => r.value === reference)?.label ?? reference?.toUpperCase() ?? 'MA'
+  return (
+    MA_REFERENCE_OPTIONS.find((r) => r.value === reference)?.label ??
+    reference?.toUpperCase() ??
+    'MA'
+  )
 }
 
 /**
@@ -222,7 +250,7 @@ export function getMAReferenceLabel(reference?: string): string {
  * builder summary (e.g. "FPT price rises to or above 95,000 VND"). Pure display
  * helper — never used for validation or persistence.
  */
-export function describeCondition(cond: ApiAlertCondition, symbol: string): string {
+export function describeCondition(cond: ApiTriggerCondition, symbol: string): string {
   const sym = symbol.trim().toUpperCase() || 'this stock'
   const ma = getMAReferenceLabel(cond.reference)
   switch (cond.type) {
@@ -259,35 +287,23 @@ export function describeCondition(cond: ApiAlertCondition, symbol: string): stri
   }
 }
 
-const ALERT_CONDITION_TYPE_LABELS: Record<AlertConditionType, string> = ALERT_CONDITION_TYPES.reduce(
+const TRIGGER_TYPE_LABELS: Record<TriggerType, string> = TRIGGER_TYPES.reduce(
   (acc, opt) => {
     acc[opt.value] = opt.label
     return acc
   },
-  {} as Record<AlertConditionType, string>
+  {} as Record<TriggerType, string>
 )
 
-const ALERT_CONDITION_TYPE_UNITS: Record<AlertConditionType, string> = ALERT_CONDITION_TYPES.reduce(
-  (acc, opt) => {
-    acc[opt.value] = opt.unit
-    return acc
-  },
-  {} as Record<AlertConditionType, string>
-)
-
-export function getConditionLabel(type: AlertConditionType): string {
-  return ALERT_CONDITION_TYPE_LABELS[type] ?? type
+export function getConditionLabel(type: TriggerType): string {
+  return TRIGGER_TYPE_LABELS[type] ?? type
 }
 
-export function getConditionUnit(type: AlertConditionType): string {
-  return ALERT_CONDITION_TYPE_UNITS[type] ?? ''
+export function getConditionOption(type: TriggerType): TriggerTypeOption | undefined {
+  return TRIGGER_TYPES.find((o) => o.value === type)
 }
 
-export function getConditionOption(type: AlertConditionType): AlertConditionTypeOption | undefined {
-  return ALERT_CONDITION_TYPES.find((o) => o.value === type)
-}
-
-export function formatThreshold(type: AlertConditionType, threshold: number): string {
+export function formatThreshold(type: TriggerType, threshold: number): string {
   if (type === 'volume_spike') {
     return `${threshold}%`
   }
@@ -299,7 +315,7 @@ export function formatThreshold(type: AlertConditionType, threshold: number): st
   return threshold.toLocaleString('en-US')
 }
 
-export function formatConditionPill(condition: ApiAlertCondition): string {
+export function formatConditionPill(condition: ApiTriggerCondition): string {
   if (condition.type === 'volume_spike') {
     return `vol ≥ ${condition.threshold}% SMA20`
   }
@@ -324,26 +340,26 @@ export function formatConditionPill(condition: ApiAlertCondition): string {
   return `price ${glyph} ${formatThreshold(condition.type, condition.threshold)} kVND`
 }
 
-export function isAlertActive(alert: ApiStockAlert): boolean {
-  return alert.conditions.some((c) => c.enabled)
+export function isWatchlistItemActive(item: ApiWatchlistItem): boolean {
+  return item.conditions.some((c) => c.enabled)
 }
 
-export function countActiveConditions(alert: ApiStockAlert): { active: number; total: number } {
-  const active = alert.conditions.reduce((n, c) => (c.enabled ? n + 1 : n), 0)
-  return { active, total: alert.conditions.length }
+export function countActiveConditions(item: ApiWatchlistItem): { active: number; total: number } {
+  const active = item.conditions.reduce((n, c) => (c.enabled ? n + 1 : n), 0)
+  return { active, total: item.conditions.length }
 }
 
 /**
- * Group an alert's conditions into the 5 ordered categories. Pure display
+ * Group a watchlist item's conditions into the 5 ordered categories. Pure display
  * helper for the expanded detail panel — categories with no conditions are
  * omitted. Conditions whose type maps to no known category are skipped.
  */
 export function groupConditionsByCategory(
-  alert: ApiStockAlert
-): Array<{ category: ConditionCategory; conditions: ApiAlertCondition[] }> {
+  item: ApiWatchlistItem
+): Array<{ category: ConditionCategory; conditions: ApiTriggerCondition[] }> {
   return CONDITION_CATEGORIES.map((category) => ({
     category,
-    conditions: alert.conditions.filter((c) => category.types.includes(c.type)),
+    conditions: item.conditions.filter((c) => category.types.includes(c.type)),
   })).filter((group) => group.conditions.length > 0)
 }
 
@@ -352,11 +368,11 @@ export function groupConditionsByCategory(
  * Categories with zero enabled conditions are omitted, preserving category order.
  */
 export function countEnabledByCategory(
-  alert: ApiStockAlert
+  item: ApiWatchlistItem
 ): Array<{ id: ConditionCategoryId; count: number }> {
   const counts: Array<{ id: ConditionCategoryId; count: number }> = []
   for (const category of CONDITION_CATEGORIES) {
-    const count = alert.conditions.reduce(
+    const count = item.conditions.reduce(
       (n, c) => (c.enabled && category.types.includes(c.type) ? n + 1 : n),
       0
     )
@@ -365,36 +381,22 @@ export function countEnabledByCategory(
   return counts
 }
 
-/**
- * Tally alerts by status. `paused` is defined as `!isAlertActive(alert)` — the
- * single source of truth that the row also uses for its paused badge.
- */
-export function countAlertStatuses(alerts: ApiStockAlert[]): { active: number; paused: number } {
-  let active = 0
-  let paused = 0
-  for (const alert of alerts) {
-    if (isAlertActive(alert)) active += 1
-    else paused += 1
-  }
-  return { active, paused }
-}
-
-export interface AlertValidationError {
+export interface WatchlistValidationError {
   field: 'symbol' | 'conditions' | `condition.${number}.threshold` | `condition.${number}.reference`
   message: string
 }
 
-export function validateAlert(
-  draft: ApiStockAlert,
+export function validateWatchlistItem(
+  draft: ApiWatchlistItem,
   existingSymbols: string[]
-): AlertValidationError[] {
-  const errors: AlertValidationError[] = []
+): WatchlistValidationError[] {
+  const errors: WatchlistValidationError[] = []
   const symbol = draft.symbol.trim().toUpperCase()
 
   if (!symbol) {
     errors.push({ field: 'symbol', message: 'Pick a stock symbol' })
   } else if (existingSymbols.includes(symbol)) {
-    errors.push({ field: 'symbol', message: 'An alert for this symbol already exists' })
+    errors.push({ field: 'symbol', message: 'This symbol is already in your watchlist' })
   }
 
   if (draft.conditions.length === 0) {
@@ -431,6 +433,6 @@ export function validateAlert(
   return errors
 }
 
-export function alertsEqual(a: ApiStockAlert[], b: ApiStockAlert[]): boolean {
+export function watchlistEqual(a: ApiWatchlistItem[], b: ApiWatchlistItem[]): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }

@@ -11,39 +11,40 @@ import {
 } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { NumberInput } from '@/components/ui/NumberInput'
-import { api, type ApiAlertCondition, type ApiStockAlert, type AlertConditionType } from '@/lib/api'
+import { api, type ApiTriggerCondition, type ApiWatchlistItem, type TriggerType } from '@/lib/api'
 import {
-  ALERT_CONDITION_TYPES,
+  TRIGGER_TYPES,
   CONDITION_CATEGORIES,
   MA_REFERENCE_OPTIONS,
-  validateAlert,
+  validateWatchlistItem,
   describeCondition,
   getConditionSentiment,
   getConditionOption,
-  type AlertValidationError,
-} from '@/lib/alertOptions'
-import { SENTIMENT_BAR, SENTIMENT_DOT, SENTIMENT_TEXT } from '@/lib/alertStyles'
+  type WatchlistValidationError,
+} from '@/lib/watchlistOptions'
+import { SENTIMENT_BAR, SENTIMENT_DOT, SENTIMENT_TEXT } from '@/lib/watchlistStyles'
 import { cn } from '@/lib/utils'
 
-interface StockAlertEditorModalProps {
-  initial: ApiStockAlert | null
+interface WatchlistEditorModalProps {
+  initial: ApiWatchlistItem | null
   existingSymbols: string[]
-  onSave: (alert: ApiStockAlert) => void
+  onSave: (item: ApiWatchlistItem) => void
   onClose: () => void
 }
 
-const DEFAULT_DRAFT: ApiStockAlert = {
+const DEFAULT_DRAFT: ApiWatchlistItem = {
   symbol: '',
   conditions: [],
 }
 
 // ---------------------------------------------------------------------------
-// Sentiment styling maps (shared SENTIMENT_DOT/TEXT/BAR live in lib/alertStyles)
+// Sentiment styling maps (shared SENTIMENT_DOT/TEXT/BAR live in lib/watchlistStyles)
 // ---------------------------------------------------------------------------
 const SENTIMENT_CHIP_ON: Record<string, string> = {
   bull: 'bg-[var(--neon-bull)] text-[var(--bg-void)] border-[var(--neon-bull)] shadow-[0_0_8px_var(--neon-bull)]',
   bear: 'bg-[var(--neon-bear)] text-[var(--bg-void)] border-[var(--neon-bear)] shadow-[0_0_8px_var(--neon-bear)]',
-  neutral: 'bg-[var(--neon-cyan)] text-[var(--bg-void)] border-[var(--neon-cyan)] shadow-[0_0_8px_var(--neon-cyan)]',
+  neutral:
+    'bg-[var(--neon-cyan)] text-[var(--bg-void)] border-[var(--neon-cyan)] shadow-[0_0_8px_var(--neon-cyan)]',
 }
 
 const SENTIMENT_CHIP_OFF =
@@ -63,13 +64,12 @@ function CategoryIcon({ name, className }: { name: string; className?: string })
 // ---------------------------------------------------------------------------
 
 interface ThresholdRowProps {
-  type: AlertConditionType
-  draft: ApiStockAlert
-  errors: AlertValidationError[]
-  getCond: (type: AlertConditionType, ref?: string) => ApiAlertCondition | undefined
-  isEnabled: (type: AlertConditionType, ref?: string) => boolean
-  setEnabled: (type: AlertConditionType, ref: string | undefined, on: boolean) => void
-  setThreshold: (type: AlertConditionType, ref: string | undefined, value: number) => void
+  type: TriggerType
+  errors: WatchlistValidationError[]
+  getCond: (type: TriggerType, ref?: string) => ApiTriggerCondition | undefined
+  isEnabled: (type: TriggerType, ref?: string) => boolean
+  setEnabled: (type: TriggerType, ref: string | undefined, on: boolean) => void
+  setThreshold: (type: TriggerType, ref: string | undefined, value: number) => void
   condIdx: () => number
 }
 
@@ -88,9 +88,7 @@ const ThresholdRow = memo(function ThresholdRow({
   const enabled = isEnabled(type)
   const threshold = cond?.threshold ?? 0
   const idx = condIdx()
-  const hasError =
-    idx >= 0 &&
-    errors.some((e) => e.field === `condition.${idx}.threshold`)
+  const hasError = idx >= 0 && errors.some((e) => e.field === `condition.${idx}.threshold`)
 
   return (
     <div
@@ -112,9 +110,7 @@ const ThresholdRow = memo(function ThresholdRow({
         <p className={cn('text-xs font-medium leading-snug', SENTIMENT_TEXT[sentiment])}>
           {opt?.label}
         </p>
-        <p className="text-[11px] text-[var(--text-muted)] leading-relaxed mt-0.5">
-          {opt?.helper}
-        </p>
+        <p className="text-[11px] text-[var(--text-muted)] leading-relaxed mt-0.5">{opt?.helper}</p>
       </div>
 
       {/* Value input */}
@@ -151,9 +147,9 @@ const ThresholdRow = memo(function ThresholdRow({
 })
 
 interface SignalRowProps {
-  type: AlertConditionType
-  isEnabled: (type: AlertConditionType, ref?: string) => boolean
-  setEnabled: (type: AlertConditionType, ref: string | undefined, on: boolean) => void
+  type: TriggerType
+  isEnabled: (type: TriggerType, ref?: string) => boolean
+  setEnabled: (type: TriggerType, ref: string | undefined, on: boolean) => void
 }
 
 const SignalRow = memo(function SignalRow({ type, isEnabled, setEnabled }: SignalRowProps) {
@@ -181,9 +177,7 @@ const SignalRow = memo(function SignalRow({ type, isEnabled, setEnabled }: Signa
         <p className={cn('text-xs font-medium leading-snug', SENTIMENT_TEXT[sentiment])}>
           {opt?.label}
         </p>
-        <p className="text-[11px] text-[var(--text-muted)] leading-relaxed mt-0.5">
-          {opt?.helper}
-        </p>
+        <p className="text-[11px] text-[var(--text-muted)] leading-relaxed mt-0.5">{opt?.helper}</p>
       </div>
 
       {/* Signal pill */}
@@ -207,9 +201,9 @@ const SignalRow = memo(function SignalRow({ type, isEnabled, setEnabled }: Signa
 })
 
 interface MARowProps {
-  type: AlertConditionType
-  isEnabled: (type: AlertConditionType, ref?: string) => boolean
-  setEnabled: (type: AlertConditionType, ref: string | undefined, on: boolean) => void
+  type: TriggerType
+  isEnabled: (type: TriggerType, ref?: string) => boolean
+  setEnabled: (type: TriggerType, ref: string | undefined, on: boolean) => void
 }
 
 const MARow = memo(function MARow({ type, isEnabled, setEnabled }: MARowProps) {
@@ -237,12 +231,14 @@ const MARow = memo(function MARow({ type, isEnabled, setEnabled }: MARowProps) {
         <p className={cn('text-xs font-medium leading-snug', SENTIMENT_TEXT[sentiment])}>
           {opt?.label}
         </p>
-        <p className="text-[11px] text-[var(--text-muted)] leading-relaxed mt-0.5">
-          {opt?.helper}
-        </p>
+        <p className="text-[11px] text-[var(--text-muted)] leading-relaxed mt-0.5">{opt?.helper}</p>
 
         {/* MA chip toggles */}
-        <div className="flex flex-wrap gap-1.5 mt-2" role="group" aria-label={`${opt?.label} moving averages`}>
+        <div
+          className="flex flex-wrap gap-1.5 mt-2"
+          role="group"
+          aria-label={`${opt?.label} moving averages`}
+        >
           {MA_REFERENCE_OPTIONS.map((ref) => {
             const on = isEnabled(type, ref.value)
             return (
@@ -271,15 +267,15 @@ const MARow = memo(function MARow({ type, isEnabled, setEnabled }: MARowProps) {
 // Main modal
 // ---------------------------------------------------------------------------
 
-export const StockAlertEditorModal = memo(function StockAlertEditorModal({
+export const WatchlistEditorModal = memo(function WatchlistEditorModal({
   initial,
   existingSymbols,
   onSave,
   onClose,
-}: StockAlertEditorModalProps) {
+}: WatchlistEditorModalProps) {
   const isEditing = initial !== null
-  const [draft, setDraft] = useState<ApiStockAlert>(initial ?? DEFAULT_DRAFT)
-  const [errors, setErrors] = useState<AlertValidationError[]>([])
+  const [draft, setDraft] = useState<ApiWatchlistItem>(initial ?? DEFAULT_DRAFT)
+  const [errors, setErrors] = useState<WatchlistValidationError[]>([])
   const [stockSymbols, setStockSymbols] = useState<string[]>([])
   const [symbolQuery, setSymbolQuery] = useState(initial?.symbol ?? '')
   const [symbolListLoading, setSymbolListLoading] = useState(false)
@@ -290,7 +286,8 @@ export const StockAlertEditorModal = memo(function StockAlertEditorModal({
     let cancelled = false
     setSymbolListLoading(true)
     api
-      .filterStocks({})
+      // Empty filter = return-all (fetch every symbol for the picker).
+      .filterStocks({ match: 'and' })
       .then((res) => {
         if (cancelled) return
         setStockSymbols(res.stocks.map((s) => s.symbol).sort())
@@ -317,75 +314,67 @@ export const StockAlertEditorModal = memo(function StockAlertEditorModal({
   // ---------------------------------------------------------------------------
 
   const getCond = useCallback(
-    (type: AlertConditionType, ref?: string): ApiAlertCondition | undefined => {
-      return draft.conditions.find(
-        (c) => c.type === type && (c.reference ?? '') === (ref ?? '')
-      )
+    (type: TriggerType, ref?: string): ApiTriggerCondition | undefined => {
+      return draft.conditions.find((c) => c.type === type && (c.reference ?? '') === (ref ?? ''))
     },
     [draft.conditions]
   )
 
   const isEnabled = useCallback(
-    (type: AlertConditionType, ref?: string): boolean => {
+    (type: TriggerType, ref?: string): boolean => {
       return getCond(type, ref)?.enabled === true
     },
     [getCond]
   )
 
-  const setEnabled = useCallback(
-    (type: AlertConditionType, ref: string | undefined, on: boolean) => {
-      setDraft((prev) => {
-        const conditions = [...prev.conditions]
-        const idx = conditions.findIndex(
-          (c) => c.type === type && (c.reference ?? '') === (ref ?? '')
-        )
-        if (idx >= 0) {
-          // Condition exists — update enabled, keep threshold/reference intact
-          conditions[idx] = { ...conditions[idx], enabled: on }
-        } else if (on) {
-          // Doesn't exist yet and we're turning it on — create it
-          conditions.push({
-            type,
-            threshold: 0,
-            reference: ref as ApiAlertCondition['reference'],
-            enabled: true,
-          })
-        }
-        // Never remove on toggle-off: retain as enabled:false so value survives
-        return { ...prev, conditions }
-      })
-    },
-    []
-  )
+  const setEnabled = useCallback((type: TriggerType, ref: string | undefined, on: boolean) => {
+    setDraft((prev) => {
+      const conditions = [...prev.conditions]
+      const idx = conditions.findIndex(
+        (c) => c.type === type && (c.reference ?? '') === (ref ?? '')
+      )
+      if (idx >= 0) {
+        // Condition exists — update enabled, keep threshold/reference intact
+        conditions[idx] = { ...conditions[idx], enabled: on }
+      } else if (on) {
+        // Doesn't exist yet and we're turning it on — create it
+        conditions.push({
+          type,
+          threshold: 0,
+          reference: ref as ApiTriggerCondition['reference'],
+          enabled: true,
+        })
+      }
+      // Never remove on toggle-off: retain as enabled:false so value survives
+      return { ...prev, conditions }
+    })
+  }, [])
 
-  const setThreshold = useCallback(
-    (type: AlertConditionType, ref: string | undefined, value: number) => {
-      setDraft((prev) => {
-        const conditions = [...prev.conditions]
-        const idx = conditions.findIndex(
-          (c) => c.type === type && (c.reference ?? '') === (ref ?? '')
-        )
-        if (idx >= 0) {
-          // Update threshold only — do NOT change enabled
-          conditions[idx] = { ...conditions[idx], threshold: value }
-        } else {
-          // Create with enabled:false so the value is stored without enabling
-          conditions.push({
-            type,
-            threshold: value,
-            reference: ref as ApiAlertCondition['reference'],
-            enabled: false,
-          })
-        }
-        return { ...prev, conditions }
-      })
-    },
-    []
-  )
+  const setThreshold = useCallback((type: TriggerType, ref: string | undefined, value: number) => {
+    setDraft((prev) => {
+      const conditions = [...prev.conditions]
+      const idx = conditions.findIndex(
+        (c) => c.type === type && (c.reference ?? '') === (ref ?? '')
+      )
+      if (idx >= 0) {
+        // Update threshold only — do NOT change enabled
+        conditions[idx] = { ...conditions[idx], threshold: value }
+      } else {
+        // Create with enabled:false so the value is stored without enabling
+        conditions.push({
+          type,
+          threshold: value,
+          reference: ref as ApiTriggerCondition['reference'],
+          enabled: false,
+        })
+      }
+      return { ...prev, conditions }
+    })
+  }, [])
 
   // Map (type, ref) to its index in draft.conditions (for error field lookup)
   const getCondIdx = useCallback(
-    (type: AlertConditionType, ref?: string): number => {
+    (type: TriggerType, ref?: string): number => {
       return draft.conditions.findIndex(
         (c) => c.type === type && (c.reference ?? '') === (ref ?? '')
       )
@@ -461,8 +450,8 @@ export const StockAlertEditorModal = memo(function StockAlertEditorModal({
   // ---------------------------------------------------------------------------
 
   const handleSave = useCallback(() => {
-    const trimmed: ApiStockAlert = { ...draft, symbol: draft.symbol.trim().toUpperCase() }
-    const found = validateAlert(trimmed, reservedSymbols)
+    const trimmed: ApiWatchlistItem = { ...draft, symbol: draft.symbol.trim().toUpperCase() }
+    const found = validateWatchlistItem(trimmed, reservedSymbols)
     if (found.length > 0) {
       setErrors(found)
       return
@@ -480,10 +469,7 @@ export const StockAlertEditorModal = memo(function StockAlertEditorModal({
   // ---------------------------------------------------------------------------
 
   // getCondIdx factory for ThresholdRow's condIdx prop
-  const makeCondIdxGetter = useCallback(
-    (type: AlertConditionType) => () => getCondIdx(type),
-    [getCondIdx]
-  )
+  const makeCondIdxGetter = useCallback((type: TriggerType) => () => getCondIdx(type), [getCondIdx])
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -499,7 +485,7 @@ export const StockAlertEditorModal = memo(function StockAlertEditorModal({
             <Icons.Bell />
           </div>
           <DialogTitle className="flex-1 text-sm">
-            {isEditing ? `Edit Alert — ${initial.symbol}` : 'Create Alert'}
+            {isEditing ? `Edit Watchlist Entry — ${initial.symbol}` : 'Add to Watchlist'}
           </DialogTitle>
         </DialogHeader>
 
@@ -507,24 +493,23 @@ export const StockAlertEditorModal = memo(function StockAlertEditorModal({
         <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
           {/* Left: form */}
           <DialogBody className="flex-1 px-5 py-4 overflow-y-auto flex flex-col gap-5 min-w-0">
-
             {/* Symbol */}
             <div className="flex flex-col gap-1.5 relative">
               <label
-                htmlFor="alert-symbol"
+                htmlFor="watchlist-symbol"
                 className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-widest"
               >
                 Symbol
               </label>
               <input
-                id="alert-symbol"
+                id="watchlist-symbol"
                 type="text"
                 role="combobox"
                 aria-expanded={symbolFocus && suggestions.length > 0}
-                aria-controls="alert-symbol-listbox"
+                aria-controls="watchlist-symbol-listbox"
                 aria-autocomplete="list"
                 aria-activedescendant={
-                  activeSuggestion >= 0 ? `alert-symbol-opt-${activeSuggestion}` : undefined
+                  activeSuggestion >= 0 ? `watchlist-symbol-opt-${activeSuggestion}` : undefined
                 }
                 className={cn(
                   'px-3 py-2 bg-[var(--bg-deep)] border rounded text-sm font-mono text-[var(--text-primary)] focus:outline-none focus:border-[var(--neon-cyan)] focus:ring-2 focus:ring-[var(--neon-cyan-dim)] transition-colors duration-150',
@@ -541,7 +526,7 @@ export const StockAlertEditorModal = memo(function StockAlertEditorModal({
               />
               {symbolFocus && suggestions.length > 0 && (
                 <ul
-                  id="alert-symbol-listbox"
+                  id="watchlist-symbol-listbox"
                   className="absolute top-full left-0 right-0 mt-1 max-h-[180px] overflow-auto bg-[var(--bg-elevated)] border border-[var(--border-dim)] rounded shadow-[0_10px_30px_rgba(0,0,0,0.5)] z-10"
                   role="listbox"
                   aria-label="Symbol suggestions"
@@ -549,7 +534,7 @@ export const StockAlertEditorModal = memo(function StockAlertEditorModal({
                   {suggestions.map((s, i) => (
                     <li
                       key={s}
-                      id={`alert-symbol-opt-${i}`}
+                      id={`watchlist-symbol-opt-${i}`}
                       role="option"
                       aria-selected={i === activeSuggestion}
                       onMouseDown={(e) => {
@@ -559,7 +544,9 @@ export const StockAlertEditorModal = memo(function StockAlertEditorModal({
                       onMouseEnter={() => setActiveSuggestion(i)}
                       className={cn(
                         'px-3 py-1.5 text-xs font-mono cursor-pointer text-[var(--text-primary)] transition-colors duration-100',
-                        i === activeSuggestion ? 'bg-[var(--bg-hover)]' : 'hover:bg-[var(--bg-hover)]'
+                        i === activeSuggestion
+                          ? 'bg-[var(--bg-hover)]'
+                          : 'hover:bg-[var(--bg-hover)]'
                       )}
                     >
                       {s}
@@ -582,9 +569,7 @@ export const StockAlertEditorModal = memo(function StockAlertEditorModal({
               </label>
 
               {CONDITION_CATEGORIES.map((cat) => {
-                const catTypes = ALERT_CONDITION_TYPES.filter((opt) =>
-                  cat.types.includes(opt.value)
-                )
+                const catTypes = TRIGGER_TYPES.filter((opt) => cat.types.includes(opt.value))
                 const isMACategory = cat.id === 'ma_cross'
 
                 return (
@@ -620,7 +605,6 @@ export const StockAlertEditorModal = memo(function StockAlertEditorModal({
                               <ThresholdRow
                                 key={opt.value}
                                 type={opt.value}
-                                draft={draft}
                                 errors={errors}
                                 getCond={getCond}
                                 isEnabled={isEnabled}
@@ -657,9 +641,9 @@ export const StockAlertEditorModal = memo(function StockAlertEditorModal({
 
             {/* Paused warning */}
             {allConditionsDisabled && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded border border-[rgba(255,170,0,0.3)] bg-[rgba(255,170,0,0.06)] text-[11px] text-[var(--neon-amber)]">
+              <div className="flex items-center gap-2 px-3 py-2 rounded border border-[var(--neon-amber-border)] bg-[var(--neon-amber-soft)] text-[11px] text-[var(--neon-amber)]">
                 <Icons.Alert className="w-3.5 h-3.5 flex-shrink-0" />
-                <span>All conditions disabled — alert will be paused</span>
+                <span>All conditions disabled — this entry will be paused</span>
               </div>
             )}
           </DialogBody>
@@ -738,7 +722,7 @@ export const StockAlertEditorModal = memo(function StockAlertEditorModal({
             Cancel
           </Button>
           <Button variant="primary" size="sm" onClick={handleSave} disabled={!canSubmit}>
-            {isEditing ? 'Update' : 'Create'} Alert
+            {isEditing ? 'Update Entry' : 'Add to Watchlist'}
           </Button>
         </DialogFooter>
       </DialogContent>

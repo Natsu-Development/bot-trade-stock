@@ -1,16 +1,16 @@
 import { memo, useCallback } from 'react'
 import { Icons } from '../icons/Icons'
 import { cn } from '@/lib/utils'
-import type { ApiStockAlert } from '@/lib/api'
+import type { ApiWatchlistItem } from '@/lib/api'
 import {
   formatConditionPill,
   getConditionSentiment,
   groupConditionsByCategory,
-} from '@/lib/alertOptions'
-import { SENTIMENT_BAR } from '@/lib/alertStyles'
+} from '@/lib/watchlistOptions'
+import { SENTIMENT_BAR } from '@/lib/watchlistStyles'
 
-interface StockAlertConditionDetailProps {
-  alert: ApiStockAlert
+interface WatchlistConditionDetailProps {
+  item: ApiWatchlistItem
   index: number
   panelId: string
   onEdit: (index: number) => void
@@ -23,20 +23,20 @@ interface StockAlertConditionDetailProps {
  * solid `●` when enabled, hollow `○` (dimmed) when disabled — plus its threshold
  * text from formatConditionPill. Read-only: all edits route to the modal.
  */
-export const StockAlertConditionDetail = memo(function StockAlertConditionDetail({
-  alert,
+export const WatchlistConditionDetail = memo(function WatchlistConditionDetail({
+  item,
   index,
   panelId,
   onEdit,
-}: StockAlertConditionDetailProps) {
+}: WatchlistConditionDetailProps) {
   const handleEdit = useCallback(() => onEdit(index), [index, onEdit])
-  const groups = groupConditionsByCategory(alert)
+  const groups = groupConditionsByCategory(item)
 
   return (
     <div
       id={panelId}
       role="region"
-      aria-label={`Conditions for ${alert.symbol}`}
+      aria-label={`Conditions for ${item.symbol}`}
       className="flex flex-col gap-3 pl-[14.5rem] pr-3 py-3 bg-[var(--bg-deep)] border-t border-[var(--border-dim)] animate-fade-in motion-reduce:animate-none"
     >
       {groups.length === 0 ? (
@@ -47,7 +47,10 @@ export const StockAlertConditionDetail = memo(function StockAlertConditionDetail
           return (
             <div key={category.id} className="relative pl-3">
               <div
-                className={cn('absolute left-0 top-0 bottom-0 w-[3px] rounded', SENTIMENT_BAR[sentiment])}
+                className={cn(
+                  'absolute left-0 top-0 bottom-0 w-[3px] rounded',
+                  SENTIMENT_BAR[sentiment]
+                )}
                 aria-hidden="true"
               />
               <span className="text-[9px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
@@ -83,7 +86,7 @@ export const StockAlertConditionDetail = memo(function StockAlertConditionDetail
         <button
           type="button"
           onClick={handleEdit}
-          aria-label={`Edit alert for ${alert.symbol} in modal`}
+          aria-label={`Edit watchlist entry for ${item.symbol} in modal`}
           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-[var(--border-glow)] text-[10px] font-mono text-[var(--text-secondary)] hover:border-[var(--neon-cyan)] hover:text-[var(--neon-cyan)] transition-colors duration-150 [&_svg]:w-3 [&_svg]:h-3"
         >
           <Icons.Settings2 />

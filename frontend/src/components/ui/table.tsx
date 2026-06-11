@@ -1,18 +1,13 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
-const Table = React.forwardRef<
-  HTMLTableElement,
-  React.HTMLAttributes<HTMLTableElement>
->(({ className, ...props }, ref) => (
-  <div className="overflow-x-auto">
-    <table
-      ref={ref}
-      className={cn('w-full border-collapse text-sm', className)}
-      {...props}
-    />
-  </div>
-))
+const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
+  ({ className, ...props }, ref) => (
+    <div className="overflow-x-auto">
+      <table ref={ref} className={cn('w-full border-collapse text-sm', className)} {...props} />
+    </div>
+  )
+)
 Table.displayName = 'Table'
 
 const TableHeader = React.forwardRef<
@@ -44,10 +39,7 @@ const TableFooter = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <tfoot
     ref={ref}
-    className={cn(
-      'border-t border-[var(--border-dim)] bg-[var(--bg-elevated)]',
-      className
-    )}
+    className={cn('border-t border-[var(--border-dim)] bg-[var(--bg-elevated)]', className)}
     {...props}
   />
 ))
@@ -60,7 +52,7 @@ const TableRow = React.forwardRef<
   <tr
     ref={ref}
     className={cn(
-      'transition-colors duration-150 hover:bg-[var(--bg-hover)] data-[state=selected]:bg-blue-500/15 data-[state=selected]:hover:bg-blue-500/20 [&_td]:transition-colors [&_td]:duration-150',
+      'transition-colors duration-150 hover:bg-[var(--bg-hover)] data-[state=selected]:bg-[var(--neon-cyan-dim)] data-[state=selected]:hover:bg-[var(--neon-cyan-dim)] [&_td]:transition-colors [&_td]:duration-150',
       selected && 'data-[state=selected]',
       className
     )}
@@ -112,13 +104,4 @@ const TableCaption = React.forwardRef<
 ))
 TableCaption.displayName = 'TableCaption'
 
-export {
-  Table,
-  TableHeader,
-  TableBody,
-  TableFooter,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableCaption,
-}
+export { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption }

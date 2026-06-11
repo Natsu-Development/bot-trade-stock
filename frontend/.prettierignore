@@ -1,0 +1,9 @@
+dist
+node_modules
+coverage
+stats.html
+yarn.lock
+package-lock.json
+playwright-report
+test-results
+**/.omc/**
