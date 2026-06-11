@@ -13,6 +13,7 @@ import (
 	"backend/domain/shared"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 var _ inbound.ConfigManager = (*ConfigUseCase)(nil)
@@ -20,11 +21,23 @@ var _ inbound.ConfigManager = (*ConfigUseCase)(nil)
 // ConfigUseCase handles configuration business operations.
 type ConfigUseCase struct {
 	repo outbound.ConfigRepository
+	// listeners are notified after UpdateConfig so per-config caches refresh
+	// immediately (fresh-on-edit): the screener-flags LRU bust (Compute) and
+	// the alert-level recompute (AlertCompute) are separate listeners. Empty by
+	// default — CreateConfig and tests need no wiring.
+	listeners []inbound.ConfigChangeListener
 }
 
 // NewConfigUseCase creates a new ConfigUseCase.
 func NewConfigUseCase(repo outbound.ConfigRepository) *ConfigUseCase {
 	return &ConfigUseCase{repo: repo}
+}
+
+// AddConfigChangeListener registers a fresh-on-edit listener (called at startup by
+// the composition root). Listeners are notified in registration order on each
+// UpdateConfig.
+func (uc *ConfigUseCase) AddConfigChangeListener(l inbound.ConfigChangeListener) {
+	uc.listeners = append(uc.listeners, l)
 }
 
 // CreateConfig validates and stores a new configuration.
@@ -87,6 +100,16 @@ func (uc *ConfigUseCase) UpdateConfig(ctx context.Context, id string, update *co
 
 	if err := uc.repo.Update(ctx, merged); err != nil {
 		return nil, err
+	}
+
+	// Fresh-on-edit: notify each listener so the per-config alert levels + screener
+	// LRU refresh immediately. Best-effort — the update already succeeded, so a
+	// listener failure is logged, not returned (the next daily refresh recovers).
+	for _, l := range uc.listeners {
+		if err := l.OnConfigUpdated(ctx, id); err != nil {
+			zap.L().Warn("fresh-on-edit listener failed",
+				zap.String("config_id", id), zap.Error(err))
+		}
 	}
 
 	return merged, nil

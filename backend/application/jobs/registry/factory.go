@@ -27,7 +27,9 @@ type JobDependencies struct {
 	BreakoutUC   *appTrendline.BreakoutUseCase
 	BreakdownUC  *appTrendline.BreakdownUseCase
 
-	// Stock metrics manager
+	// StockMetricsManager drives the metrics OPERATION (Refresh) — used by the
+	// refresh job to trigger a provider sweep + snapshot publish. Cache READS go
+	// through the service-layer stores below, not this port.
 	StockMetricsManager inbound.StockMetricsManager
 
 	// Shared dependencies
@@ -37,6 +39,16 @@ type JobDependencies struct {
 	WatchlistEvaluator *alertservice.WatchlistEvaluator
 	ConditionDisabler  *appService.ConditionDisabler
 	Config             *config.InfraConfig
+
+	// SnapshotStore is the lock-free shared metrics snapshot (base metrics + bars)
+	// the watchlist tick reads directly via MetricsBySymbol — the service-layer
+	// cache itself, not the StockMetricsManager use case. Written by the refresh
+	// pipeline (the metrics UseCase owns the writer; jobs are read-only consumers).
+	SnapshotStore *appService.SnapshotStore
+
+	// AlertTrendlineStore is the lock-free per-config alert-level store the watchlist
+	// tick reads (resist/support levels). Published by the refresh/Layer-2 path.
+	AlertTrendlineStore *appService.AlertTrendlineStore
 
 	// MarketTimezone is the HoSE-local timezone (Asia/Ho_Chi_Minh by default,
 	// loaded once at startup from CRON_TIMEZONE in wire/app.go).

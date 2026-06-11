@@ -6,53 +6,43 @@ import (
 	marketvo "backend/domain/shared/valueobject/market"
 )
 
-// StockMetrics represents comprehensive metrics for a single stock.
+// StockMetrics represents comprehensive metrics for a single stock. It carries
+// CONFIG-INDEPENDENT metrics only: identity, the cross-universe RS percentile
+// ratings (assigned by Calculator.RankAll), and the per-stock base metrics
+// (returns, volume, price, moving averages — computed by CalculateBaseMetrics).
+//
+// The per-config trendline/divergence signal flags and the tick-time
+// resistance/support levels are NOT stored here: they live in their own cache
+// layers — analysisvo.SignalFlags (the screener's per-config signals,
+// dto.ScreenerStock) and analysisvo.AlertTrendline (the watchlist alert-level store) —
+// each computed per config from the shared snapshot's bars. Old persisted
+// documents may still carry has_breakout_*/resistance_level bson fields; the
+// driver ignores unknown fields on decode.
 type StockMetrics struct {
-	Symbol        marketvo.Symbol        `json:"symbol" bson:"symbol"`
-	Name          string                 `json:"name" bson:"name"`         // Vietnamese stock name from listallstock
-	Exchange      marketvo.Exchange      `json:"exchange" bson:"exchange"` // HOSE, HNX, UPCOM
-	RS1M          int                    `json:"rs_1m" bson:"rs_1m"`       // 1-month percentile (1-99), 0 if not enough data
-	RS3M          int                    `json:"rs_3m" bson:"rs_3m"`       // 3-month percentile (1-99), 0 if not enough data
-	RS6M          int                    `json:"rs_6m" bson:"rs_6m"`       // 6-month percentile (1-99), 0 if not enough data
-	RS9M          int                    `json:"rs_9m" bson:"rs_9m"`       // 9-month percentile (1-99), 0 if not enough data
-	RS52W         int                    `json:"rs_52w" bson:"rs_52w"`     // 52-week percentile (1-99), 0 if not enough data
+	Symbol   marketvo.Symbol   `json:"symbol" bson:"symbol"`
+	Name     string            `json:"name" bson:"name"`         // Vietnamese stock name from listallstock
+	Exchange marketvo.Exchange `json:"exchange" bson:"exchange"` // HOSE, HNX, UPCOM
+
+	// Ranked metrics — cross-universe RS percentiles (1-99, 0 if not enough data),
+	// assigned by Calculator.RankAll from every stock's relative position.
+	RS1M  int `json:"rs_1m" bson:"rs_1m"`
+	RS3M  int `json:"rs_3m" bson:"rs_3m"`
+	RS6M  int `json:"rs_6m" bson:"rs_6m"`
+	RS9M  int `json:"rs_9m" bson:"rs_9m"`
+	RS52W int `json:"rs_52w" bson:"rs_52w"`
+
+	// Base metrics — computed per stock from its own price history.
 	PeriodReturns periodvo.PeriodReturns `json:"period_returns" bson:"period_returns"`
 	CurrentVolume int64                  `json:"current_volume" bson:"current_volume"` // Today's volume
 	VolumeSMA20   int64                  `json:"volume_sma20" bson:"volume_sma20"`     // 20-day SMA of volume
 
-	// Price metrics
 	CurrentPrice   float64 `json:"current_price" bson:"current_price"`       // Latest close price
 	PriceChangePct float64 `json:"price_change_pct" bson:"price_change_pct"` // % change from previous close
 
-	// Moving averages
 	EMA9   float64 `json:"ema_9" bson:"ema_9"`     // 9-period EMA
 	EMA21  float64 `json:"ema_21" bson:"ema_21"`   // 21-period EMA
 	EMA50  float64 `json:"ema_50" bson:"ema_50"`   // 50-period EMA
 	SMA200 float64 `json:"sma_200" bson:"sma_200"` // 200-period SMA
-
-	// Signal metrics (from trendline and divergence analysis on daily timeframe)
-	HasBreakoutPotential  bool `json:"has_breakout_potential" bson:"has_breakout_potential"`
-	HasBreakoutConfirmed  bool `json:"has_breakout_confirmed" bson:"has_breakout_confirmed"`
-	HasBreakdownPotential bool `json:"has_breakdown_potential" bson:"has_breakdown_potential"`
-	HasBreakdownConfirmed bool `json:"has_breakdown_confirmed" bson:"has_breakdown_confirmed"`
-	HasBullishRSI         bool `json:"has_bullish_rsi" bson:"has_bullish_rsi"`
-	HasBearishRSI         bool `json:"has_bearish_rsi" bson:"has_bearish_rsi"`
-
-	// ResistanceLevel: PriceLine of the nearest BreakoutPotential signal above
-	// latestClose at refresh time. SupportLevel: nearest BreakdownPotential
-	// below latestClose. Both are read directly from the refresh job's
-	// GenerateResistanceSignals / GenerateSupportSignals output (via
-	// nearestLevelFromSignals) and consumed exclusively by the tick-time
-	// potential-breakout/breakdown watchlist evaluator (TriggerTypeTrendlineBreakout
-	// / Breakdown). A *_Potential signal exists only for an intact line inside
-	// its approach band, so a broken or far-from-price line yields 0 here,
-	// which the evaluator treats as "no alert."
-	// Response-only, NOT in the screener FilterField whitelist (the screener
-	// uses the boolean HasBreakout*/HasBreakdown* tags above instead).
-	// Additive bson/json → old documents decode fine.
-	ResistanceLevel    float64 `json:"resistance_level" bson:"resistance_level"`
-	SupportLevel       float64 `json:"support_level" bson:"support_level"`
-	TrendlineProximity float64 `json:"trendline_proximity" bson:"trendline_proximity"`
 }
 
 // GetVolumeVsSMA calculates the percentage of current volume vs SMA20 on-demand.

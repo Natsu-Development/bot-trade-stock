@@ -6,6 +6,7 @@ import (
 
 	"backend/application/dto"
 	"backend/application/port/inbound"
+	"backend/domain/config"
 	filtervo "backend/domain/shared/valueobject/filter"
 	marketvo "backend/domain/shared/valueobject/market"
 	"backend/presentation/http/response"
@@ -18,25 +19,74 @@ type StockHandler struct {
 	stockMetrics inbound.StockMetricsManager
 }
 
-// NewStockHandler creates a new stock handler.
+// NewStockHandler creates a new stock handler. The handler is thin: it delegates all
+// per-config orchestration (signal compute + filter) to the metrics use case and only
+// maps the returned domain error to an HTTP status.
 func NewStockHandler(stockMetrics inbound.StockMetricsManager) *StockHandler {
 	return &StockHandler{stockMetrics: stockMetrics}
 }
 
-// RefreshStocks handles POST /stocks/refresh request.
-// Fetches all stocks from HOSE, HNX, UPCOM, calculates metrics, and caches in RAM.
-func (h *StockHandler) RefreshStocks(c *gin.Context) {
-	result, err := h.stockMetrics.Refresh(c.Request.Context())
+// requireConfigID reads the mandatory config_id query param, writing a 400 and
+// returning ok=false when it is absent. After the no-system flip, every
+// /stocks/* request MUST carry a real config_id (the cron's Refresh(ctx) is the
+// only unguarded path — it never reaches the handler).
+func requireConfigID(c *gin.Context) (string, bool) {
+	id := c.Query("config_id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "config_id is required",
+			"message": "Select a configuration (log in) before requesting stock metrics",
+		})
+		return "", false
+	}
+	return id, true
+}
+
+// respondCacheNotReady writes the standard 503 for an unpopulated stock-metrics
+// cache (shared by the signals-resolution and filter paths).
+func respondCacheNotReady(c *gin.Context) {
+	c.JSON(http.StatusServiceUnavailable, gin.H{
+		"error":   "Stock metrics cache not ready",
+		"message": "Stock data is warming up — the refresh job runs at startup and daily; please retry shortly",
+	})
+}
+
+// respondMetricsErr maps a metrics use-case error to its HTTP status — a presentation
+// concern only, no orchestration. Unknown config → 404, unpopulated cache → 503,
+// anything else → 500.
+func respondMetricsErr(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, config.ErrConfigNotFound):
+		response.NotFound(c, "configuration")
+	case errors.Is(err, inbound.ErrCacheNotReady):
+		respondCacheNotReady(c)
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to compute stock metrics", "details": err.Error()})
+	}
+}
+
+// RecomputeStocks handles POST /stocks/recompute: it recomputes the caller's per-config
+// caches from the cached snapshot bars (no sweep) — BOTH the screener signal flags and
+// the watchlist alert trendlines. The provider fetch is the stock-refresh job's job; this
+// endpoint never fetches. No snapshot → 503; otherwise 200 with the cache stamp + size.
+func (h *StockHandler) RecomputeStocks(c *gin.Context) {
+	configID, ok := requireConfigID(c)
+	if !ok {
+		return
+	}
+
+	// Recompute warms BOTH per-config caches and returns the cache stamp + ranked size
+	// (it does not filter or project the snapshot).
+	cachedAt, totalStocks, err := h.stockMetrics.Recompute(c.Request.Context(), configID)
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "Failed to refresh stock metrics", err.Error())
+		respondMetricsErr(c, err)
 		return
 	}
 
 	response.Success(c, http.StatusOK, gin.H{
-		"message":       "Stock metrics refreshed successfully",
-		"total_stocks":  result.TotalStocksAnalyzed,
-		"stocks_ranked": result.StocksMatching,
-		"calculated_at": result.CalculatedAt,
+		"message":       "Per-config signals & alert levels recomputed from cache",
+		"total_stocks":  totalStocks,
+		"calculated_at": cachedAt,
 	})
 }
 
@@ -47,7 +97,7 @@ func (h *StockHandler) GetCacheInfo(c *gin.Context) {
 	if !ok {
 		response.Success(c, http.StatusOK, gin.H{
 			"cached":  false,
-			"message": "Cache is empty. Call POST /stocks/refresh to populate.",
+			"message": "Cache is empty; the refresh job populates it at startup and daily.",
 		})
 		return
 	}
@@ -128,20 +178,16 @@ func (h *StockHandler) FilterStocks(c *gin.Context) {
 		return
 	}
 
-	// Execute filter
-	result, err := h.stockMetrics.Filter(c.Request.Context(), filter)
+	// config_id is required (no-system). The use case orchestrates: it resolves the
+	// config's per-config signals and applies the filter; we only map errors here.
+	configID, ok := requireConfigID(c)
+	if !ok {
+		return
+	}
+
+	result, err := h.stockMetrics.Filter(c.Request.Context(), filter, configID)
 	if err != nil {
-		if errors.Is(err, inbound.ErrCacheNotReady) {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"error":   "Stock metrics cache not ready",
-				"message": "Please call POST /stocks/refresh first to populate the cache",
-			})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to filter stocks",
-			"details": err.Error(),
-		})
+		respondMetricsErr(c, err)
 		return
 	}
 

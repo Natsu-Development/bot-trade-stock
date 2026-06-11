@@ -4,6 +4,7 @@ package service
 import (
 	"fmt"
 
+	analysisvo "backend/domain/analysis/valueobject"
 	configvo "backend/domain/config/valueobject"
 	metricsagg "backend/domain/metrics/aggregate"
 	marketvo "backend/domain/shared/valueobject/market"
@@ -33,12 +34,17 @@ func NewWatchlistEvaluator() *WatchlistEvaluator {
 //
 // prevQuote is used only by TriggerTypeTransactionVolumeSpike — pass a zero-value
 // MarketQuote for other types.
-// metrics may be nil; volume_spike returns (zero, false) in that case.
+// metrics may be nil; volume_spike and the MA-cross branches return (zero, false)
+// in that case. trendline carries the per-config tick-time resistance/support the
+// trendline breakout/breakdown branches fire on (zero Levels → no fire); it is
+// supplied separately from metrics because trendline are config-specific while the
+// base metrics are shared.
 func (e *WatchlistEvaluator) Evaluate(
 	cond configvo.TriggerCondition,
 	quote marketvo.MarketQuote,
 	prevQuote marketvo.MarketQuote,
 	metrics *metricsagg.StockMetrics,
+	trendline analysisvo.AlertTrendline,
 ) (EvaluationResult, bool) {
 	switch cond.Type {
 	case configvo.TriggerTypePriceAbove:
@@ -85,12 +91,12 @@ func (e *WatchlistEvaluator) Evaluate(
 		}, true
 	case configvo.TriggerTypeTrendlineBreakout:
 		// POTENTIAL ONLY — fire in the approach zone on the not-yet-broken side.
-		// Price strictly above ResistanceLevel (broken through) does NOT fire.
-		if metrics == nil || metrics.ResistanceLevel <= 0 {
+		// Price strictly above Resistance (broken through) does NOT fire.
+		if trendline.Resistance <= 0 {
 			return EvaluationResult{}, false
 		}
-		level := metrics.ResistanceLevel
-		lower := level * (1 - metrics.TrendlineProximity)
+		level := trendline.Resistance
+		lower := level * (1 - trendline.Proximity)
 		if quote.MatchedPrice >= lower && quote.MatchedPrice <= level {
 			return EvaluationResult{
 				Label: configvo.LabelTrendlineBreakout,
@@ -99,12 +105,12 @@ func (e *WatchlistEvaluator) Evaluate(
 		}
 	case configvo.TriggerTypeTrendlineBreakdown:
 		// POTENTIAL ONLY — fire in the approach zone on the not-yet-broken side.
-		// Price strictly below SupportLevel (broken through) does NOT fire.
-		if metrics == nil || metrics.SupportLevel <= 0 {
+		// Price strictly below Support (broken through) does NOT fire.
+		if trendline.Support <= 0 {
 			return EvaluationResult{}, false
 		}
-		level := metrics.SupportLevel
-		upper := level * (1 + metrics.TrendlineProximity)
+		level := trendline.Support
+		upper := level * (1 + trendline.Proximity)
 		if quote.MatchedPrice <= upper && quote.MatchedPrice >= level {
 			return EvaluationResult{
 				Label: configvo.LabelTrendlineBreakdown,

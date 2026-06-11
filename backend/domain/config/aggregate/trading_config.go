@@ -153,6 +153,26 @@ func (c *TradingConfig) SymbolsWithEnabledCondition(t valueobject.TriggerType) [
 	return symbols
 }
 
+// AlertSubsetSymbols returns the deduplicated symbols that have an enabled
+// trendline breakout OR breakdown condition — the "alert subset" whose
+// tick-time resistance/support levels the watchlist evaluator fires on. The
+// Layer-2 alert-level computation derives its watched-symbol set from this, so
+// the selection rule lives here in the domain rather than in the use case.
+func (c *TradingConfig) AlertSubsetSymbols() []market.Symbol {
+	seen := make(map[market.Symbol]struct{})
+	var out []market.Symbol
+	for _, t := range []valueobject.TriggerType{valueobject.TriggerTypeTrendlineBreakout, valueobject.TriggerTypeTrendlineBreakdown} {
+		for _, sym := range c.SymbolsWithEnabledCondition(t) {
+			if _, ok := seen[sym]; ok {
+				continue
+			}
+			seen[sym] = struct{}{}
+			out = append(out, sym)
+		}
+	}
+	return out
+}
+
 // Validate checks all trading config invariants.
 func (c *TradingConfig) Validate() error {
 	var errs []string

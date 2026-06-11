@@ -2,19 +2,29 @@
 package service
 
 import (
+	analysisvo "backend/domain/analysis/valueobject"
 	metricsagg "backend/domain/metrics/aggregate"
 	filtervo "backend/domain/shared/valueobject/filter"
 )
 
 // Matches reports whether a stock satisfies the filter. Exchanges are a hard
 // outer AND (never negated); the rest is a flat two-level scope.
-func Matches(stock *metricsagg.StockMetrics, f *filtervo.StockFilter) bool {
+//
+// signalsBySymbol maps symbol → that config's signal flags and may be nil. The
+// shared StockMetrics is base-only (no signal flags), so the per-config signals
+// are the SOLE signal source: a symbol absent from the map — or a nil map —
+// evaluates every signal flag as false. Numeric and moving-average fields (RS,
+// volume, EMAs) always read off the shared stock.
+func Matches(stock *metricsagg.StockMetrics, f *filtervo.StockFilter, signalsBySymbol map[string]analysisvo.SignalFlags) bool {
 	// Check exchange filter first (always AND with other conditions, never negated).
 	if len(f.Exchanges) > 0 && !matchesExchanges(stock, f.Exchanges) {
 		return false
 	}
 
-	res := evalScope(stock, f.Match, f.Conditions, f.Groups)
+	// Per-config signals are the sole signal source: an absent symbol (or nil map)
+	// indexes to the zero Signals — every flag false.
+	sig := signalsBySymbol[string(stock.Symbol)]
+	res := evalScope(stock, sig, f.Match, f.Conditions, f.Groups)
 	if f.Negate {
 		return !res
 	}
@@ -23,19 +33,19 @@ func Matches(stock *metricsagg.StockMetrics, f *filtervo.StockFilter) bool {
 
 // evalScope combines a level's conditions + groups under one combinator
 // (short-circuits). Shared by the top level and each group (groups pass nil groups).
-func evalScope(stock *metricsagg.StockMetrics, m filtervo.MatchMode, conds []filtervo.Condition, groups []filtervo.Group) bool {
+func evalScope(stock *metricsagg.StockMetrics, sig analysisvo.SignalFlags, m filtervo.MatchMode, conds []filtervo.Condition, groups []filtervo.Group) bool {
 	if len(conds) == 0 && len(groups) == 0 {
 		return true // empty scope = match-all; caller applies Negate
 	}
 
 	if m == filtervo.MatchOr { // OR
 		for _, c := range conds {
-			if evalCondition(stock, c) {
+			if evalCondition(stock, sig, c) {
 				return true
 			}
 		}
 		for _, g := range groups {
-			if evalGroup(stock, g) {
+			if evalGroup(stock, sig, g) {
 				return true
 			}
 		}
@@ -43,12 +53,12 @@ func evalScope(stock *metricsagg.StockMetrics, m filtervo.MatchMode, conds []fil
 	}
 
 	for _, c := range conds { // AND (default)
-		if !evalCondition(stock, c) {
+		if !evalCondition(stock, sig, c) {
 			return false
 		}
 	}
 	for _, g := range groups {
-		if !evalGroup(stock, g) {
+		if !evalGroup(stock, sig, g) {
 			return false
 		}
 	}
@@ -56,8 +66,8 @@ func evalScope(stock *metricsagg.StockMetrics, m filtervo.MatchMode, conds []fil
 }
 
 // evalGroup evaluates one group (conditions only, no sub-groups), applying Negate.
-func evalGroup(stock *metricsagg.StockMetrics, g filtervo.Group) bool {
-	res := evalScope(stock, g.Match, g.Conditions, nil)
+func evalGroup(stock *metricsagg.StockMetrics, sig analysisvo.SignalFlags, g filtervo.Group) bool {
+	res := evalScope(stock, sig, g.Match, g.Conditions, nil)
 	if g.Negate {
 		return !res
 	}
@@ -65,16 +75,35 @@ func evalGroup(stock *metricsagg.StockMetrics, g filtervo.Group) bool {
 }
 
 // evalCondition evaluates a single leaf condition against a stock.
-//   - signal field: direct boolean comparison;
+//   - field comparison (RhsField set): compare two price/MA fields directly;
+//   - signal field: direct boolean comparison (read from the resolved sig);
 //   - moving-average field: compare current price vs the MA value;
 //   - numeric field: compare the field value vs the condition value.
-func evalCondition(stock *metricsagg.StockMetrics, c filtervo.Condition) bool {
+//
+// The field-comparison case is checked FIRST (mirroring Condition.validate's
+// branch order) so a price/MA LHS routes here instead of the legacy MA branch.
+func evalCondition(stock *metricsagg.StockMetrics, sig analysisvo.SignalFlags, c filtervo.Condition) bool {
 	switch {
+	case c.RhsField != nil:
+		// Field-vs-field comparison (e.g. EMA 9 >= EMA 21, Price < EMA 50). Reuse
+		// getFieldValue (already resolves current_price + all MAs) and compareNum.
+		lhs := getFieldValue(stock, c.Field)
+		rhs := getFieldValue(stock, *c.RhsField)
+		// Warm-up/no-data guard: indicators return 0 below their period and a
+		// no-trade stock has price 0. A 0 operand would spuriously match (e.g.
+		// SMA200==0 < EMA9), so exclude when either side is non-positive. Real
+		// prices/MAs are always > 0, so no legitimate match is dropped.
+		if lhs <= 0 || rhs <= 0 {
+			return false
+		}
+		return compareNum(lhs, c.Op, rhs)
 	case c.Field.IsSignal():
-		return getSignalFieldValue(stock, c.Field) == c.BoolValue()
-	case c.Field.IsMovingAverage():
-		return comparePriceVsMA(stock.CurrentPrice, getFieldValue(stock, c.Field), c.Op)
+		return getSignalFieldValue(sig, c.Field) == c.BoolValue()
 	default:
+		// Numeric comparison (RS, volume, price-change, and current_price-vs-number).
+		// A bare moving-average leaf can never reach here — validate() rejects an MA
+		// field without an RhsField, so every price/MA comparison is the field-vs-field
+		// case above.
 		return compareNum(getFieldValue(stock, c.Field), c.Op, c.Val())
 	}
 }
@@ -90,33 +119,9 @@ func compareNum(fieldValue float64, op filtervo.FilterOperator, value float64) b
 		return fieldValue > value
 	case filtervo.OperatorLessThan:
 		return fieldValue < value
-	case filtervo.OperatorEqual:
-		// exact float == is intentional: pre-existing behaviour carried over by the filter revamp.
-		// these metrics are never exactly equal in practice, so this branch is effectively unreachable.
-		// epsilon-comparison semantics are deliberately out of scope.
-		return fieldValue == value
 	default:
-		return false
-	}
-}
-
-// comparePriceVsMA compares current price against MA value using the operator.
-func comparePriceVsMA(currentPrice, maValue float64, operator filtervo.FilterOperator) bool {
-	switch operator {
-	case filtervo.OperatorGreaterThanOrEqual:
-		return currentPrice >= maValue // Price at or above MA
-	case filtervo.OperatorLessThanOrEqual:
-		return currentPrice <= maValue // Price at or below MA
-	case filtervo.OperatorGreaterThan:
-		return currentPrice > maValue // Price above MA
-	case filtervo.OperatorLessThan:
-		return currentPrice < maValue // Price below MA
-	case filtervo.OperatorEqual:
-		// exact float == is intentional: pre-existing behaviour carried over by the filter revamp.
-		// price never exactly equals an MA value in practice, so this branch is effectively unreachable.
-		// epsilon-comparison semantics are deliberately out of scope.
-		return currentPrice == maValue // price equals MA
-	default:
+		// '=' never reaches here — Condition.validate rejects numeric and
+		// field-vs-field equality, and signals use a direct boolean compare.
 		return false
 	}
 }
@@ -172,21 +177,22 @@ func matchesExchanges(stock *metricsagg.StockMetrics, exchanges []string) bool {
 	return false
 }
 
-// getSignalFieldValue returns the boolean value of a signal field.
-func getSignalFieldValue(stock *metricsagg.StockMetrics, field filtervo.FilterField) bool {
+// getSignalFieldValue returns the boolean value of a signal field, read from the
+// resolved per-stock Signals (from the per-config signals, or zero when absent).
+func getSignalFieldValue(sig analysisvo.SignalFlags, field filtervo.FilterField) bool {
 	switch field {
 	case filtervo.FieldHasBreakoutPotential:
-		return stock.HasBreakoutPotential
+		return sig.HasBreakoutPotential
 	case filtervo.FieldHasBreakoutConfirmed:
-		return stock.HasBreakoutConfirmed
+		return sig.HasBreakoutConfirmed
 	case filtervo.FieldHasBreakdownPotential:
-		return stock.HasBreakdownPotential
+		return sig.HasBreakdownPotential
 	case filtervo.FieldHasBreakdownConfirmed:
-		return stock.HasBreakdownConfirmed
+		return sig.HasBreakdownConfirmed
 	case filtervo.FieldHasBullishRSI:
-		return stock.HasBullishRSI
+		return sig.HasBullishRSI
 	case filtervo.FieldHasBearishRSI:
-		return stock.HasBearishRSI
+		return sig.HasBearishRSI
 	default:
 		return false
 	}

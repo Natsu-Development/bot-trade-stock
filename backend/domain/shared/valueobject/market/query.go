@@ -15,9 +15,9 @@ type MarketDataQuery struct {
 	Interval  Interval
 }
 
-// NewMarketDataQueryFromStrings creates a validated MarketDataQuery from raw string values.
+// NewMarketDataQuery creates a validated MarketDataQuery from raw string values.
 // startDate is automatically calculated as (endDate - fetchSpan).
-func NewMarketDataQueryFromStrings(symbolStr, endDate, intervalStr string, fetchSpan FetchSpanDays) (MarketDataQuery, error) {
+func NewMarketDataQuery(symbolStr, endDate, intervalStr string, fetchSpan FetchSpanDays) (MarketDataQuery, error) {
 	symbol, err := NewSymbol(symbolStr)
 	if err != nil {
 		return MarketDataQuery{}, fmt.Errorf("invalid symbol: %w", err)

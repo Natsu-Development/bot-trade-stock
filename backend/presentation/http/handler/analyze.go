@@ -59,7 +59,7 @@ func (h *AnalyzeHandler) Analyze(c *gin.Context) {
 	span := marketvo.FetchSpanForBars(interval, h.windowBars)
 
 	// endDate defaults to today, startDate is calculated from the fetch span.
-	query, err := marketvo.NewMarketDataQueryFromStrings(
+	query, err := marketvo.NewMarketDataQuery(
 		c.Param("symbol"),
 		c.Query("end_date"),
 		intervalStr,

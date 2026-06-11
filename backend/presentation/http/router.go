@@ -48,10 +48,10 @@ func NewRouter(
 	router.GET("/analyze/:symbol", analyzeHandler.Analyze)
 
 	// Stock metrics endpoints
-	// POST /stocks/refresh - Fetch all stocks, calculate metrics, cache in RAM
+	// POST /stocks/recompute - Recompute per-config signals from cached bars (no provider fetch)
 	// POST /stocks/filter - Advanced filtering with AND/OR logic
 	// GET /stocks/cache-info - Get cache status
-	router.POST("/stocks/refresh", stockHandler.RefreshStocks)
+	router.POST("/stocks/recompute", stockHandler.RecomputeStocks)
 	router.POST("/stocks/filter", stockHandler.FilterStocks)
 	router.GET("/stocks/cache-info", stockHandler.GetCacheInfo)
 

@@ -130,7 +130,7 @@ func (j *AnalysisJob) analyzeSymbol(ctx context.Context, symbol string, cfg *con
 	}
 	span := marketvo.FetchSpanForBars(interval, j.windowBars)
 
-	query, err := marketvo.NewMarketDataQueryFromStrings(symbol, "", j.interval, span)
+	query, err := marketvo.NewMarketDataQuery(symbol, "", j.interval, span)
 	if err != nil {
 		zap.L().Error("Failed to create query", zap.String("symbol", symbol), zap.Error(err))
 		return

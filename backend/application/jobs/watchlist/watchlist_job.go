@@ -27,14 +27,23 @@ func init() {
 // WatchlistJob evaluates user-configured price/volume conditions against
 // real-time market quotes and notifies on match.
 type WatchlistJob struct {
-	schedule       string
-	timeout        time.Duration
-	configRepo     outbound.ConfigRepository
-	quoteProvider  outbound.QuoteProvider
-	metricsManager inbound.StockMetricsManager
-	notifier       outbound.Notifier
-	evaluator      *alertservice.WatchlistEvaluator
-	disabler       *appService.ConditionDisabler
+	schedule      string
+	timeout       time.Duration
+	configRepo    outbound.ConfigRepository
+	quoteProvider outbound.QuoteProvider
+	// snapshotStore is the lock-free shared metrics snapshot the tick reads directly
+	// (base metrics for volume_spike + price-cross MAs) via MetricsBySymbol — the
+	// service-layer cache, NOT the StockMetricsManager use case. May be nil before
+	// the cache warms; the evaluator treats nil metrics as "skip volume_spike".
+	snapshotStore *appService.SnapshotStore
+	notifier      outbound.Notifier
+	evaluator     *alertservice.WatchlistEvaluator
+	disabler      *appService.ConditionDisabler
+	// trendlineStore is the lock-free per-config alert-level store. resist/support
+	// alerts read THIS config's levels from here (not the shared snapshot, which
+	// after no-system carries no levels). May be nil (levels then come off the
+	// shared metrics — the pre-per-config behavior).
+	trendlineStore *appService.AlertTrendlineStore
 
 	// marketTz is HoSE-local (injected from JobDependencies.MarketTimezone)
 	// for the IsHoSEActiveQuoteWindow gate.
@@ -78,10 +87,11 @@ func NewWatchlistJobFromDeps(deps registry.JobDependencies) ([]inbound.Job, erro
 		timeout:           cfg.Timeout,
 		configRepo:        deps.ConfigRepo,
 		quoteProvider:     deps.QuoteProvider,
-		metricsManager:    deps.StockMetricsManager,
+		snapshotStore:     deps.SnapshotStore,
 		notifier:          deps.Notifier,
 		evaluator:         deps.WatchlistEvaluator,
 		disabler:          deps.ConditionDisabler,
+		trendlineStore:    deps.AlertTrendlineStore,
 		marketTz:          deps.MarketTimezone,
 		ignoreSessionGate: cfg.IgnoreSessionGate,
 		now:               time.Now,
@@ -99,7 +109,7 @@ func (j *WatchlistJob) Metadata() inbound.JobMetadata {
 }
 
 // Execute fetches quotes + configs and fires matching alerts.
-// Stock metrics are read lock-free from the manager's shared lookup map.
+// Stock metrics are read lock-free from the shared snapshot store's lookup map.
 func (j *WatchlistJob) Execute(ctx context.Context) error {
 	// Skip ticks outside the HoSE intraday quote window (ATO and lunch are
 	// no-data periods; the provider would return stale data). Weekday gating
@@ -114,11 +124,12 @@ func (j *WatchlistJob) Execute(ctx context.Context) error {
 		return fmt.Errorf("fetch quotes: %w", err)
 	}
 
-	// Lock-free read of the symbol→metrics map. May be nil before the cache
-	// warms; the evaluator already treats nil metrics as "skip volume_spike".
+	// Lock-free read of the symbol→metrics map straight from the service-layer
+	// snapshot store. May be nil before the cache warms; the evaluator already
+	// treats nil metrics as "skip volume_spike".
 	var metricsBySymbol map[string]*metricsagg.StockMetrics
-	if j.metricsManager != nil {
-		metricsBySymbol = j.metricsManager.MetricsBySymbol()
+	if j.snapshotStore != nil {
+		metricsBySymbol = j.snapshotStore.MetricsBySymbol()
 	}
 
 	// O(1) reference swap: prev = last tick's map, install current for next tick.
@@ -160,6 +171,13 @@ func (j *WatchlistJob) processConfig(
 		}
 		prev := prevQuotes[string(alert.Symbol)] // zero-value if first observation
 
+		// Base metrics (volume_spike SMA, price-cross MAs) come from the shared
+		// snapshot, read-only; the per-config tick-time resistance/support levels
+		// come from THIS config's alert store. Both are looked up once per symbol
+		// and reused across its conditions; the shared snapshot entry is untouched.
+		base := metricsBySymbol[string(alert.Symbol)]
+		trendline := j.trendlineStore.TrendlineFor(string(cfg.ID), string(alert.Symbol))
+
 		var matched []outbound.Field
 		var firedConds []configvo.TriggerCondition
 		for ci := range alert.Conditions {
@@ -169,11 +187,11 @@ func (j *WatchlistJob) processConfig(
 				// owned by the analyze jobs; never fire them on the tick path.
 				continue
 			}
-			field, fired := j.evaluateCondition(cond, quote, prev, metricsBySymbol[string(alert.Symbol)])
+			result, fired := j.evaluator.Evaluate(cond, quote, prev, base, trendline)
 			if !fired {
 				continue
 			}
-			matched = append(matched, field)
+			matched = append(matched, outbound.Field{Label: result.Label, Value: result.Value})
 			firedConds = append(firedConds, cond)
 		}
 
@@ -204,22 +222,6 @@ func (j *WatchlistJob) processConfig(
 			}
 		}
 	}
-}
-
-// evaluateCondition projects the domain evaluator's result into an outbound.Field.
-// No fire/no-fire logic and no TriggerType switch here — all of that lives in the
-// WatchlistEvaluator domain service.
-func (j *WatchlistJob) evaluateCondition(
-	cond configvo.TriggerCondition,
-	quote marketvo.MarketQuote,
-	prev marketvo.MarketQuote,
-	metrics *metricsagg.StockMetrics,
-) (outbound.Field, bool) {
-	result, fired := j.evaluator.Evaluate(cond, quote, prev, metrics)
-	if !fired {
-		return outbound.Field{}, false
-	}
-	return outbound.Field{Label: result.Label, Value: result.Value}, true
 }
 
 // buildMessage assembles the notification fields for a fired alert.

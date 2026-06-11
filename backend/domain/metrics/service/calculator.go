@@ -55,11 +55,12 @@ var periodRankingConfigs = []periodConfig{
 	},
 }
 
-// CalculateForStock computes the metrics for a single stock from price history.
-// Returns nil if there is insufficient data (less than MinDataPoints).
-// Calculates partial RS for periods with enough data, sets 0 for periods without enough data.
-// Percentile ratings are assigned later in RankAll based on relative position.
-func (c *Calculator) CalculateForStock(symbol, exchange, name string, priceHistory []marketvo.MarketData) *metricsagg.StockMetrics {
+// CalculateBaseMetrics computes the per-stock base metrics (period returns,
+// volume, price, moving averages) for a single stock from its price history.
+// Returns nil if there is insufficient data (less than MinDataPoints). Period
+// returns are computed for periods with enough data and left zero otherwise; the
+// cross-universe RS percentile ratings are assigned later in RankAll.
+func (c *Calculator) CalculateBaseMetrics(symbol, exchange, name string, priceHistory []marketvo.MarketData) *metricsagg.StockMetrics {
 	n := len(priceHistory)
 
 	if n < periodvo.MinDataPoints {

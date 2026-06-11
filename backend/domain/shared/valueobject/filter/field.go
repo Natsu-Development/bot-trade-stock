@@ -98,6 +98,27 @@ func (f FilterField) IsMovingAverage() bool {
 	return f == FieldEMA9 || f == FieldEMA21 || f == FieldEMA50 || f == FieldSMA200
 }
 
+// IsPriceOrMA returns true if the field is the current price or a moving average
+// — the set of fields allowed on either side of a field-vs-field comparison.
+func (f FilterField) IsPriceOrMA() bool {
+	return f == FieldCurrentPrice || f.IsMovingAverage()
+}
+
+// IsFloatValued reports whether the field's underlying metric is a continuous
+// float: price, % change, the volume-vs-SMA ratio, and the EMA/SMA moving
+// averages. Such a value never lands exactly on a threshold, so these fields
+// compare with strict >/< only. Integer-valued fields (RS ranks 1-99, raw share
+// volumes) are NOT float-valued and keep >=/<=.
+func (f FilterField) IsFloatValued() bool {
+	switch f {
+	case FieldCurrentPrice, FieldPriceChangePct, FieldVolumeVsSMA,
+		FieldEMA9, FieldEMA21, FieldEMA50, FieldSMA200:
+		return true
+	default:
+		return false
+	}
+}
+
 // IsSignal returns true if the field is a signal type (boolean).
 func (f FilterField) IsSignal() bool {
 	return f == FieldHasBreakoutPotential || f == FieldHasBreakoutConfirmed ||

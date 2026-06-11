@@ -49,6 +49,12 @@ type InfraConfig struct {
 	// market.FetchSpanForBars. Required (no default) — fail-fast on unset.
 	AnalysisWindowBars int
 
+	// SignalsLRUSize caps the per-config screener signals cache (the Layer-2
+	// SignalComputeUseCase LRU). Operator-set so the working set can be tuned to the
+	// number of active configs without a rebuild. Required (no default) —
+	// fail-fast on unset, like AnalysisWindowBars.
+	SignalsLRUSize int
+
 	// MongoDB Configuration
 	MongoDBURI      string
 	MongoDBDatabase string
@@ -97,6 +103,7 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 
 	// Analysis Configuration (required, no default)
 	cfg.AnalysisWindowBars = getNumberEnv("ANALYSIS_WINDOW_BARS", &errors)
+	cfg.SignalsLRUSize = getNumberEnv("SIGNALS_LRU_SIZE", &errors)
 
 	// MongoDB Configuration
 	cfg.MongoDBURI = getStringEnv("MONGODB_URI", &errors)
