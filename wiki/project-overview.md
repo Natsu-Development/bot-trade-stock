@@ -2,7 +2,7 @@
 title: "Project overview: bot-trade-stock"
 tags: ["architecture", "runtime", "api", "operations"]
 created: 2026-05-22
-updated: 2026-05-22
+updated: 2026-06-11
 sources: ["docs/CODEBASE_MAP.md"]
 category: architecture
 confidence: high
@@ -51,8 +51,8 @@ Interface compliance is asserted at compile time, e.g. `var _ outbound.MarketGat
 |---------|------|---------------|
 | analysis | `domain/analysis/` | `Divergence`, `Trendline`, `Signal`, pivot finder, signal generator |
 | metrics | `domain/metrics/` | `StockMetrics` aggregate, RS ranking calculator, filterer |
-| config | `domain/config/` | `TradingConfig` aggregate, `AlertEvaluator`, watchlists, alert conditions |
-| shared | `domain/shared/` | `MarketData`, `MarketQuote`, `Symbol`, `Interval`, filter value objects, RSI indicator |
+| config | `domain/config/` | `TradingConfig` aggregate, `WatchlistEvaluator`, watchlists, `TriggerCondition`s |
+| shared | `domain/shared/` | `MarketData`, `MarketQuote`, `Symbol`, `Interval`, flat-filter value objects (`StockFilter`/`Condition`/`Group`), RSI indicator |
 
 ## Top modules by size
 
@@ -65,7 +65,7 @@ Interface compliance is asserted at compile time, e.g. `var _ outbound.MarketGat
 | Screener | 23 | 76% | Stock screener (FE) |
 | Chart | 23 | 90% | Charting (FE) |
 | Provider | 21 | 84% | Market data adapters |
-| Alert | 7 | 100% | Stock-alert job — fully self-contained |
+| Watchlist | 7 | 100% | Watchlist tick job — fully self-contained |
 
 ## HTTP API surface (`backend/presentation/http/router.go`)
 
@@ -77,8 +77,8 @@ Interface compliance is asserted at compile time, e.g. `var _ outbound.MarketGat
 | GET/PUT/DELETE | `/config/:id` | `ConfigHandler` | Config CRUD |
 | POST/DELETE | `/config/:id/watchlist` | `ConfigHandler` | Watchlist add/remove |
 | GET | `/analyze/:symbol` | `AnalyzeHandler.Analyze` | Full analysis (divergence + trendlines + signals + price history) |
-| POST | `/stocks/refresh` | `StockHandler.RefreshStocks` | Recompute + cache all-stock metrics |
-| POST | `/stocks/filter` | `StockHandler.FilterStocks` | Filter cached metrics (AND/OR) |
+| POST | `/stocks/recompute` | `StockHandler.RecomputeStocks` | Recompute per-config signals + alert trendlines from cache, no fetch (`config_id` required) |
+| POST | `/stocks/filter` | `StockHandler.FilterStocks` | Filter cached metrics, flat AND/OR/NOT (`config_id` required) |
 | GET | `/stocks/cache-info` | `StockHandler.GetCacheInfo` | Cache freshness |
 
 Frontend consumes these via `ApiClient` (`frontend/src/lib/api.ts`), base URL `VITE_API_URL` (default `http://localhost:8080`).
@@ -93,8 +93,8 @@ each package; factories registered in `registry.GlobalRegistry()`). The schedule
 |-----|---------|-----------|--------|
 | bullish-rsi / bearish-rsi | `bullish` / `bearish` | 1H, 1D, 1W (per-config env) | `jobs/analyze/*_rsi_job.go` |
 | breakout / breakdown | `breakout` / `breakdown` | 1H, 1D, 1W | `jobs/analyze/break*_job.go` |
-| stock-refresh | `stock_refresh` | single (`default`) | `jobs/refresh/stock_refresh_job.go` |
-| stock-alert | `stock_alert` | single (`default`, ~15s) | `jobs/alert/stock_alert_job.go` |
+| stock-refresh | `stock_refresh` | single (`default`; boot run + daily cron) | `jobs/refresh/stock_refresh_job.go` |
+| watchlist | `watchlist` | single (`default`, ~15s) | `jobs/watchlist/watchlist_job.go` |
 
 Each interval is independently enabled/scheduled via env (`config/config.go:122-167`),
 e.g. `BULLISH_1H_ENABLED`, `BULLISH_1H_SCHEDULE`. A disabled or empty-schedule interval
@@ -137,7 +137,7 @@ Cron tick (e.g. bullish-rsi-1D)
    → if signal: Notifier.Send         Telegram   infrastructure/telegram/notifier.go
 ```
 
-Real-time alert flow (every ~15s): `StockAlertJob.Execute` → `FetchAllQuotes` (SSI quote provider) + lock-free `MetricsBySymbol()` → per config/condition `AlertEvaluator.Evaluate` → on fire, Telegram + auto-disable + `ConfigRepository.Update`.
+Real-time watchlist flow (every ~15s, HoSE-session-gated): `WatchlistJob.Execute` → `FetchAllQuotes` (SSI quote provider) + two lock-free reads (`SnapshotStore.MetricsBySymbol()` base metrics, and per-config `AlertTrendlineStore.TrendlineFor` resist/support) → per config/condition `WatchlistEvaluator.Evaluate` → on fire, Telegram + scoped auto-disable via `ConditionDisabler` (`arrayFilter`-scoped `$set`, never a whole-doc write).
 
 ## Detailed module docs
 
@@ -150,23 +150,30 @@ Real-time alert flow (every ~15s): `StockAlertJob.Execute` → `FetchAllQuotes` 
 | Symbol | Why risky |
 |--------|-----------|
 | `MarketGateway` / `ProviderPool.FetchData` | Every analysis + refresh path depends on it |
-| `StockMetricsUseCase` | Holds the RAM cache consumed lock-free by the 15s alert job |
+| `metrics.UseCase` + `SnapshotStore` | Owns the shared snapshot read lock-free by the screener, the 15s watchlist tick, and both Layer-2 computes |
 | `Preparer.Prepare` | Shared by HTTP analyzer and all analysis jobs |
-| `AlertEvaluator.Evaluate` | The single switch over `AlertType` in the whole codebase |
+| `WatchlistEvaluator.Evaluate` | The single switch over `TriggerType` in the whole codebase |
 | `TradingConfig` aggregate | Persisted, read by every job's `GetAll` |
 
 ## Critical unknowns (verify before relying)
 
-- **Unknown:** Mongo indexes on `bot_config` / `stock_metrics`. `GetAll` is called every
-  alert tick (~15s). Verify: inspect repository code in `infrastructure/mongodb/*_repository.go`
-  and Mongo `getIndexes()`. Impact: alert-tick latency under many configs.
-- **Unknown:** Test coverage. No `_test.go` files surfaced in the file listing; `e2e/` exists
-  at repo root. Verify: `find backend -name '*_test.go'` and inspect `e2e/`.
-- **Unknown:** Alert auto-disable persistence race. `processConfig` sets `cond.Enabled=false`
-  then `configRepo.Update`; concurrent config edits via the API could be clobbered (last-writer-wins). Verify: read `infrastructure/mongodb/config_repository.go` Update semantics.
+- **Unknown:** Mongo indexes on `bot_config` / `stock_metrics` / `stock_bars`. `GetAll` is called
+  every watchlist tick (~15s). Verify: inspect repository code in `infrastructure/mongodb/*_repository.go`
+  and Mongo `getIndexes()`. Impact: tick latency under many configs.
+- **Resolved (was a race):** watchlist auto-disable no longer does a whole-doc read-modify-write.
+  Both the watchlist tick and the analyze jobs disable a fired condition through `ConditionDisabler`,
+  whose `arrayFilter`-scoped `$set` touches only the matching condition — concurrent disables on
+  different conditions compose; same-condition disables are idempotent. See [ADR-0002](./adr-0002-two-track-alert-and-analyze-architecture.md).
+
+## Testing
+
+Tests are consolidated into the repo-root **`/e2e` Playwright suite** (the former frontend vitest layer
+was removed). The backend keeps a few focused Go unit tests (e.g.
+`domain/shared/valueobject/filter/condition_test.go`, `domain/metrics/service/filterer_test.go`).
+Verify: `find backend -name '*_test.go'` and inspect `e2e/`.
 
 ## Priority recommendations for next work
 
-1. Confirm Mongo indexing for the hot `ConfigRepository.GetAll` alert path — low effort, high impact on tick latency.
-2. Add unit tests around `AlertEvaluator.Evaluate` and divergence detectors (pure functions, easy to test, high business value).
-3. Document/guard the alert auto-disable update against concurrent API writes (optimistic version field).
+1. Confirm Mongo indexing for the hot `ConfigRepository.GetAll` tick path — low effort, high impact on tick latency.
+2. Broaden `WatchlistEvaluator.Evaluate` + divergence-detector unit coverage (pure functions, high business value).
+3. Add backend unit tests for the flat screener filter (`StockFilter.Validate` / `metricsservice.Matches`) to lock the per-field-kind operator rules.

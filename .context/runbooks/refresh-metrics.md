@@ -1,31 +1,42 @@
-Refresh stock metrics cache (RS Rating data).
+Stock metrics: refresh is split into two distinct operations — the heavy provider
+fetch is owned by the JOB; the HTTP endpoint only recomputes the caller's per-config
+signals from already-cached bars (it never sweeps the provider).
 
-## Usage
+## (A) The stock-refresh JOB — owns the provider fetch
+
+- Sweeps all exchanges (HOSE/HNX/UPCOM), computes config-independent base metrics,
+  ranks them, persists to Mongo, and publishes the in-RAM snapshot. After publishing
+  it eagerly recomputes per-config alert trendlines (`metrics.UseCase.Refresh` runs
+  the base refresh then the alert recompute — explicit composition, no publish hook).
+- Runs ONCE at startup AND on the daily cron, gated by `STOCK_REFRESH_ENABLED`.
+  When disabled, neither the boot run nor the cron runs and the cache stays cold.
+- The boot run is best-effort: launched from `StartSchedulers` (after `wire.New`),
+  timeout-bounded, panic-recovered, off the request path — a fresh deploy
+  self-populates without a manual call.
+
+## (B) POST /stocks/recompute — per-config recompute (NO fetch)
+
+Recomputes the caller's per-config signals from the snapshot's ALREADY-CACHED bars
+via the existing Layer-2 compute. It NEVER triggers a provider sweep.
 
 ```bash
-# Refresh all stock metrics
-curl -X POST http://localhost:8080/stocks/refresh
+curl -X POST "http://localhost:8080/stocks/recompute?config_id=<id>"
 ```
 
-## What It Does
+Response (200): `{ message, total_stocks, calculated_at }`
+(`total_stocks` = ranked symbols in the cache).
 
-1. Fetches latest price data from VietCap API
-2. Calculates RS Rating for all HOSE stocks
-3. Updates MongoDB cache
-4. Returns cache info
+### Snapshot states (response contract)
 
-## Check Cache Status
+| Snapshot state | Result |
+|---|---|
+| no snapshot (truly cold) | **503** — data warming up |
+| snapshot present (DB-warm or post-fetch) | **200** |
+
+Unknown `config_id` → **404**; missing `config_id` → **400**.
+
+## Check cache status
 
 ```bash
 curl http://localhost:8080/stocks/cache-info
-```
-
-## Response
-
-```json
-{
-  "last_refresh": "2026-03-14T10:00:00Z",
-  "stocks_count": 400,
-  "exchanges": ["HOSE", "HNX", "UPCOM"]
-}
 ```

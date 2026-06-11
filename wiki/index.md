@@ -1,6 +1,6 @@
 # Wiki Index
 
-> 9 project-knowledge pages | Last updated: 2026-05-27 | Folder: `wiki/`.
+> 11 project-knowledge pages | Last updated: 2026-06-11 | Folder: `wiki/`.
 
 ## architecture
 
@@ -14,6 +14,8 @@
 
 - [ADR 0001: Use host-side SSI cookie refresh](adr-0001-use-host-side-ssi-cookie-refresh.md)
 - [ADR 0002: Two-track alert + analyze job architecture](adr-0002-two-track-alert-and-analyze-architecture.md)
+- [ADR 0003: Flat two-level screener filter (normal form)](adr-0003-flat-screener-filter-normal-form.md)
+- [ADR 0004: Fixed analysis window (ANALYSIS_WINDOW_BARS)](adr-0004-fixed-analysis-window.md)
 
 ## debugging
 

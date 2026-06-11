@@ -47,7 +47,7 @@ This page documents the `ssi-quote` real-time quote flow. The user typo `ssi-qou
 7. `backend/infrastructure/credentials/env_store.go` re-parses the env file and atomically swaps an `atomic.Pointer[SSICredentials]`. On parse failure the old snapshot is preserved.
 8. `SSIQueryProvider.fetchExchange` in `backend/infrastructure/provider/sources/ssi_quote.go` snapshots current credentials per exchange request, builds a fresh per-call cookie jar, seeds non-empty CF cookies for `.ssi.com.vn`, sets browser-like headers plus the minted User-Agent, and fetches iboard-query endpoints.
 9. `FetchAllQuotes` fetches HOSE/HNX/UPCOM in parallel and returns a symbol-keyed `MarketQuote` map.
-10. `backend/application/jobs/alert/stock_alert_job.go` calls `quoteProvider.FetchAllQuotes(ctx)` each tick, evaluates configured alerts, notifies Telegram, and auto-disables fired conditions.
+10. `backend/application/jobs/watchlist/watchlist_job.go` calls `quoteProvider.FetchAllQuotes(ctx)` each tick, evaluates configured watchlist conditions, notifies Telegram, and auto-disables fired conditions.
 
 ## Key files
 - `scripts/ssi-bypass/refresh-cookies.sh` — mints SSI Cloudflare cookies via FlareSolverr, validates `cf_clearance`, prints diagnostics, writes env vars, and optionally signals bot reload.
@@ -62,7 +62,7 @@ This page documents the `ssi-quote` real-time quote flow. The user typo `ssi-qou
 - `backend/infrastructure/credentials/env_store.go` — strict env-file parser plus atomic hot-reload store.
 - `backend/cmd/server/main.go` — SIGHUP reload path; SIGINT/SIGTERM remain shutdown signals.
 - `backend/infrastructure/provider/sources/ssi_quote.go` — actual `ssi-quote` real-time quote provider and per-call cookie/header usage.
-- `backend/application/jobs/alert/stock_alert_job.go` — downstream consumer of quote map for stock alert evaluation.
+- `backend/application/jobs/watchlist/watchlist_job.go` — downstream consumer of quote map for watchlist condition evaluation.
 
 ## Env file contract
 The refresh script writes:

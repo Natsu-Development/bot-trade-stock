@@ -2,7 +2,7 @@
 title: "Backend architecture"
 tags: ["go", "clean-architecture", "ddd", "backend"]
 created: 2026-05-22
-updated: 2026-05-22
+updated: 2026-06-11
 sources: ["docs/backend-architecture.md"]
 category: architecture
 confidence: high
@@ -44,9 +44,10 @@ The provider pool is built from a global registry of provider factories
   (`:34-52`). Pure functions returning value objects — trivially testable.
 - **Pivot finder, trendline builder, signal generator** (`domain/analysis/service/`): build
   support/resistance lines and emit potential/confirmed breakout/breakdown signals.
-- **AlertEvaluator** (`domain/config/service/alert_evaluator.go`): the only `switch` over
-  `AlertType` in the codebase (`:43`). Owns both fire/no-fire and value formatting. `volume_spike`
-  returns no-fire when metrics are nil (`:58-60`), so a cold cache degrades gracefully.
+- **WatchlistEvaluator** (`domain/config/service/watchlist_evaluator.go`): the only `switch` over
+  `TriggerType` in the codebase. Owns both fire/no-fire and value formatting. `volume_spike`
+  returns no-fire when base metrics are nil, so a cold cache degrades gracefully. The
+  resistance/support cases read the per-config `AlertTrendline` passed alongside the base metrics.
 
 ## Application use cases
 
@@ -54,7 +55,10 @@ The provider pool is built from a global registry of provider factories
   Prepares data **once** via `Preparer`, then runs bullish/bearish RSI and breakout/breakdown
   use cases over the same prepared data (no per-use-case I/O), and combines into one DTO
   (`:74-114`). This is the key DRY/perf decision — one fetch, four analyses.
-- **StockMetricsUseCase** (`application/usecase/stock_metrics.go`): see [`data-and-caching.md`](./data-and-caching.md).
+- **metrics.UseCase** (`application/usecase/metrics/`): the all-stock metrics orchestrator —
+  the Layer-1 base pipeline + screener read path, composing the two Layer-2 per-config computes
+  (`SignalComputeUseCase`, `AlertComputeUseCase`). It owns the shared `SnapshotStore`. See
+  [`data-and-caching.md`](./data-and-caching.md).
 
 ## Failure modes & recovery (backend)
 
@@ -68,8 +72,9 @@ The provider pool is built from a global registry of provider factories
 
 ## Safe-change guidance
 
-`MarketGateway`, `ProviderPool.FetchData`, `Preparer.Prepare`, `StockMetricsUseCase`,
-is mandatory and HIGH/CRITICAL results must be reported before proceeding.
+`MarketGateway`, `ProviderPool.FetchData`, `Preparer.Prepare`, and `metrics.UseCase` are hub
+symbols with a wide blast radius. Run impact analysis before editing them; HIGH/CRITICAL results
+must be reported before proceeding (see `.context/policies/code-intelligence.md`).
 
 ## Unknowns
 - **Unknown:** whether handlers map domain errors to HTTP status codes consistently. Verify: read `presentation/http/handler/*.go` and `response/response.go`.

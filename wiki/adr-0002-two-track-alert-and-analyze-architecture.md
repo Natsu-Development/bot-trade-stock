@@ -2,9 +2,9 @@
 title: "ADR 0002: Two-track alert + analyze job architecture"
 tags: ["alert", "analyze", "stock-alert", "rsi-divergence", "trendline", "session-gate", "auto-disable", "arrayfilter", "job-registry", "alert-evaluator", "signal-level"]
 created: 2026-05-27T00:00:00.000Z
-updated: 2026-05-28T17:30:00.000Z
+updated: 2026-06-11T00:00:00.000Z
 sources:
-  - "backend/application/jobs/alert/stock_alert_job.go"
+  - "backend/application/jobs/watchlist/watchlist_job.go"
   - "backend/application/jobs/analyze/base.go"
   - "backend/application/jobs/analyze/bullish_rsi_job.go"
   - "backend/application/jobs/analyze/bearish_rsi_job.go"
@@ -13,13 +13,14 @@ sources:
   - "backend/application/jobs/registry/factory.go"
   - "backend/config/config.go"
   - "backend/application/service/condition_disabler.go"
-  - "backend/application/usecase/stock_metrics.go"
-  - "backend/domain/analysis/service/signal_generator.go"
-  - "backend/domain/analysis/valueobject/signal.go"
+  - "backend/application/service/alert_trendline_store.go"
+  - "backend/application/usecase/metrics/orchestrator.go"
+  - "backend/application/usecase/metrics/alerts_compute.go"
+  - "backend/domain/analysis/service/signal_analyzer.go"
+  - "backend/domain/analysis/valueobject/signal_flags.go"
   - "backend/domain/config/aggregate/trading_config.go"
-  - "backend/domain/config/service/alert_evaluator.go"
-  - "backend/domain/config/valueobject/stock_alert_config.go"
-  - "backend/domain/metrics/aggregate/stock_metrics.go"
+  - "backend/domain/config/service/watchlist_evaluator.go"
+  - "backend/domain/config/valueobject/watchlist_config.go"
   - "backend/domain/shared/valueobject/market/session.go"
   - "backend/infrastructure/mongodb/config_repository.go"
 links:
@@ -34,7 +35,53 @@ schemaVersion: 1
 # ADR 0002: Two-track alert + analyze job architecture
 
 ## Status
-Accepted.
+Accepted — **partially superseded (2026-06-06)** by the refresh-metrics per-user-config redesign
+(`.omc/plans/refresh-metrics-user-config-plan.md`). See the amendment below.
+
+## Amendment (2026-06-06): per-config alert trendlines replace the shared `system` levels
+
+The no-`system` / full-per-user redesign changes how the 15s watchlist tick obtains its trendline
+**resistance/support levels**. The following statements elsewhere in this ADR are now **FALSE** and are
+corrected here:
+
+- **Single-consumer shared levels** (formerly: a shared `Resistance/Support` on `StockMetrics` for the
+  tick evaluator). No longer true. Layer 1 (the shared refresh) computes **base metrics only** and
+  carries **no** signal/level fields. Every config-derived value — the six screener signal flags AND the
+  watchlist `ResistanceLevel`/`SupportLevel`/`TrendlineProximity` — is now computed **per config** in
+  Layer 2: `SignalComputeUseCase` (screener flags) and `AlertComputeUseCase` (watchlist trendlines).
+  There is no single `SignalsUseCase`.
+- **The tick reading levels off the shared `metricsBySymbol` map.** The tick now reads **per-config
+  levels** from a dedicated lock-free store — `application/service.AlertTrendlineStore`
+  (`atomic.Pointer[map[cfgID]*atomic.Pointer[map[sym]AlertTrendline]]`, value `analysisvo.AlertTrendline`,
+  keyed by **watched symbols only**), NOT the shared snapshot. In `watchlist_job.processConfig` each
+  symbol is evaluated from base metrics (`MetricsBySymbol`, for `volume_spike` + price-cross — both
+  config-independent) AND this config's `TrendlineFor(cfg.ID, sym)`, passed to
+  `WatchlistEvaluator.Evaluate` as a **separate argument**; the shared snapshot entry is never mutated.
+- **Levels are NOT persisted.** `AlertTrendlineStore` is **RAM-only** — there is no `alert_levels`
+  collection and no `AlertLevelRepository`. It is published eagerly after each refresh
+  (`AlertComputeUseCase.RefreshAlertTrendline`) and fresh-on-edit (`UseCase.OnConfigUpdated`); after a
+  restart it stays **empty until the next refresh's eager publish** recomputes it. (The screener's
+  per-config signals, by contrast, recompute on boot from bars rehydrated from the `stock_bars`
+  collection — see [data-and-caching.md](data-and-caching.md).)
+
+**New invariant (a 2nd lock-free tick input):** the watchlist tick now performs **two** lock-free
+reads — the shared `Snapshot` (for `volume_spike`'s `VolumeSMA20` and price-cross MAs, both
+config-independent) **and** the per-config `AlertTrendlineStore` (for resist/support levels). The
+trendline store is published by the refresh / Layer-2 path (eager publish after each refresh, RAM-only)
+and fresh-on-edit; the tick only reads it. `volume_spike` and price-cross alerts are unchanged
+(still off the shared base metrics).
+
+> **Naming note (post-rename).** The body below predates the Alerts→Watchlist rename and the
+> `stock_metrics` use-case split; read it with this map: `AlertEvaluator`→`WatchlistEvaluator`,
+> `StockAlertJob`/`stock_alert_job.go`→`WatchlistJob`/`jobs/watchlist/watchlist_job.go`,
+> `AlertCondition`→`TriggerCondition`, `AlertType`→`TriggerType`, `cfg.Alerts`/`StockAlert`→
+> `cfg.Watchlist`/`WatchlistItem`, `application/usecase/stock_metrics.go`→`application/usecase/metrics/`,
+> env `STOCK_ALERT_*`→`WATCHLIST_*`, and the singleton `_id:"system"` config no longer exists (configs
+> are per-user). The two-track split, session gate, scoped auto-disable via `ConditionDisabler`, and job
+> registry all remain accurate.
+
+Everything else in this ADR (the two-track alert/analyze split, the session gate, the scoped
+auto-disable via `ConditionDisabler`, the job registry) remains accurate.
 
 ## Context
 A single user-configured alert list has to serve two very different evaluation
@@ -368,23 +415,23 @@ env-only.
 ## Manual verification commands
 
 ```bash
-# Compile + unit tests for the alert/analyze layer
+# Compile + unit tests for the watchlist/analyze layer
 cd backend
-go test ./application/jobs/alert/... ./application/jobs/analyze/... \
+go test ./application/jobs/watchlist/... ./application/jobs/analyze/... \
         ./domain/config/service/... ./domain/config/aggregate/... \
         ./application/service/...
 
 # Trace a single tick locally (requires running services)
-docker logs trading-bot 2>&1 | grep -E '(stock-alert|stock alert)'
+docker logs trading-bot 2>&1 | grep -E 'watchlist'
 
-# Inspect a config's enabled conditions
-mongosh --eval 'db.bot_config.findOne({_id:"system"}).alerts'
+# Inspect a config's watchlist conditions (configs are per-user — pick a real _id)
+mongosh --eval 'db.bot_config.findOne({}, {watchlist:1}).watchlist'
 
 # Verify a fired condition was scoped-disabled, not whole-doc clobbered
-mongosh --eval 'db.bot_config.findOne({_id:"system"}).alerts[0].conditions'
+mongosh --eval 'db.bot_config.findOne({}).watchlist[0].conditions'
 
 # Trigger the HoSE session gate (dev only)
-STOCK_ALERT_IGNORE_SESSION_GATE=true ./backend
+WATCHLIST_IGNORE_SESSION_GATE=true ./backend
 ```
 
 ## 7. Price-scale contract
