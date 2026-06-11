@@ -75,7 +75,7 @@ Path → rules — the high-frequency lookup, kept inline. **For skills, runbook
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **bot-trade-stock** (3538 symbols, 8610 relationships, 244 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **bot-trade-stock** (4550 symbols, 10711 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

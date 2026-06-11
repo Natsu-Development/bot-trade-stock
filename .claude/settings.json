@@ -20,19 +20,6 @@
     ],
     "deny": []
   },
-  "enabledPlugins": {
-    "aio-golang-mastery@aiocean-plugins": true,
-    "oh-my-claudecode@omc": true,
-    "go-lsp@go-lsp-local": true
-  },
-  "extraKnownMarketplaces": {
-    "go-lsp-local": {
-      "source": {
-        "source": "directory",
-        "path": "/home/zion/Documents/Dev/true-profit/.claude/marketplaces/go-lsp"
-      }
-    }
-  },
   "hooks": {
     "PostToolUse": [
       {
@@ -47,5 +34,19 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "aio-golang-mastery@aiocean-plugins": true,
+    "oh-my-claudecode@omc": true,
+    "go-lsp@go-lsp-local": true,
+    "aio-code-review@aiocean-plugins": true
+  },
+  "extraKnownMarketplaces": {
+    "go-lsp-local": {
+      "source": {
+        "source": "directory",
+        "path": "/home/zion/Documents/Dev/true-profit/.claude/marketplaces/go-lsp"
+      }
+    }
   }
 }
