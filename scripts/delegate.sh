@@ -16,7 +16,10 @@
 
 set -euo pipefail
 
-PLAYBOOK=".context/policies/delegation-playbook.md"
+# Resolve the playbook relative to this script so the tool works from any cwd,
+# not only the repo root.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+PLAYBOOK="$SCRIPT_DIR/../.context/policies/delegation-playbook.md"
 
 usage() {
     cat <<EOF
@@ -70,7 +73,7 @@ done
 
 # --- guards ---
 if [ ! -f "$PLAYBOOK" ]; then
-    echo "Missing $PLAYBOOK — run from repo root." >&2
+    echo "Missing $PLAYBOOK" >&2
     exit 3
 fi
 

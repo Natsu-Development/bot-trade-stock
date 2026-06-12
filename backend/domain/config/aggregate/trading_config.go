@@ -4,9 +4,9 @@ package aggregate
 import (
 	"time"
 
-	"bot-trade/domain/config/valueobject"
-	"bot-trade/domain/shared"
-	"bot-trade/domain/shared/valueobject/market"
+	"backend/domain/config/valueobject"
+	"backend/domain/shared"
+	"backend/domain/shared/valueobject/market"
 )
 
 const (
@@ -20,13 +20,8 @@ type TradingConfig struct {
 	ID          valueobject.ConfigID    `bson:"_id"`
 	RSIPeriod   valueobject.RSIPeriod   `bson:"rsi_period"`
 	PivotPeriod valueobject.PivotPeriod `bson:"pivot_period"`
-	// LookbackDay specifies how many days of historical data to fetch for analysis.
-	// Used to calculate the start date: time.Now().AddDate(0, 0, -int(LookbackDay))
-	LookbackDay market.LookbackDay     `bson:"lookback_day"`
-	Divergence  valueobject.Divergence `bson:"divergence"`
-	Trendline   valueobject.Trendline  `bson:"trendline"`
-	// IndicesRecent specifies the number of recent indices to track.
-	IndicesRecent valueobject.IndicesRecent `bson:"indices_recent"`
+	Divergence  valueobject.Divergence  `bson:"divergence"`
+	Trendline   valueobject.Trendline   `bson:"trendline"`
 	// SignalDaysThreshold is the configured recency window (in days): a
 	// trendline/RSI-divergence signal only counts when its most recent point falls
 	// within this many days, not across the whole analyzed range.
@@ -35,11 +30,11 @@ type TradingConfig struct {
 	// MetricsFilter holds user-saved screener filter configurations.
 	// Nil = not set, empty array = user cleared their filters.
 	MetricsFilter []valueobject.MetricsFilter `bson:"metrics_filter,omitempty"`
-	// Alerts holds user-configured price/volume alerts.
-	// Nil = not set, empty array = user cleared their alerts.
-	Alerts    []valueobject.StockAlertConfig `bson:"alerts,omitempty"`
-	CreatedAt time.Time                      `bson:"created_at"`
-	UpdatedAt time.Time                      `bson:"updated_at"`
+	// Watchlist holds user-configured price/volume watchlist items.
+	// Nil = not set, empty array = user cleared their watchlist.
+	Watchlist []valueobject.WatchlistItem `bson:"watchlist,omitempty"`
+	CreatedAt time.Time                   `bson:"created_at"`
+	UpdatedAt time.Time                   `bson:"updated_at"`
 }
 
 // NewTradingConfig creates a new TradingConfig with validation.
@@ -48,20 +43,16 @@ func NewTradingConfig(
 	id valueobject.ConfigID,
 	rsiPeriod valueobject.RSIPeriod,
 	pivotPeriod valueobject.PivotPeriod,
-	lookbackDay market.LookbackDay,
 	divergence valueobject.Divergence,
 	trendline valueobject.Trendline,
-	indicesRecent valueobject.IndicesRecent,
 	signalDaysThreshold int,
 ) (*TradingConfig, error) {
 	cfg := &TradingConfig{
 		ID:                  id,
 		RSIPeriod:           rsiPeriod,
 		PivotPeriod:         pivotPeriod,
-		LookbackDay:         lookbackDay,
 		Divergence:          divergence,
 		Trendline:           trendline,
-		IndicesRecent:       indicesRecent,
 		SignalDaysThreshold: signalDaysThreshold,
 		Telegram:            valueobject.Telegram{Enabled: false},
 		CreatedAt:           time.Now(),
@@ -84,20 +75,12 @@ func (c *TradingConfig) Merge(update *TradingConfig) (*TradingConfig, error) {
 	// Override primitive VOs if explicitly set
 	var emptyRSI valueobject.RSIPeriod
 	var emptyPivot valueobject.PivotPeriod
-	var emptyOffset market.LookbackDay
-	var emptyIndices valueobject.IndicesRecent
 
 	if update.RSIPeriod != emptyRSI {
 		merged.RSIPeriod = update.RSIPeriod
 	}
 	if update.PivotPeriod != emptyPivot {
 		merged.PivotPeriod = update.PivotPeriod
-	}
-	if update.LookbackDay != emptyOffset {
-		merged.LookbackDay = update.LookbackDay
-	}
-	if update.IndicesRecent != emptyIndices {
-		merged.IndicesRecent = update.IndicesRecent
 	}
 	// Zero is the sentinel for "not provided" — matches the pattern used for
 	// every sibling VO above and preserves the partial-PUT semantics promised
@@ -141,8 +124,8 @@ func (c *TradingConfig) Merge(update *TradingConfig) (*TradingConfig, error) {
 	}
 
 	// Always merge alerts if provided (even if empty, to allow clearing)
-	if update.Alerts != nil {
-		merged.Alerts = update.Alerts
+	if update.Watchlist != nil {
+		merged.Watchlist = update.Watchlist
 	}
 
 	merged.UpdatedAt = time.Now()
@@ -157,9 +140,9 @@ func (c *TradingConfig) Merge(update *TradingConfig) (*TradingConfig, error) {
 // SymbolsWithEnabledCondition returns the symbols whose Alerts contain an enabled
 // condition of the given type. Used by the analyze-job factories to derive their
 // symbol set from divergence conditions (wrap in a SymbolSelector closure).
-func (c *TradingConfig) SymbolsWithEnabledCondition(t valueobject.AlertType) []market.Symbol {
+func (c *TradingConfig) SymbolsWithEnabledCondition(t valueobject.TriggerType) []market.Symbol {
 	var symbols []market.Symbol
-	for _, alert := range c.Alerts {
+	for _, alert := range c.Watchlist {
 		for _, cond := range alert.Conditions {
 			if cond.Enabled && cond.Type == t {
 				symbols = append(symbols, alert.Symbol)
@@ -168,6 +151,26 @@ func (c *TradingConfig) SymbolsWithEnabledCondition(t valueobject.AlertType) []m
 		}
 	}
 	return symbols
+}
+
+// AlertSubsetSymbols returns the deduplicated symbols that have an enabled
+// trendline breakout OR breakdown condition — the "alert subset" whose
+// tick-time resistance/support levels the watchlist evaluator fires on. The
+// Layer-2 alert-level computation derives its watched-symbol set from this, so
+// the selection rule lives here in the domain rather than in the use case.
+func (c *TradingConfig) AlertSubsetSymbols() []market.Symbol {
+	seen := make(map[market.Symbol]struct{})
+	var out []market.Symbol
+	for _, t := range []valueobject.TriggerType{valueobject.TriggerTypeTrendlineBreakout, valueobject.TriggerTypeTrendlineBreakdown} {
+		for _, sym := range c.SymbolsWithEnabledCondition(t) {
+			if _, ok := seen[sym]; ok {
+				continue
+			}
+			seen[sym] = struct{}{}
+			out = append(out, sym)
+		}
+	}
+	return out
 }
 
 // Validate checks all trading config invariants.
@@ -185,11 +188,6 @@ func (c *TradingConfig) Validate() error {
 		return shared.NewValidationError("pivot_period is required")
 	}
 
-	// IndicesRecent is optional, but if set must be valid
-	var emptyIndices valueobject.IndicesRecent
-	if c.IndicesRecent != emptyIndices && c.IndicesRecent < 1 {
-		errs = append(errs, "indices_recent must be a positive integer")
-	}
 	if c.SignalDaysThreshold < MinSignalDaysThreshold || c.SignalDaysThreshold > MaxSignalDaysThreshold {
 		errs = append(errs, "signal_days_threshold must be between 1 and 365")
 	}
@@ -205,7 +203,7 @@ func (c *TradingConfig) Validate() error {
 		errs = append(errs, err.Error())
 	}
 
-	for _, alert := range c.Alerts {
+	for _, alert := range c.Watchlist {
 		if err := alert.Validate(); err != nil {
 			errs = append(errs, err.Error())
 		}
@@ -218,31 +216,31 @@ func (c *TradingConfig) Validate() error {
 	return nil
 }
 
-// AddAlert appends or replaces an alert for the given symbol.
+// AddWatchlistItem appends or replaces an alert for the given symbol.
 // If an alert for the same symbol already exists, it is replaced.
-func (c *TradingConfig) AddAlert(alert valueobject.StockAlertConfig) error {
+func (c *TradingConfig) AddWatchlistItem(alert valueobject.WatchlistItem) error {
 	if err := alert.Validate(); err != nil {
 		return err
 	}
 
-	for i, existing := range c.Alerts {
+	for i, existing := range c.Watchlist {
 		if existing.Symbol == alert.Symbol {
-			c.Alerts[i] = alert
+			c.Watchlist[i] = alert
 			c.UpdatedAt = time.Now()
 			return nil
 		}
 	}
-	c.Alerts = append(c.Alerts, alert)
+	c.Watchlist = append(c.Watchlist, alert)
 	c.UpdatedAt = time.Now()
 	return nil
 }
 
-// RemoveAlert removes an alert for the given symbol.
+// RemoveWatchlistItem removes an alert for the given symbol.
 // Idempotent: returns nil if no alert exists for the symbol.
-func (c *TradingConfig) RemoveAlert(symbol market.Symbol) error {
-	for i, existing := range c.Alerts {
+func (c *TradingConfig) RemoveWatchlistItem(symbol market.Symbol) error {
+	for i, existing := range c.Watchlist {
 		if existing.Symbol == symbol {
-			c.Alerts = append(c.Alerts[:i], c.Alerts[i+1:]...)
+			c.Watchlist = append(c.Watchlist[:i], c.Watchlist[i+1:]...)
 			c.UpdatedAt = time.Now()
 			return nil
 		}

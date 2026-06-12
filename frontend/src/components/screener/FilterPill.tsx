@@ -40,10 +40,18 @@ export function FilterPill({
       return (
         <>
           <span className="font-semibold text-[var(--neon-cyan)]">Price</span>
-          <span className={cn(isCompact ? 'text-[var(--text-muted)]' : 'text-[var(--text-secondary)] text-[11px] uppercase')}>
+          <span
+            className={cn(
+              isCompact
+                ? 'text-[var(--text-muted)]'
+                : 'text-[var(--text-secondary)] text-[11px] uppercase'
+            )}
+          >
             {MA_OPERATOR_LABELS[filter.operator]}
           </span>
-          <span className="font-semibold text-[var(--neon-cyan)]">{fieldOption?.shortLabel || filter.field}</span>
+          <span className="font-semibold text-[var(--neon-cyan)]">
+            {fieldOption?.shortLabel || filter.field}
+          </span>
         </>
       )
     }
@@ -53,10 +61,10 @@ export function FilterPill({
       const hasSignal = filter.value === true
       return (
         <>
-          <span className="font-semibold text-[var(--neon-cyan)]">
-            {hasSignal ? 'Has' : 'No'}
-          </span>
-          <span className={cn(isCompact ? 'text-[var(--text-muted)]' : 'text-[var(--text-secondary)]')}>
+          <span className="font-semibold text-[var(--neon-cyan)]">{hasSignal ? 'Has' : 'No'}</span>
+          <span
+            className={cn(isCompact ? 'text-[var(--text-muted)]' : 'text-[var(--text-secondary)]')}
+          >
             {fieldOption?.shortLabel || filter.field}
           </span>
         </>
@@ -65,11 +73,21 @@ export function FilterPill({
 
     return (
       <>
-        <span className="font-semibold text-[var(--neon-cyan)]">{fieldOption?.shortLabel || filter.field}</span>
-        <span className={cn(isCompact ? 'text-[var(--text-muted)]' : 'text-[var(--text-secondary)] text-[11px] uppercase')}>
+        <span className="font-semibold text-[var(--neon-cyan)]">
+          {fieldOption?.shortLabel || filter.field}
+        </span>
+        <span
+          className={cn(
+            isCompact
+              ? 'text-[var(--text-muted)]'
+              : 'text-[var(--text-secondary)] text-[11px] uppercase'
+          )}
+        >
           {isCompact ? filter.operator : operatorSymbol}
         </span>
-        <span className={cn('font-mono', isCompact ? 'font-medium' : 'font-medium')}>{filter.value}</span>
+        <span className={cn('font-mono', isCompact ? 'font-medium' : 'font-medium')}>
+          {filter.value}
+        </span>
       </>
     )
   }
@@ -91,7 +109,9 @@ export function FilterPill({
             className={cn(
               'flex items-center justify-center p-0 bg-transparent border-none rounded cursor-pointer transition-all duration-150',
               'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--neon-cyan)]',
-              isCompact ? 'p-0.5 [&_svg]:w-3 [&_svg]:h-3' : 'w-6 h-6 [&_svg]:w-3.5 [&_svg]:h-3.5 [&_svg]:flex-shrink-0'
+              isCompact
+                ? 'p-0.5 [&_svg]:w-3 [&_svg]:h-3'
+                : 'w-6 h-6 [&_svg]:w-3.5 [&_svg]:h-3.5 [&_svg]:flex-shrink-0'
             )}
             onClick={() => onEdit?.(filter)}
             type="button"
@@ -103,7 +123,9 @@ export function FilterPill({
             className={cn(
               'flex items-center justify-center p-0 bg-transparent border-none rounded cursor-pointer transition-all duration-150',
               'text-[var(--text-muted)] hover:bg-[var(--neon-bear-dim)] hover:text-[var(--neon-bear)]',
-              isCompact ? 'p-0.5 [&_svg]:w-3 [&_svg]:h-3' : 'w-6 h-6 [&_svg]:w-3.5 [&_svg]:h-3.5 [&_svg]:flex-shrink-0'
+              isCompact
+                ? 'p-0.5 [&_svg]:w-3 [&_svg]:h-3'
+                : 'w-6 h-6 [&_svg]:w-3.5 [&_svg]:h-3.5 [&_svg]:flex-shrink-0'
             )}
             onClick={() => onRemove?.(filter.id)}
             type="button"

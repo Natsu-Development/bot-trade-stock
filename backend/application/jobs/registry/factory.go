@@ -3,14 +3,14 @@ package registry
 import (
 	"time"
 
-	"bot-trade/application/port/inbound"
-	"bot-trade/application/port/outbound"
-	appService "bot-trade/application/service"
-	appPrep "bot-trade/application/usecase/analyze/prep"
-	appRsi "bot-trade/application/usecase/analyze/rsi"
-	appTrendline "bot-trade/application/usecase/analyze/trendline"
-	"bot-trade/config"
-	alertservice "bot-trade/domain/config/service"
+	"backend/application/port/inbound"
+	"backend/application/port/outbound"
+	appService "backend/application/service"
+	appPrep "backend/application/usecase/analyze/prep"
+	appRsi "backend/application/usecase/analyze/rsi"
+	appTrendline "backend/application/usecase/analyze/trendline"
+	"backend/config"
+	alertservice "backend/domain/config/service"
 )
 
 // Global registry instance
@@ -27,21 +27,33 @@ type JobDependencies struct {
 	BreakoutUC   *appTrendline.BreakoutUseCase
 	BreakdownUC  *appTrendline.BreakdownUseCase
 
-	// Stock metrics manager
+	// StockMetricsManager drives the metrics OPERATION (Refresh) — used by the
+	// refresh job to trigger a provider sweep + snapshot publish. Cache READS go
+	// through the service-layer stores below, not this port.
 	StockMetricsManager inbound.StockMetricsManager
 
 	// Shared dependencies
-	Notifier          outbound.Notifier
-	ConfigRepo        outbound.ConfigRepository
-	QuoteProvider     outbound.QuoteProvider
-	AlertEvaluator    *alertservice.AlertEvaluator
-	ConditionDisabler *appService.ConditionDisabler
-	Config            *config.InfraConfig
+	Notifier           outbound.Notifier
+	ConfigRepo         outbound.ConfigRepository
+	QuoteProvider      outbound.QuoteProvider
+	WatchlistEvaluator *alertservice.WatchlistEvaluator
+	ConditionDisabler  *appService.ConditionDisabler
+	Config             *config.InfraConfig
+
+	// SnapshotStore is the lock-free shared metrics snapshot (base metrics + bars)
+	// the watchlist tick reads directly via MetricsBySymbol — the service-layer
+	// cache itself, not the StockMetricsManager use case. Written by the refresh
+	// pipeline (the metrics UseCase owns the writer; jobs are read-only consumers).
+	SnapshotStore *appService.SnapshotStore
+
+	// AlertTrendlineStore is the lock-free per-config alert-level store the watchlist
+	// tick reads (resist/support levels). Published by the refresh/Layer-2 path.
+	AlertTrendlineStore *appService.AlertTrendlineStore
 
 	// MarketTimezone is the HoSE-local timezone (Asia/Ho_Chi_Minh by default,
 	// loaded once at startup from CRON_TIMEZONE in wire/app.go).
 	// Job factories that gate on HoSE trading sessions (currently only
-	// StockAlertJob) read it via this injected field rather than calling
+	// WatchlistJob) read it via this injected field rather than calling
 	// time.LoadLocation themselves, keeping the binary's view of "Vietnam
 	// time" single-sourced.
 	MarketTimezone *time.Location

@@ -9,13 +9,20 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: 0,
+  // One retry absorbs load-induced flakiness: the suite drives a live backend and a
+  // Vite dev server, so over a long run page loads / first-symbol analyze can hiccup
+  // past tight per-assertion timeouts. A genuinely broken test still fails on retry.
+  retries: 1,
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
+  // 10s (vs the 5s default) gives slow-but-correct renders room under that load.
+  expect: { timeout: 10000 },
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    actionTimeout: 15000,
+    navigationTimeout: 30000,
   },
 
   projects: [

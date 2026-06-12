@@ -1,17 +1,10 @@
-export type Page = 'dashboard' | 'screener' | 'divergence' | 'config' | 'settings'
+export type Page = 'dashboard' | 'screener' | 'analyze' | 'config' | 'settings'
 
 export type Exchange = 'HOSE' | 'HNX' | 'UPCOM'
 
-// API Filter Request type
-export interface ApiFilterRequest {
-  filters?: Array<{
-    field: string
-    op: string
-    value?: number | boolean
-  }>
-  logic?: 'and' | 'or'
-  exchanges?: string[]
-}
+// Re-export the flat API filter request from the api client so legacy imports
+// from '@/types' keep working after the flat normal-form migration.
+export type { ApiFilterRequest } from '@/lib/api'
 
 export type SignalType = 'bullish' | 'bearish'
 
@@ -73,6 +66,32 @@ export type FilterField =
 
 export type FilterOperator = '>=' | '<=' | '>' | '<' | '='
 
+export type FilterLogic = 'and' | 'or'
+
+/** Mirror of the backend caps (depth ≤ 3, ≤ 50 global leaves). */
+export const MAX_FILTER_DEPTH = 3
+export const MAX_FILTER_CONDITIONS = 50
+
+/**
+ * Client-side recursive filter tree node — the single canonical FE filter model.
+ * A node is a LEAF when it carries a `condition`; otherwise it is a BRANCH
+ * (`logic`/`negate`/`children`). The `id` is client-only (React keys / editing).
+ */
+export interface FilterTreeNode {
+  id: string
+  logic?: FilterLogic
+  negate?: boolean
+  children?: FilterTreeNode[]
+  condition?: {
+    field: FilterField
+    op: FilterOperator
+    value: number | boolean
+    // When set, this leaf is a field-vs-field comparison (e.g. EMA 9 >= EMA 21):
+    // `field` is the LHS, `rhsField` the RHS, both price-or-MA; `value` is unused.
+    rhsField?: FilterField
+  }
+}
+
 export interface DynamicFilter {
   id: string
   field: FilterField
@@ -99,4 +118,3 @@ export interface FilterOperatorOption {
   value: FilterOperator
   label: string
 }
-

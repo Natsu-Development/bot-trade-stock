@@ -17,11 +17,11 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 
-	"bot-trade/infrastructure/credentials"
-	"bot-trade/infrastructure/metrics"
-	"bot-trade/infrastructure/provider/contract"
+	"backend/infrastructure/credentials"
+	"backend/infrastructure/metrics"
+	"backend/infrastructure/provider/contract"
 
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	marketvo "backend/domain/shared/valueobject/market"
 
 	"go.uber.org/zap"
 	"golang.org/x/net/publicsuffix"

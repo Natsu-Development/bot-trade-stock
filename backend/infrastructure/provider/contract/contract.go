@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // Provider defines the interface for a market data provider.

@@ -26,6 +26,21 @@ func NewSymbol(value string) (Symbol, error) {
 	return Symbol(value), nil
 }
 
+// equitySymbolRe matches symbols a market-data provider will serve OHLCV for:
+//   - 3-4 letter cash equity tickers (VIC, VCB, HPG, VJC, FRT, ...)
+//   - ETF tickers with the E1/FUE prefix (E1VFVN30, FUEVFVND, ...)
+//
+// Warrants (CFPT2311), bonds (BVBS17094), TD-codes, and other derivatives
+// contain digits or exceed 4 chars and are excluded — no provider serves them.
+var equitySymbolRe = regexp.MustCompile(`^([A-Z]{3,4}|E1[A-Z0-9]+|FUE[A-Z0-9]+)$`)
+
+// IsEquity reports whether the symbol is a cash equity or ETF ticker (the kinds a
+// provider serves OHLCV for), excluding warrants, bonds, TD-codes and other
+// derivatives.
+func (s Symbol) IsEquity() bool {
+	return equitySymbolRe.MatchString(string(s))
+}
+
 // StockInfo represents basic information about a stock.
 // This is a value object with no identity.
 type StockInfo struct {

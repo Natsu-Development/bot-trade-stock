@@ -4,15 +4,15 @@ import (
 	"context"
 	"fmt"
 
-	"bot-trade/application/jobs/registry"
-	"bot-trade/application/port/inbound"
-	"bot-trade/application/port/outbound"
-	appPrep "bot-trade/application/usecase/analyze/prep"
-	appTrendline "bot-trade/application/usecase/analyze/trendline"
-	analysisvo "bot-trade/domain/analysis/valueobject"
-	configagg "bot-trade/domain/config/aggregate"
-	configvo "bot-trade/domain/config/valueobject"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	"backend/application/jobs/registry"
+	"backend/application/port/inbound"
+	"backend/application/port/outbound"
+	appPrep "backend/application/usecase/analyze/prep"
+	appTrendline "backend/application/usecase/analyze/trendline"
+	analysisvo "backend/domain/analysis/valueobject"
+	configagg "backend/domain/config/aggregate"
+	configvo "backend/domain/config/valueobject"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 func init() {
@@ -63,13 +63,14 @@ func NewBreakdownJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, err
 			timeout:     jobCfg.Timeout,
 			concurrency: jobCfg.Concurrency,
 			namePrefix:  "breakdown",
+			windowBars:  deps.Config.AnalysisWindowBars,
 			preparer:    deps.Preparer,
 			configRepo:  deps.ConfigRepo,
 			notifier:    deps.Notifier,
 			disabler:    deps.ConditionDisabler,
-			disableType: configvo.AlertTypeBreakdownMTF,
+			disableType: configvo.TriggerTypeBreakdownMTF,
 			selectSymbols: func(cfg *configagg.TradingConfig) []marketvo.Symbol {
-				return cfg.SymbolsWithEnabledCondition(configvo.AlertTypeBreakdownMTF)
+				return cfg.SymbolsWithEnabledCondition(configvo.TriggerTypeBreakdownMTF)
 			},
 			analyze: func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, bool, error) {
 				return AnalyzeBreakdown(ctx, data, deps.BreakdownUC, interval)

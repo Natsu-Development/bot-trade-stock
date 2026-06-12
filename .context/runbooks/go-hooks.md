@@ -26,7 +26,7 @@ All checks `command -v <tool>` first and skip silently if the binary isn't on PA
 The script reads a JSON document from stdin and extracts `.tool_input.file_path`:
 
 ```bash
-echo '{"tool_input":{"file_path":"bot-trade/path/to/file.go"}}' \
+echo '{"tool_input":{"file_path":"backend/path/to/file.go"}}' \
   | bash scripts/go-check.sh
 ```
 

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"bot-trade/application/jobs/registry"
-	"bot-trade/application/port/inbound"
+	"backend/application/jobs/registry"
+	"backend/application/port/inbound"
 
 	"go.uber.org/zap"
 )

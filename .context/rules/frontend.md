@@ -5,6 +5,11 @@ paths:
 
 # Frontend Rules (React + TypeScript)
 
+> **Design system (tokens, `ui/` primitives, CVA variants, icon registry, animation, enforcement):**
+> see [`../skills/frontend-patterns/references/ui-kit.md`](../skills/frontend-patterns/references/ui-kit.md) —
+> authoritative; read before building or modifying any UI. **No hardcoded colors** — use `var(--token)`
+> or the Tailwind alias (lint-enforced as an error).
+
 ## TypeScript Configuration
 
 - **Strict mode** enabled with no unused locals/params

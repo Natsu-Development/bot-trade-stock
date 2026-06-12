@@ -1,198 +1,205 @@
 import { test, expect } from '@playwright/test'
-import { navigateToPage, waitForPageHeading, resetTestConfig } from '../helpers'
+import { navigateToPage, resetTestConfig } from '../helpers'
 
-test.describe('Divergence Page', () => {
+type Page = import('@playwright/test').Page
+
+/** Navigate to the Analyze page and wait for it to be ready. The page no longer
+ *  renders an "Analyze" h1 (the header was removed), so we wait on the watchlist
+ *  sidebar instead of a page heading. */
+async function gotoAnalyze(page: Page) {
+  await navigateToPage(page, 'Analyze')
+  await expect(page.getByTestId('analyze-sidebar')).toBeVisible()
+}
+
+/** Load a symbol via the ON-CHART symbol box (Enter), then wait for the chart to
+ *  render. Symbol entry lives on the chart header, not in the sidebar. */
+async function loadSymbol(page: Page, symbol: string) {
+  const box = page.getByTestId('analyze-chart-symbol-input')
+  await box.fill(symbol)
+  await box.press('Enter')
+  await expect(page.locator('[data-testid="chart-container"]')).toBeVisible({ timeout: 30000 })
+}
+
+test.describe('Analyze Page (TradingView revamp)', () => {
+  // All tests here mutate the SAME shared backend config (e2e_test_user), and every
+  // beforeEach resets it to an empty watchlist. Under fullyParallel that reset races
+  // the seeded-watchlist tests' mount-GET (one test wipes another's seed mid-flight),
+  // so run this file serially — the standard idiom for tests sharing mutable server state.
+  test.describe.configure({ mode: 'serial' })
+
   test.beforeEach(async ({ page }) => {
     await resetTestConfig()
-    await navigateToPage(page, 'Divergence')
-    await waitForPageHeading(page, 'Divergence Analysis')
+    await gotoAnalyze(page)
   })
 
-  test.describe('Page Structure', () => {
-    test('should display header with title and subtitle', async ({ page }) => {
-      await expect(page.getByRole('heading', { name: 'Divergence Analysis' })).toBeVisible()
-      await expect(page.getByText('RSI divergence & trendline pattern detection')).toBeVisible()
+  test.describe('Page structure', () => {
+    test('has NO page header — title / subtitle / clock / History are removed', async ({ page }) => {
+      await expect(page.getByRole('heading', { name: 'Analyze' })).toHaveCount(0)
+      await expect(page.getByText('RSI divergence & trendline pattern detection')).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'History' })).toHaveCount(0)
     })
 
-    test('should display History button', async ({ page }) => {
-      await expect(page.getByRole('button', { name: /History/i })).toBeVisible()
+    test('shows the persistent watchlist sidebar', async ({ page }) => {
+      await expect(page.getByTestId('analyze-sidebar')).toBeVisible()
     })
 
-    test('should display live clock', async ({ page }) => {
-      await expect(page.getByText(/\d{2}:\d{2}:\d{2}\s+ICT/)).toBeVisible()
-    })
-  })
-
-  test.describe('Analyze Symbol Form', () => {
-    test('should display analyze section', async ({ page }) => {
-      await expect(page.getByText('Analyze Symbol')).toBeVisible()
-    })
-
-    test('should have Config ID input', async ({ page }) => {
-      const input = page.getByPlaceholder('e.g., default')
-      await expect(input).toBeVisible()
-      await expect(input).toHaveValue(/e2e_test_user/)
+    test('symbol entry lives ON the chart — sidebar has no add input', async ({ page }) => {
+      await expect(page.getByTestId('analyze-chart-symbol-input')).toBeVisible()
+      await expect(page.getByTestId('analyze-chart-add')).toBeVisible()
+      // Removed in earlier rounds: the sidebar search/add box + the old control bar.
+      await expect(page.getByTestId('analyze-symbol-search')).toHaveCount(0)
+      await expect(page.getByTestId('analyze-symbol-add')).toHaveCount(0)
+      await expect(page.getByTestId('analyze-symbol-input')).toHaveCount(0)
+      await expect(page.getByTestId('analyze-run')).toHaveCount(0)
     })
 
-    test('should have Symbol input', async ({ page }) => {
-      const input = page.getByPlaceholder('e.g., VCB')
-      await expect(input).toBeVisible()
-    })
-
-    test('should have Timeframe dropdown', async ({ page }) => {
-      const select = page.locator('select')
-      await expect(select).toBeVisible()
-
-      const options = await select.locator('option').allTextContents()
-      expect(options).toContain('Daily (1D)')
-      expect(options).toContain('Weekly (1W)')
-      expect(options).toContain('Monthly (1M)')
-    })
-
-    test('should have Analyze All button', async ({ page }) => {
-      await expect(page.getByRole('button', { name: /Analyze All/i })).toBeVisible()
-    })
-
-    test('should uppercase symbol input', async ({ page }) => {
-      const input = page.getByPlaceholder('e.g., VCB')
+    test('uppercases the on-chart symbol input', async ({ page }) => {
+      const input = page.getByTestId('analyze-chart-symbol-input')
       await input.fill('vcb')
       await expect(input).toHaveValue('VCB')
     })
 
-    test('should change timeframe', async ({ page }) => {
-      const select = page.locator('select')
-      await select.selectOption('1W')
-      await expect(select).toHaveValue('1W')
+    test('empty chart state prompts to type a symbol', async ({ page }) => {
+      await expect(page.getByText(/Type a symbol above .* to load the chart/)).toBeVisible()
     })
   })
 
-  test.describe('Signal Type Filter', () => {
-    test('should display all signal type buttons', async ({ page }) => {
-      await expect(page.getByRole('button', { name: 'All Signals' })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Breakdown' })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Breakout' })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Confirmed' })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Watching' })).toBeVisible()
+  test.describe('Signal-type filter + signals table (relocated strip)', () => {
+    test('chips read All / Breakout / Breakdown / Confirmed / Potential — never "Watching"', async ({ page }) => {
+      await expect(page.getByTestId('signal-chip-all')).toBeVisible()
+      await expect(page.getByTestId('signal-chip-breakout')).toBeVisible()
+      await expect(page.getByTestId('signal-chip-breakdown')).toBeVisible()
+      await expect(page.getByTestId('signal-chip-confirmed')).toBeVisible()
+      await expect(page.getByTestId('signal-chip-potential')).toBeVisible()
+      await expect(page.getByText('Watching', { exact: true })).toHaveCount(0)
     })
 
-    test('should toggle signal type', async ({ page }) => {
-      const breakdownBtn = page.getByRole('button', { name: 'Breakdown' })
-      await breakdownBtn.click()
-      // Verify the button is now active (has a different background)
-      await expect(breakdownBtn).toBeVisible()
-    })
-  })
-
-  test.describe('Signal Cards', () => {
-    test('should display bullish divergence card', async ({ page }) => {
-      await expect(page.getByRole('heading', { name: 'Bullish Divergence' })).toBeVisible()
+    test('selecting a chip activates it with a visible (non-transparent) background', async ({ page }) => {
+      const breakdown = page.getByTestId('signal-chip-breakdown')
+      await breakdown.click()
+      await expect(breakdown).toHaveAttribute('aria-pressed', 'true')
+      await expect(breakdown).toHaveCSS('background-color', 'rgb(255, 51, 102)')
     })
 
-    test('should display bearish divergence card', async ({ page }) => {
-      await expect(page.getByRole('heading', { name: 'Bearish Divergence' })).toBeVisible()
-    })
-
-    test('should show default HOLD status', async ({ page }) => {
-      const holdTexts = page.getByText('HOLD')
-      const count = await holdTexts.count()
-      expect(count).toBeGreaterThanOrEqual(2)
-    })
-
-    test('should display confidence and strength metrics', async ({ page }) => {
-      const confidenceLabels = page.getByText('CONFIDENCE')
-      const strengthLabels = page.getByText('STRENGTH')
-      expect(await confidenceLabels.count()).toBeGreaterThanOrEqual(2)
-      expect(await strengthLabels.count()).toBeGreaterThanOrEqual(2)
-    })
-
-    test('should display divergence type', async ({ page }) => {
-      const divTypeLabels = page.getByText('DIVERGENCE TYPE')
-      expect(await divTypeLabels.count()).toBeGreaterThanOrEqual(2)
+    test('renders the signals TABLE and NO standalone divergence cards (divergence lives on the RSI pane)', async ({ page }) => {
+      await expect(page.getByTestId('analyze-signals-table')).toBeVisible()
+      await expect(page.getByTestId('divergence-card-bullish')).toHaveCount(0)
+      await expect(page.getByTestId('divergence-card-bearish')).toHaveCount(0)
     })
   })
 
-  test.describe('Price Chart Section', () => {
-    test('should display chart section header', async ({ page }) => {
-      await expect(page.getByText(/Price & Trendline Chart/)).toBeVisible()
-    })
+  test.describe('Sidebar collapse', () => {
+    test('collapsing the sidebar keeps the chart usable', async ({ page }) => {
+      await loadSymbol(page, 'FPT')
 
-    test('should show placeholder when no analysis', async ({ page }) => {
-      await expect(page.getByText(/Click "Analyze All" to load chart/)).toBeVisible()
-    })
-
-    test('should display signal count badges', async ({ page }) => {
-      await expect(page.getByText(/\d+ Bullish/i)).toBeVisible()
-      await expect(page.getByText(/\d+ Bearish/i)).toBeVisible()
+      await page.getByTestId('analyze-sidebar-toggle').click()
+      await expect(page.getByTestId('analyze-watchlist')).toHaveCount(0)
+      await expect(page.locator('[data-testid="chart-container"]')).toBeVisible()
     })
   })
 
-  test.describe('Analysis Execution', () => {
-    test('should show loading state during analysis', async ({ page }) => {
-      const symbolInput = page.getByPlaceholder('e.g., VCB')
-      await symbolInput.fill('VCB')
+  test.describe('Analysis execution', () => {
+    test('loads the chart with RSI toggle + overlay controls', async ({ page }) => {
+      await loadSymbol(page, 'FPT')
 
-      const analyzeBtn = page.getByRole('button', { name: /Analyze All/i })
-      await analyzeBtn.click()
-
-      await expect(page.getByRole('button', { name: /Analyzing.../i })).toBeVisible()
-    })
-
-    test('should complete analysis and show chart', async ({ page }) => {
-      const symbolInput = page.getByPlaceholder('e.g., VCB')
-      await symbolInput.fill('FPT')
-
-      const analyzeBtn = page.getByRole('button', { name: /Analyze All/i })
-      await analyzeBtn.click()
-
-      // Wait for analysis to complete
-      await expect(page.getByRole('button', { name: /Analyze All/i })).toBeEnabled({ timeout: 30000 })
-
-      // Chart placeholder should be gone
-      await expect(page.getByText(/Click "Analyze All" to load chart/)).not.toBeVisible()
-    })
-
-    test('should show chart controls after analysis', async ({ page }) => {
-      const symbolInput = page.getByPlaceholder('e.g., VCB')
-      await symbolInput.fill('FPT')
-
-      await page.getByRole('button', { name: /Analyze All/i }).click()
-      await expect(page.getByRole('button', { name: /Analyze All/i })).toBeEnabled({ timeout: 30000 })
-
-      // Chart controls should appear
       await expect(page.getByRole('button', { name: /Trendlines/i })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Signals', exact: true })).toBeVisible()
-    })
-
-    test('should show price data after analysis', async ({ page }) => {
-      const symbolInput = page.getByPlaceholder('e.g., VCB')
-      await symbolInput.fill('FPT')
-
-      await page.getByRole('button', { name: /Analyze All/i }).click()
-      await expect(page.getByRole('button', { name: /Analyze All/i })).toBeEnabled({ timeout: 30000 })
-
-      // Price info should be visible
+      await expect(page.getByRole('button', { name: 'RSI', exact: true })).toBeVisible()
       await expect(page.getByText(/Latest:/)).toBeVisible()
     })
 
-    test('should update chart header with symbol name', async ({ page }) => {
-      const symbolInput = page.getByPlaceholder('e.g., VCB')
-      await symbolInput.fill('VCB')
+    test('timeframe lives IN the chart — interval dropdown shown, nav/zoom controls hidden', async ({ page }) => {
+      await loadSymbol(page, 'FPT')
 
-      await page.getByRole('button', { name: /Analyze All/i }).click()
-      await expect(page.getByRole('button', { name: /Analyze All/i })).toBeEnabled({ timeout: 30000 })
-
-      await expect(page.getByText(/Price & Trendline Chart — VCB/)).toBeVisible()
+      const trigger = page.getByTestId('chart-interval-switch')
+      await expect(trigger).toBeVisible()
+      await expect(trigger).toContainText('1D')
+      await trigger.click()
+      await expect(page.getByTestId('interval-option-1D')).toBeVisible()
+      await expect(page.getByTestId('interval-option-1W')).toBeVisible()
+      await expect(page.getByTestId('interval-option-1M')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(page.getByTitle('Reset zoom')).toHaveCount(0)
+      await expect(page.getByTitle('Zoom in')).toHaveCount(0)
+      await expect(page.getByTitle('Go to start')).toHaveCount(0)
     })
 
-    test('should analyze with different timeframe', async ({ page }) => {
-      const symbolInput = page.getByPlaceholder('e.g., VCB')
-      await symbolInput.fill('FPT')
+    test('switching the in-chart timeframe reloads the chart', async ({ page }) => {
+      await loadSymbol(page, 'FPT')
+      const trigger = page.getByTestId('chart-interval-switch')
+      await trigger.click()
+      // Selecting 1W must fire a fresh /analyze request carrying interval=1W.
+      const req1w = page.waitForRequest(
+        (r) => r.url().includes('/analyze/') && r.url().includes('interval=1W'),
+        { timeout: 30000 }
+      )
+      await page.getByTestId('interval-option-1W').click()
+      await req1w
+      await expect(trigger).toContainText('1W')
+      await expect(page.locator('[data-testid="chart-container"]')).toBeVisible({ timeout: 30000 })
+    })
 
-      await page.locator('select').selectOption('1W')
-      await page.getByRole('button', { name: /Analyze All/i }).click()
-      await expect(page.getByRole('button', { name: /Analyze All/i })).toBeEnabled({ timeout: 30000 })
+    test('RSI is ON by default with a draggable divider once a symbol loads', async ({ page }) => {
+      await loadSymbol(page, 'FPT')
+      await expect(page.getByTestId('rsi-divider')).toBeVisible()
+    })
+  })
 
-      await expect(page.getByText(/Click "Analyze All" to load chart/)).not.toBeVisible()
+  test.describe('Watchlist', () => {
+    test('add via the on-chart control persists (PUT succeeds with the disabled seed condition)', async ({ page }) => {
+      // Empty watchlist → nothing auto-selected; type a symbol to load it, then add.
+      const box = page.getByTestId('analyze-chart-symbol-input')
+      await box.fill('FPT')
+      await box.press('Enter')
+      const configPut = page.waitForResponse(
+        (r) => r.url().includes('/config/') && r.request().method() === 'PUT'
+      )
+      await page.getByTestId('analyze-chart-add').click()
+      // If the PUT had been rejected (e.g. empty conditions), the optimistic add
+      // would roll back and the row would vanish. It must persist.
+      await expect(page.getByTestId('watchlist-item-FPT')).toBeVisible()
+      await configPut
+      await expect(page.getByTestId('watchlist-item-FPT')).toBeVisible()
+      await expect(page.getByTestId('analyze-chart-add')).toContainText('In watchlist')
+    })
+
+    test('per-row X is the only remove affordance — no redundant toggle or sidebar input', async ({ page }) => {
+      await resetTestConfig(['VCB'])
+      await gotoAnalyze(page)
+
+      await expect(page.getByTestId('watchlist-item-VCB')).toBeVisible()
+      await expect(page.getByTestId('watchlist-remove-VCB')).toBeAttached()
+      await expect(page.getByTestId('watchlist-toggle-current')).toHaveCount(0)
+      await expect(page.getByTestId('analyze-symbol-search')).toHaveCount(0)
+    })
+
+    test('auto-selects the FIRST watchlist symbol on entry, then quick-switch loads another', async ({ page }) => {
+      await resetTestConfig(['VCB', 'HPG'])
+      await gotoAnalyze(page)
+
+      // Auto-select: the first watchlist symbol loads with no interaction; its row
+      // shows the selected-state indicator and the chart renders.
+      await expect(page.getByTestId('analyze-chart-symbol-input')).toHaveValue('VCB')
+      await expect(page.getByTestId('watchlist-active-VCB')).toBeVisible()
+      await expect(page.locator('[data-testid="chart-container"]')).toBeVisible({ timeout: 30000 })
+
+      // Quick-switch to the other symbol — the indicator + symbol box follow it.
+      await page.getByTestId('watchlist-item-HPG').click()
+      await expect(page.getByTestId('analyze-chart-symbol-input')).toHaveValue('HPG')
+      await expect(page.getByTestId('watchlist-active-HPG')).toBeVisible()
+    })
+  })
+
+  test.describe('Deep link (path routing)', () => {
+    test('/analyze?symbol=VCB loads VCB into the chart + symbol box (no hash)', async ({ page }) => {
+      await page.goto('/analyze?symbol=VCB')
+      await expect(page.getByTestId('analyze-sidebar')).toBeVisible()
+      await expect(page.getByTestId('analyze-chart-symbol-input')).toHaveValue('VCB')
+      await expect(page.locator('[data-testid="chart-container"]')).toBeVisible({ timeout: 30000 })
+      // Path-based, not hash-based, and the symbol param is stripped after consumption.
+      await expect.poll(() => new URL(page.url()).pathname).toBe('/analyze')
+      expect(page.url()).not.toContain('#')
+      expect(page.url()).not.toContain('symbol=')
     })
   })
 })

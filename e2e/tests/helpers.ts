@@ -3,19 +3,21 @@ import { Page, expect } from '@playwright/test'
 export const TEST_USERNAME = 'e2e_test_user'
 export const API_BASE = 'http://localhost:8080'
 
-export async function navigateToPage(page: Page, pageName: 'Dashboard' | 'Screener' | 'Divergence' | 'Config' | 'Settings') {
+export async function navigateToPage(page: Page, pageName: 'Dashboard' | 'Screener' | 'Analyze' | 'Config' | 'Settings') {
   await page.goto('/')
   await page.waitForLoadState('networkidle')
   const nav = page.locator('nav')
   await expect(nav).toBeVisible()
-  await nav.getByRole('button', { name: pageName }).click()
+  // Nav items are real <a> links now (path routing + ctrl-click new tab), so they
+  // expose the 'link' role rather than 'button'.
+  await nav.getByRole('link', { name: pageName }).click()
 }
 
 export async function waitForPageHeading(page: Page, heading: string, timeout = 10000) {
   await expect(page.getByRole('heading', { name: heading })).toBeVisible({ timeout })
 }
 
-export async function resetTestConfig() {
+export async function resetTestConfig(watchlist: string[] = []) {
   await fetch(`${API_BASE}/config/${TEST_USERNAME}`, { method: 'DELETE' }).catch(() => {})
   await fetch(`${API_BASE}/config`, {
     method: 'POST',
@@ -24,12 +26,13 @@ export async function resetTestConfig() {
       id: TEST_USERNAME,
       rsi_period: 14,
       pivot_period: 5,
-      lookback_day: 365,
       divergence: { range_min: 30, range_max: 70 },
       trendline: { max_lines: 5, proximity_percent: 3 },
-      indices_recent: 5,
       signal_days_threshold: 30,
-      alerts: [],
+      watchlist: watchlist.map((symbol) => ({
+        symbol,
+        conditions: [{ type: 'bullish_divergence', threshold: 0, enabled: false }],
+      })),
       telegram: { enabled: false },
     }),
   })

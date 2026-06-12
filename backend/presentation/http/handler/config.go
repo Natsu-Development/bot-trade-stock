@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/http"
 
-	"bot-trade/application/dto"
-	"bot-trade/application/port/inbound"
-	"bot-trade/domain/config"
-	shared "bot-trade/domain/shared"
-	"bot-trade/presentation/http/response"
+	"backend/application/dto"
+	"backend/application/port/inbound"
+	"backend/domain/config"
+	shared "backend/domain/shared"
+	"backend/presentation/http/response"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,11 +23,39 @@ func NewConfigHandler(configManager inbound.ConfigManager) *ConfigHandler {
 	return &ConfigHandler{configManager: configManager}
 }
 
-// CreateConfig handles POST /config - creates a new configuration.
-func (h *ConfigHandler) CreateConfig(c *gin.Context) {
+// maxConfigBodyBytes bounds the POST /config and PUT /config/:id request bodies
+// before decoding (defense in depth against oversized payloads containing large
+// metrics_filter arrays; the per-filter condition cap is the second line of defense).
+const maxConfigBodyBytes = 512 << 10 // 512 KiB
+
+// bindConfigRequest caps the request body, binds the JSON into a
+// TradingConfigRequest, and writes the matching error response on failure
+// (413 for an oversized body, 400 otherwise). It returns ok=false when a
+// response has already been written, so callers should simply return.
+func bindConfigRequest(c *gin.Context) (dto.TradingConfigRequest, bool) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxConfigBodyBytes)
+
 	var req dto.TradingConfigRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{
+				"error":     "Request body too large",
+				"details":   err.Error(),
+				"max_bytes": maxConfigBodyBytes,
+			})
+			return dto.TradingConfigRequest{}, false
+		}
 		response.BadRequest(c, err.Error())
+		return dto.TradingConfigRequest{}, false
+	}
+	return req, true
+}
+
+// CreateConfig handles POST /config - creates a new configuration.
+func (h *ConfigHandler) CreateConfig(c *gin.Context) {
+	req, ok := bindConfigRequest(c)
+	if !ok {
 		return
 	}
 
@@ -85,9 +113,8 @@ func (h *ConfigHandler) UpdateConfig(c *gin.Context) {
 		return
 	}
 
-	var req dto.TradingConfigRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+	req, ok := bindConfigRequest(c)
+	if !ok {
 		return
 	}
 

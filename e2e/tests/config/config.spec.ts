@@ -78,7 +78,7 @@ test.describe('Config Page', () => {
     await expect(page.getByRole('heading', { name: 'RSI Settings' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Divergence Parameters' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Trendline Parameters' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Stock Alerts' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Watchlist' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Telegram Notifications' })).toBeVisible()
   })
 
@@ -101,7 +101,7 @@ test.describe('Config Page', () => {
     // NumberInput renders type="text" (role textbox), not a native spinbutton.
     const inputs = page.getByRole('textbox')
     const count = await inputs.count()
-    expect(count).toBeGreaterThanOrEqual(5) // RSI, Pivot, Lookback, Range Min, Range Max, …
+    expect(count).toBeGreaterThanOrEqual(4) // RSI, Pivot, Range Min, Range Max, …
   })
 
   test('should have signal recency window input', async ({ page }) => {
@@ -110,20 +110,20 @@ test.describe('Config Page', () => {
   })
 
   // --------------------------------------------------------
-  // Stock Alerts Tests
+  // Watchlist Tests
   // --------------------------------------------------------
-  test('should display Stock Alerts section with Add Alert', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Stock Alerts' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Add Alert' })).toBeVisible()
+  test('should display Watchlist section with Add Symbol', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'Watchlist' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Add Symbol' })).toBeVisible()
   })
 
-  test('should open the alert editor with all condition types', async ({ page }) => {
-    await page.getByRole('button', { name: 'Add Alert' }).click()
+  test('should open the watchlist editor with all condition types', async ({ page }) => {
+    await page.getByRole('button', { name: 'Add Symbol' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
-    await expect(dialog.getByRole('heading', { name: 'Create Alert' })).toBeVisible()
-    await expect(dialog.locator('#alert-symbol')).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: 'Add to Watchlist' })).toBeVisible()
+    await expect(dialog.locator('#watchlist-symbol')).toBeVisible()
 
     // One representative control per condition category.
     await expect(dialog.getByRole('switch', { name: 'Enable Price above' })).toBeVisible()
@@ -136,28 +136,28 @@ test.describe('Config Page', () => {
     await expect(dialog).not.toBeVisible()
   })
 
-  test('should add a stock alert via the editor', async ({ page }) => {
+  test('should add a watchlist entry via the editor', async ({ page }) => {
     // Drive the editor and assert the card renders from local state (no reload).
     // Race-immune under fullyParallel: every test shares e2e_test_user's backend
     // config, so a sibling's resetTestConfig would wipe any seeded+reloaded
     // state; local draft state is per-page and unaffected.
-    await page.getByRole('button', { name: 'Add Alert' }).click()
+    await page.getByRole('button', { name: 'Add Symbol' }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
 
     // Choose a symbol from the autocomplete (loaded from /stocks/filter).
-    await dialog.locator('#alert-symbol').fill('FPT')
+    await dialog.locator('#watchlist-symbol').fill('FPT')
     await dialog.getByRole('option', { name: 'FPT', exact: true }).click()
 
     // Enable a Price-above threshold condition.
     await dialog.getByRole('textbox', { name: 'Price above threshold' }).fill('100')
     await dialog.getByRole('switch', { name: 'Enable Price above' }).click()
 
-    await dialog.getByRole('button', { name: 'Create Alert' }).click()
+    await dialog.getByRole('button', { name: 'Add to Watchlist' }).click()
     await expect(dialog).not.toBeVisible()
 
-    // The new alert card is in the Stock Alerts list.
-    await expect(page.getByRole('button', { name: 'Edit alert for FPT' })).toBeVisible()
+    // The new watchlist entry is in the Watchlist section.
+    await expect(page.getByRole('button', { name: 'Edit watchlist entry for FPT' })).toBeVisible()
   })
 
   // --------------------------------------------------------

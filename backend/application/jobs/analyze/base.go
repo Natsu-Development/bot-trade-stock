@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"time"
 
-	"bot-trade/application/dto"
-	"bot-trade/application/port/inbound"
-	"bot-trade/application/port/outbound"
-	appService "bot-trade/application/service"
-	appPrep "bot-trade/application/usecase/analyze/prep"
-	analysisvo "bot-trade/domain/analysis/valueobject"
-	configagg "bot-trade/domain/config/aggregate"
-	configvo "bot-trade/domain/config/valueobject"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	"backend/application/dto"
+	"backend/application/port/inbound"
+	"backend/application/port/outbound"
+	appService "backend/application/service"
+	appPrep "backend/application/usecase/analyze/prep"
+	analysisvo "backend/domain/analysis/valueobject"
+	configagg "backend/domain/config/aggregate"
+	configvo "backend/domain/config/valueobject"
+	marketvo "backend/domain/shared/valueobject/market"
 
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -66,6 +66,7 @@ type AnalysisJob struct {
 	timeout       time.Duration
 	concurrency   int
 	namePrefix    string
+	windowBars    int
 	preparer      *appPrep.Preparer
 	configRepo    outbound.ConfigRepository
 	notifier      outbound.Notifier
@@ -75,7 +76,7 @@ type AnalysisJob struct {
 	// disableType is the condition type this job auto-disables on a fired signal.
 	// Set per factory (bullish_divergence / bearish_divergence); identity is
 	// (symbol, type) since divergence conditions carry no reference.
-	disableType configvo.AlertType
+	disableType configvo.TriggerType
 }
 
 func (j *AnalysisJob) Metadata() inbound.JobMetadata {
@@ -116,9 +117,8 @@ func (j *AnalysisJob) processConfig(ctx context.Context, cfg *configagg.TradingC
 }
 
 func (j *AnalysisJob) analyzeSymbol(ctx context.Context, symbol string, cfg *configagg.TradingConfig) {
-	// Scale LookbackDay by interval cadence so weekly/monthly jobs fetch enough
-	// bars for the RSI/pivot/divergence pipeline. See ADR in
-	// .omc/plans/analyze-interval-autoscale.md.
+	// Scale the operator-set window bar count by interval cadence so
+	// weekly/monthly jobs fetch enough bars for the RSI/pivot/divergence pipeline.
 	interval, err := marketvo.NewInterval(j.interval)
 	if err != nil {
 		zap.L().Error("Invalid job interval",
@@ -128,9 +128,9 @@ func (j *AnalysisJob) analyzeSymbol(ctx context.Context, symbol string, cfg *con
 		)
 		return
 	}
-	effectiveLookback := marketvo.EffectiveLookbackDays(interval, cfg.LookbackDay)
+	span := marketvo.FetchSpanForBars(interval, j.windowBars)
 
-	query, err := marketvo.NewMarketDataQueryFromStrings(symbol, "", j.interval, effectiveLookback)
+	query, err := marketvo.NewMarketDataQuery(symbol, "", j.interval, span)
 	if err != nil {
 		zap.L().Error("Failed to create query", zap.String("symbol", symbol), zap.Error(err))
 		return
@@ -159,7 +159,7 @@ func (j *AnalysisJob) analyzeSymbol(ctx context.Context, symbol string, cfg *con
 
 	// Auto-disable the fired divergence condition via the scoped per-condition write
 	// so concurrent tick-job disables on the same config are never clobbered.
-	cond := configvo.AlertCondition{Type: j.disableType}
+	cond := configvo.TriggerCondition{Type: j.disableType}
 	if err := j.disabler.Disable(ctx, string(cfg.ID), symbol, cond); err != nil {
 		zap.L().Error("Failed to persist divergence auto-disable",
 			zap.String("symbol", symbol),

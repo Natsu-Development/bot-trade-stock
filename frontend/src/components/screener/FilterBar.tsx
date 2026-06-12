@@ -1,24 +1,41 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
-import { Icons } from '../icons/Icons'
-import { FilterPill } from './FilterPill'
-import { FilterEditor } from './FilterEditor'
 import { QuickPresets } from './QuickPresets'
-import type { DynamicFilter, FilterField, FilterFieldOption, FilterOperatorOption, QuickPreset } from '../../types'
+import { SavedFilterChips } from './SavedFilterChips'
+import { QueryBuilder } from './QueryBuilder'
+import { ColoredFormulaEditor } from './ColoredFormulaEditor'
+import { makeBranch, makeLeaf } from '@/lib/filterSerialize'
+import type { FilterTreeNode, QuickPreset } from '../../types'
+import type { ScreenerFilterPreset } from '@/lib/api'
+import type { LoadedPreset } from '@/hooks/screener/useScreenerFilters'
 
 interface FilterBarProps {
-  filters: DynamicFilter[]
-  fieldOptions: FilterFieldOption[]
-  operatorOptions: FilterOperatorOption[]
-  filterLogic: 'and' | 'or'
+  /** Canonical filter tree (the screener's single source of truth). */
+  filterTree: FilterTreeNode
+  /** Provenance of the active filter (drives the identity line + chip highlight). */
+  loadedPreset: LoadedPreset | null
+  /** The live tree diverges from the loaded preset's baseline. */
+  isModified: boolean
   activeExchange: string
-  onFiltersChange: (filters: DynamicFilter[]) => void
-  onLogicChange: (logic: 'and' | 'or') => void
+  builderOpen: boolean
+  /** User-saved presets (config.metrics_filter). */
+  savedFilters: ScreenerFilterPreset[]
+  /** Commit a parsed tree from FREE-TEXT editing (formula box). */
+  onTreeChange: (root: FilterTreeNode) => void
+  /** Load a built-in quick preset (auto-applies). */
+  onSelectBuiltIn: (name: string, root: FilterTreeNode) => void
   onExchangeChange: (exchange: string) => void
-  onReset: () => void
-  onSavePreset?: () => void
+  onOpenBuilder: () => void
+  onCloseBuilder: () => void
+  onApplyBuilder: (root: FilterTreeNode, exchanges: string[]) => void
+  /** Load / delete a saved preset by name. */
+  onLoadPreset: (name: string) => void
+  onDeletePreset: (name: string) => void
+  /** Save the current tree as a named preset. */
+  onSavePreset: (root: FilterTreeNode, exchanges: string[], name: string) => void
 }
 
+/** Built-in quick filters — each builds a fresh canonical tree on select. */
 const builtInPresets: QuickPreset[] = [
   {
     id: 'momentum',
@@ -27,7 +44,7 @@ const builtInPresets: QuickPreset[] = [
     filters: [
       { field: 'rs_52w', operator: '>=', value: 80 },
       { field: 'rs_3m', operator: '>=', value: 75 },
-      { field: 'volume_vs_sma', operator: '>=', value: 30 },
+      { field: 'volume_vs_sma', operator: '>', value: 30 },
     ],
   },
   {
@@ -36,7 +53,7 @@ const builtInPresets: QuickPreset[] = [
     icon: '⚡',
     filters: [
       { field: 'rs_52w', operator: '>=', value: 70 },
-      { field: 'volume_vs_sma', operator: '>=', value: 80 },
+      { field: 'volume_vs_sma', operator: '>', value: 80 },
     ],
   },
   {
@@ -53,7 +70,7 @@ const builtInPresets: QuickPreset[] = [
     id: 'volume-surge',
     name: 'Volume Surge',
     icon: '📊',
-    filters: [{ field: 'volume_vs_sma', operator: '>=', value: 150 }],
+    filters: [{ field: 'volume_vs_sma', operator: '>', value: 150 }],
   },
   {
     id: 'swing-trade',
@@ -62,86 +79,110 @@ const builtInPresets: QuickPreset[] = [
     filters: [
       { field: 'rs_52w', operator: '>=', value: 60 },
       { field: 'rs_52w', operator: '<=', value: 85 },
-      { field: 'volume_vs_sma', operator: '>=', value: 50 },
+      { field: 'volume_vs_sma', operator: '>', value: 50 },
     ],
   },
 ]
 
 const exchanges = ['All', 'HOSE', 'HNX', 'UPCOM'] as const
 
+/** Build a canonical AND-tree from a built-in preset's flat condition list. */
+function presetToTree(preset: QuickPreset): FilterTreeNode {
+  return makeBranch(
+    'and',
+    preset.filters.map((f) => makeLeaf(f.field, f.operator, f.value))
+  )
+}
+
 export function FilterBar({
-  filters,
-  fieldOptions,
-  operatorOptions,
-  filterLogic,
+  filterTree,
+  loadedPreset,
+  isModified,
   activeExchange,
-  onFiltersChange,
-  onLogicChange,
+  builderOpen,
+  savedFilters,
+  onTreeChange,
+  onSelectBuiltIn,
   onExchangeChange,
-  onReset: _onReset,
+  onOpenBuilder,
+  onCloseBuilder,
+  onApplyBuilder,
+  onLoadPreset,
+  onDeletePreset,
   onSavePreset,
 }: FilterBarProps) {
-  const [isEditorOpen, setIsEditorOpen] = useState(false)
-  const [editingFilter, setEditingFilter] = useState<DynamicFilter | null>(null)
-  const [activePresetId, setActivePresetId] = useState<string | null>(null)
+  // Save ▾ popover. saveAsName: null = "save as new" form closed; '' or text = open.
+  const [saveMenuOpen, setSaveMenuOpen] = useState(false)
+  const [saveAsName, setSaveAsName] = useState<string | null>(null)
 
-  // Memoize field lookup map for O(1) access instead of O(n) find()
-  const fieldOptionsMap = useMemo(() => {
-    return new Map(fieldOptions.map(o => [o.value, o]))
-  }, [fieldOptions])
+  const exchangesForSave = activeExchange !== 'All' ? [activeExchange] : []
 
-  const getFieldOption = (field: FilterField) => {
-    return fieldOptionsMap.get(field)
-  }
-
-  const handleAddFilter = () => {
-    setEditingFilter(null)
-    setIsEditorOpen(true)
-  }
-
-  const handleEditFilter = (filter: DynamicFilter) => {
-    setEditingFilter(filter)
-    setIsEditorOpen(true)
-  }
-
-  const handleRemoveFilter = (id: string) => {
-    onFiltersChange(filters.filter(f => f.id !== id))
-    setActivePresetId(null)
-  }
-
-  const handleSaveFilter = (filter: DynamicFilter) => {
-    if (editingFilter) {
-      onFiltersChange(filters.map(f => f.id === editingFilter.id ? filter : f))
-    } else {
-      onFiltersChange([...filters, filter])
-    }
-    setActivePresetId(null)
-  }
+  const isSavedLoaded = loadedPreset?.source === 'saved'
+  const builtinActiveName = loadedPreset?.source === 'builtin' ? loadedPreset.name : null
 
   const handleSelectPreset = (preset: QuickPreset) => {
-    setActivePresetId(preset.id)
-    const newFilters: DynamicFilter[] = preset.filters.map((f, index) => ({
-      id: `preset_${preset.id}_${index}`,
-      field: f.field,
-      operator: f.operator,
-      value: f.value,
-    }))
-    onFiltersChange(newFilters)
-    if (preset.filters.length > 1) {
-      onLogicChange('and')
-    }
+    onSelectBuiltIn(preset.name, presetToTree(preset))
   }
+
+  const closeSaveMenu = () => {
+    setSaveMenuOpen(false)
+    setSaveAsName(null)
+  }
+
+  const commitUpdate = () => {
+    if (!loadedPreset) return
+    onSavePreset(filterTree, exchangesForSave, loadedPreset.name)
+    closeSaveMenu()
+  }
+
+  const commitSaveAs = () => {
+    const n = (saveAsName ?? '').trim()
+    if (!n) return
+    onSavePreset(filterTree, exchangesForSave, n)
+    closeSaveMenu()
+  }
+
+  // Builder provenance (US-06): the modal title + subline reflect the loaded filter.
+  const builderTitle = loadedPreset
+    ? `Editing: ★ ${loadedPreset.name}${isModified ? ' · modified' : ''}`
+    : 'New filter'
+  const builderSubtitle = ((): string => {
+    if (!loadedPreset) return 'Custom — not saved as a preset'
+    if (loadedPreset.source === 'saved')
+      return isModified ? 'Modified from your saved preset' : 'Your saved preset'
+    return isModified ? 'Modified from a built-in quick filter' : 'Built-in quick filter'
+  })()
 
   return (
     <div className="flex flex-col gap-4">
       <QuickPresets
         presets={builtInPresets}
-        activePresetId={activePresetId}
+        activeName={builtinActiveName}
+        modified={isModified}
         onSelectPreset={handleSelectPreset}
-        onSaveCurrent={onSavePreset || (() => {})}
       />
 
-      <div className="flex justify-between items-center gap-4 flex-wrap">
+      {/* Saved Filters — user presets (config.metrics_filter), always visible. */}
+      <div className="flex flex-col gap-2" data-testid="saved-filters">
+        <span className="text-[13px] font-medium text-[var(--text-secondary)]">Saved Filters</span>
+        {savedFilters.length === 0 ? (
+          <span className="text-[12px] text-[var(--text-muted)]">
+            No saved filters yet — edit a query and use “💾 Save ▾”.
+          </span>
+        ) : (
+          <SavedFilterChips
+            savedFilters={savedFilters}
+            loadedPreset={loadedPreset}
+            isModified={isModified}
+            onLoad={onLoadPreset}
+            onDelete={onDeletePreset}
+          />
+        )}
+      </div>
+
+      {/* Exchanges (outer AND). */}
+      <div className="flex flex-col gap-2">
+        <span className="text-[13px] font-medium text-[var(--text-secondary)]">Exchanges</span>
         <div className="flex items-center gap-2">
           {exchanges.map((exchange) => (
             <button
@@ -150,7 +191,8 @@ export function FilterBar({
                 'px-3.5 py-1.5 text-[13px] font-medium rounded transition-all duration-200',
                 'bg-[var(--bg-elevated)] border border-[var(--border-dim)] text-[var(--text-secondary)]',
                 'hover:bg-[var(--bg-hover)]',
-                activeExchange === exchange && 'bg-[var(--neon-cyan-dim)] border-[var(--neon-cyan)] text-[var(--neon-cyan)]'
+                activeExchange === exchange &&
+                  'bg-[var(--neon-cyan-dim)] border-[var(--neon-cyan)] text-[var(--neon-cyan)]'
               )}
               onClick={() => onExchangeChange(exchange)}
               type="button"
@@ -159,80 +201,154 @@ export function FilterBar({
             </button>
           ))}
         </div>
-
-        <div className="flex items-center gap-1 p-1 bg-[var(--bg-elevated)] border border-[var(--border-dim)] rounded">
-          <span className="text-xs font-medium text-[var(--text-muted)] mr-1">Match</span>
-          <button
-            className={cn(
-              'px-4 py-1.5 bg-transparent border-none rounded text-[13px] font-medium text-[var(--text-secondary)] cursor-pointer transition-all duration-200',
-              'hover:text-[var(--text-primary)]',
-              filterLogic === 'and' && 'bg-[var(--neon-cyan)] text-[var(--bg-void)]'
-            )}
-            onClick={() => onLogicChange('and')}
-            type="button"
-          >
-            All
-          </button>
-          <button
-            className={cn(
-              'px-4 py-1.5 bg-transparent border-none rounded text-[13px] font-medium text-[var(--text-secondary)] cursor-pointer transition-all duration-200',
-              'hover:text-[var(--text-primary)]',
-              filterLogic === 'or' && 'bg-[var(--neon-cyan)] text-[var(--bg-void)]'
-            )}
-            onClick={() => onLogicChange('or')}
-            type="button"
-          >
-            Any
-          </button>
-        </div>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <span className="text-[13px] font-medium text-[var(--text-secondary)]">Active Filters</span>
-          {filters.length > 0 && (
-            <span className="text-xs text-[var(--text-muted)]">
-              {filters.filter(f => f.value !== '').length} filter(s)
-            </span>
-          )}
-        </div>
-
-        {filters.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 px-4 text-center border-2 border-dashed border-[var(--border-dim)] rounded-md text-[var(--text-muted)]">
-            <Icons.Filter className="w-10 h-10 mb-3 opacity-40 flex-shrink-0" />
-            <p className="m-0 text-[13px]">No filters added. Click "Add Filter" to create conditions.</p>
+      {/* ── Current Filter card — identity + single colored editable box ──────── */}
+      <div
+        data-testid="current-filter"
+        className="rounded-lg border border-[var(--border-dim)] bg-[var(--bg-surface)] p-3.5"
+      >
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          {/* Identity line (provenance) */}
+          <div data-testid="current-filter-identity" className="flex items-center gap-1.5 text-sm">
+            {loadedPreset ? (
+              <>
+                <span className="text-[var(--neon-amber)]">★</span>
+                <span className="font-semibold text-[var(--text-primary)]">
+                  {loadedPreset.name}
+                </span>
+                {isModified && (
+                  <span className="text-[12px] text-[var(--neon-amber)]">· modified</span>
+                )}
+              </>
+            ) : (
+              <span className="font-medium text-[var(--text-secondary)]">Custom filter</span>
+            )}
           </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2 min-h-[40px]">
-            {filters.map((filter) => (
-              <FilterPill
-                key={filter.id}
-                filter={filter}
-                fieldOption={getFieldOption(filter.field)}
-                onEdit={handleEditFilter}
-                onRemove={handleRemoveFilter}
-              />
-            ))}
+
+          <div className="flex items-center gap-2">
+            {/* Save ▾ */}
+            <div className="relative">
+              <button
+                type="button"
+                data-testid="filter-save-menu"
+                aria-expanded={saveMenuOpen}
+                onClick={() => {
+                  setSaveMenuOpen((v) => !v)
+                  setSaveAsName(null)
+                }}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--neon-cyan)] bg-[var(--neon-cyan-dim)] px-3 py-1.5 text-[13px] font-medium text-[var(--neon-cyan)] transition-all duration-200 hover:brightness-110"
+              >
+                💾 Save ▾
+              </button>
+
+              {saveMenuOpen && (
+                <div
+                  data-testid="filter-save-popover"
+                  className="absolute right-0 z-20 mt-1.5 w-64 rounded-lg border border-[var(--border-glow)] bg-[var(--bg-surface)] p-2 shadow-[0_20px_50px_rgba(0,0,0,0.6)]"
+                >
+                  {isSavedLoaded && (
+                    <button
+                      type="button"
+                      data-testid="filter-save-update"
+                      disabled={!isModified}
+                      onClick={commitUpdate}
+                      title={isModified ? undefined : 'No changes to save'}
+                      className={cn(
+                        'mb-1 block w-full rounded px-2.5 py-2 text-left text-[13px] font-medium',
+                        isModified
+                          ? 'text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
+                          : 'cursor-not-allowed text-[var(--text-muted)] opacity-60'
+                      )}
+                    >
+                      Update “{loadedPreset?.name}”
+                    </button>
+                  )}
+
+                  {saveAsName === null ? (
+                    <button
+                      type="button"
+                      data-testid="filter-save-as-new"
+                      onClick={() => setSaveAsName('')}
+                      className="block w-full rounded px-2.5 py-2 text-left text-[13px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+                    >
+                      Save as new…
+                    </button>
+                  ) : (
+                    <div className="flex flex-col gap-2 p-1">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={saveAsName}
+                        onChange={(e) => setSaveAsName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            commitSaveAs()
+                          }
+                          if (e.key === 'Escape') {
+                            e.preventDefault()
+                            setSaveAsName(null)
+                          }
+                        }}
+                        placeholder="Preset name, e.g. High Momentum"
+                        data-testid="filter-save-name"
+                        className="w-full rounded border border-[var(--border-dim)] bg-[var(--bg-deep)] px-2.5 py-1.5 text-[13px] text-[var(--text-primary)] focus:border-[var(--neon-cyan)] focus:outline-none"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSaveAsName(null)}
+                          className="rounded px-2.5 py-1 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="filter-save-confirm"
+                          onClick={commitSaveAs}
+                          disabled={saveAsName.trim().length === 0}
+                          className={cn(
+                            'rounded border border-[var(--neon-bull)] bg-[var(--neon-bull-dim)] px-2.5 py-1 text-[12px] font-medium text-[var(--neon-bull)]',
+                            saveAsName.trim().length === 0 && 'cursor-not-allowed opacity-40'
+                          )}
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Open builder */}
             <button
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-transparent border border-dashed border-[var(--border-dim)] rounded-md text-[13px] font-medium text-[var(--text-muted)] cursor-pointer transition-all duration-200 hover:border-[var(--neon-cyan)] hover:text-[var(--neon-cyan)] hover:bg-[var(--neon-cyan-dim)] [&_svg]:w-4 [&_svg]:h-4 [&_svg]:flex-shrink-0"
-              onClick={handleAddFilter}
               type="button"
+              onClick={onOpenBuilder}
+              data-testid="open-builder"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-glow)] bg-[var(--bg-elevated)] px-3 py-1.5 text-[13px] font-medium text-[var(--text-primary)] transition-all duration-200 hover:border-[var(--neon-cyan)] hover:text-[var(--neon-cyan)]"
             >
-              <Icons.Plus />
-              <span>Add Filter</span>
+              ⚙ Open builder
             </button>
           </div>
-        )}
+        </div>
+
+        <ColoredFormulaEditor tree={filterTree} onTreeChange={onTreeChange} />
       </div>
 
-      {isEditorOpen && (
-        <FilterEditor
-          isOpen={isEditorOpen}
-          filter={editingFilter}
-          fieldOptions={fieldOptions}
-          operatorOptions={operatorOptions}
-          onSave={handleSaveFilter}
-          onClose={() => setIsEditorOpen(false)}
+      {builderOpen && (
+        <QueryBuilder
+          initialRoot={filterTree}
+          initialExchanges={activeExchange !== 'All' ? [activeExchange] : []}
+          title={builderTitle}
+          subtitle={builderSubtitle}
+          // Exchange is owned by the screener's tabs (outer AND); the builder only
+          // edits the boolean query. A save still captures the active exchange.
+          showExchanges={false}
+          onDone={(root, ex) => onApplyBuilder(root, ex)}
+          onCancel={onCloseBuilder}
+          onSavePreset={onSavePreset}
         />
       )}
     </div>

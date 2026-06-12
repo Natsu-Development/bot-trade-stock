@@ -5,10 +5,10 @@ import (
 	"errors"
 	"time"
 
-	"bot-trade/application/port/outbound"
-	"bot-trade/domain/config"
-	configagg "bot-trade/domain/config/aggregate"
-	configvo "bot-trade/domain/config/valueobject"
+	"backend/application/port/outbound"
+	"backend/domain/config"
+	configagg "backend/domain/config/aggregate"
+	configvo "backend/domain/config/valueobject"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -88,9 +88,9 @@ func (r *ConfigRepository) Update(ctx context.Context, cfg *configagg.TradingCon
 // positional arrayFilter scoped to the matching (symbol, type, reference). Mongo
 // applies arrayFilter updates atomically at the document level, so concurrent
 // disables of different conditions on the same doc both survive (no clobber).
-func (r *ConfigRepository) SetConditionEnabled(ctx context.Context, configID, symbol string, cond configvo.AlertCondition, enabled bool) error {
+func (r *ConfigRepository) SetConditionEnabled(ctx context.Context, configID, symbol string, cond configvo.TriggerCondition, enabled bool) error {
 	// The (symbol,type,reference) identity assumes ≤1 condition per pair, enforced
-	// by StockAlertConfig.Validate's duplicate guard. reference defaults to "" for
+	// by WatchlistItem.Validate's duplicate guard. reference defaults to "" for
 	// non-cross types; match missing-or-empty so old docs without the field still match.
 	condFilter := bson.M{
 		"c.type": string(cond.Type),
@@ -115,8 +115,8 @@ func (r *ConfigRepository) SetConditionEnabled(ctx context.Context, configID, sy
 
 	update := bson.M{
 		"$set": bson.M{
-			"alerts.$[a].conditions.$[c].enabled": enabled,
-			"updated_at":                          time.Now(),
+			"watchlist.$[a].conditions.$[c].enabled": enabled,
+			"updated_at":                             time.Now(),
 		},
 	}
 

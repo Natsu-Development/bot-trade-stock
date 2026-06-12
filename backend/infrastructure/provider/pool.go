@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"bot-trade/application/port/outbound"
-	"bot-trade/infrastructure/provider/contract"
-	_ "bot-trade/infrastructure/provider/sources"
+	"backend/application/port/outbound"
+	"backend/infrastructure/provider/contract"
+	_ "backend/infrastructure/provider/sources"
 
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	marketvo "backend/domain/shared/valueobject/market"
 
 	"go.uber.org/zap"
 )

@@ -15,7 +15,7 @@ import "time"
 // remain useful for non-direction alerts (accepted per existing design).
 //
 // Scope: this helper models intraday session boundaries only. Weekday gating
-// is the cron schedule's responsibility (STOCK_ALERT_SCHEDULE field-6 = "1-5").
+// is the cron schedule's responsibility (WATCHLIST_SCHEDULE field-6 = "1-5").
 // Vietnamese holidays are out of scope. Callers that invoke this helper from
 // a non-cron context must apply their own weekday/holiday filter beforehand.
 //

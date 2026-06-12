@@ -4,14 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	"bot-trade/application/jobs/registry"
-	"bot-trade/application/port/inbound"
-	"bot-trade/application/port/outbound"
-	appPrep "bot-trade/application/usecase/analyze/prep"
-	appRsi "bot-trade/application/usecase/analyze/rsi"
-	configagg "bot-trade/domain/config/aggregate"
-	configvo "bot-trade/domain/config/valueobject"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	"backend/application/jobs/registry"
+	"backend/application/port/inbound"
+	"backend/application/port/outbound"
+	appPrep "backend/application/usecase/analyze/prep"
+	appRsi "backend/application/usecase/analyze/rsi"
+	configagg "backend/domain/config/aggregate"
+	configvo "backend/domain/config/valueobject"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 func init() {
@@ -74,7 +74,7 @@ func AnalyzeBullishRSIEarly(ctx context.Context, data *appPrep.DataPrepare, uc *
 
 // NewBullishRSIJobsFromDeps builds, per enabled interval, a CONFIRMED bullish divergence
 // job and an independent EARLY bullish divergence job. Each selects + auto-disables only
-// its own AlertType, so firing one never affects the other's enabled state.
+// its own TriggerType, so firing one never affects the other's enabled state.
 func NewBullishRSIJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, error) {
 	var jobs []inbound.Job
 	jobCfg := deps.Config.BullishJob
@@ -90,13 +90,14 @@ func NewBullishRSIJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, er
 			timeout:     jobCfg.Timeout,
 			concurrency: jobCfg.Concurrency,
 			namePrefix:  "bullish-rsi",
+			windowBars:  deps.Config.AnalysisWindowBars,
 			preparer:    deps.Preparer,
 			configRepo:  deps.ConfigRepo,
 			notifier:    deps.Notifier,
 			disabler:    deps.ConditionDisabler,
-			disableType: configvo.AlertTypeBullishDivergence,
+			disableType: configvo.TriggerTypeBullishDivergence,
 			selectSymbols: func(cfg *configagg.TradingConfig) []marketvo.Symbol {
-				return cfg.SymbolsWithEnabledCondition(configvo.AlertTypeBullishDivergence)
+				return cfg.SymbolsWithEnabledCondition(configvo.TriggerTypeBullishDivergence)
 			},
 			analyze: func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, bool, error) {
 				return AnalyzeBullishRSI(ctx, data, deps.BullishRSIUC, interval)
@@ -109,13 +110,14 @@ func NewBullishRSIJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, er
 			timeout:     jobCfg.Timeout,
 			concurrency: jobCfg.Concurrency,
 			namePrefix:  "bullish-rsi-early",
+			windowBars:  deps.Config.AnalysisWindowBars,
 			preparer:    deps.Preparer,
 			configRepo:  deps.ConfigRepo,
 			notifier:    deps.Notifier,
 			disabler:    deps.ConditionDisabler,
-			disableType: configvo.AlertTypeBullishDivergenceEarly,
+			disableType: configvo.TriggerTypeBullishDivergenceEarly,
 			selectSymbols: func(cfg *configagg.TradingConfig) []marketvo.Symbol {
-				return cfg.SymbolsWithEnabledCondition(configvo.AlertTypeBullishDivergenceEarly)
+				return cfg.SymbolsWithEnabledCondition(configvo.TriggerTypeBullishDivergenceEarly)
 			},
 			analyze: func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, bool, error) {
 				return AnalyzeBullishRSIEarly(ctx, data, deps.BullishRSIUC, interval)

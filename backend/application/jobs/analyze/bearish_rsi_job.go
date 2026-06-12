@@ -4,14 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	"bot-trade/application/jobs/registry"
-	"bot-trade/application/port/inbound"
-	"bot-trade/application/port/outbound"
-	appPrep "bot-trade/application/usecase/analyze/prep"
-	appRsi "bot-trade/application/usecase/analyze/rsi"
-	configagg "bot-trade/domain/config/aggregate"
-	configvo "bot-trade/domain/config/valueobject"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	"backend/application/jobs/registry"
+	"backend/application/port/inbound"
+	"backend/application/port/outbound"
+	appPrep "backend/application/usecase/analyze/prep"
+	appRsi "backend/application/usecase/analyze/rsi"
+	configagg "backend/domain/config/aggregate"
+	configvo "backend/domain/config/valueobject"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 func init() {
@@ -74,7 +74,7 @@ func AnalyzeBearishRSIEarly(ctx context.Context, data *appPrep.DataPrepare, uc *
 
 // NewBearishRSIJobsFromDeps builds, per enabled interval, a CONFIRMED bearish divergence
 // job and an independent EARLY bearish divergence job. Each selects + auto-disables only
-// its own AlertType, so firing one never affects the other's enabled state.
+// its own TriggerType, so firing one never affects the other's enabled state.
 func NewBearishRSIJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, error) {
 	var jobs []inbound.Job
 	jobCfg := deps.Config.BearishJob
@@ -90,13 +90,14 @@ func NewBearishRSIJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, er
 			timeout:     jobCfg.Timeout,
 			concurrency: jobCfg.Concurrency,
 			namePrefix:  "bearish-rsi",
+			windowBars:  deps.Config.AnalysisWindowBars,
 			preparer:    deps.Preparer,
 			configRepo:  deps.ConfigRepo,
 			notifier:    deps.Notifier,
 			disabler:    deps.ConditionDisabler,
-			disableType: configvo.AlertTypeBearishDivergence,
+			disableType: configvo.TriggerTypeBearishDivergence,
 			selectSymbols: func(cfg *configagg.TradingConfig) []marketvo.Symbol {
-				return cfg.SymbolsWithEnabledCondition(configvo.AlertTypeBearishDivergence)
+				return cfg.SymbolsWithEnabledCondition(configvo.TriggerTypeBearishDivergence)
 			},
 			analyze: func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, bool, error) {
 				return AnalyzeBearishRSI(ctx, data, deps.BearishRSIUC, interval)
@@ -109,13 +110,14 @@ func NewBearishRSIJobsFromDeps(deps registry.JobDependencies) ([]inbound.Job, er
 			timeout:     jobCfg.Timeout,
 			concurrency: jobCfg.Concurrency,
 			namePrefix:  "bearish-rsi-early",
+			windowBars:  deps.Config.AnalysisWindowBars,
 			preparer:    deps.Preparer,
 			configRepo:  deps.ConfigRepo,
 			notifier:    deps.Notifier,
 			disabler:    deps.ConditionDisabler,
-			disableType: configvo.AlertTypeBearishDivergenceEarly,
+			disableType: configvo.TriggerTypeBearishDivergenceEarly,
 			selectSymbols: func(cfg *configagg.TradingConfig) []marketvo.Symbol {
-				return cfg.SymbolsWithEnabledCondition(configvo.AlertTypeBearishDivergenceEarly)
+				return cfg.SymbolsWithEnabledCondition(configvo.TriggerTypeBearishDivergenceEarly)
 			},
 			analyze: func(ctx context.Context, data *appPrep.DataPrepare, interval string) (outbound.Message, bool, error) {
 				return AnalyzeBearishRSIEarly(ctx, data, deps.BearishRSIUC, interval)

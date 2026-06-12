@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"bot-trade/application/port/outbound"
-	metricsagg "bot-trade/domain/metrics/aggregate"
+	"backend/application/port/outbound"
+	metricsagg "backend/domain/metrics/aggregate"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -30,10 +30,12 @@ type StockMetricsRepository struct {
 }
 
 // NewStockMetricsRepository creates a new MongoDB-based StockMetricsRepository.
-// collectionName specifies the MongoDB collection to use (e.g. "stock_metrics").
+// collectionName holds the computed base metrics (e.g. "stock_metrics"); the raw
+// bars from the same refresh are persisted separately via StockBarsRepository.
 func NewStockMetricsRepository(client *mongo.Client, databaseName, collectionName string) *StockMetricsRepository {
-	collection := client.Database(databaseName).Collection(collectionName)
-	return &StockMetricsRepository{collection: collection}
+	return &StockMetricsRepository{
+		collection: client.Database(databaseName).Collection(collectionName),
+	}
 }
 
 // Save persists the stock metrics to MongoDB.

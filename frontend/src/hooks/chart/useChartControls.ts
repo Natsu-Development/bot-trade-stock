@@ -17,7 +17,9 @@ export interface ChartControlsResult {
   scrollRight: () => void
 }
 
-export function useChartControls(chartRef: React.MutableRefObject<IChartApi | null>): ChartControlsResult {
+export function useChartControls(
+  chartRef: React.MutableRefObject<IChartApi | null>
+): ChartControlsResult {
   const [barSpacing, setBarSpacing] = useState(ZOOM_CONFIG.defaultBarSpacing)
   const barSpacingRef = useRef(barSpacing)
 
@@ -44,7 +46,7 @@ export function useChartControls(chartRef: React.MutableRefObject<IChartApi | nu
     const currentSpacing = timeScale.options().barSpacing ?? barSpacingRef.current
     const newSpacing = Math.min(currentSpacing + ZOOM_CONFIG.zoomStep, ZOOM_CONFIG.maxBarSpacing)
     chartRef.current.applyOptions({
-      timeScale: { barSpacing: newSpacing }
+      timeScale: { barSpacing: newSpacing },
     })
     barSpacingRef.current = newSpacing
     setBarSpacing(newSpacing)
@@ -56,7 +58,7 @@ export function useChartControls(chartRef: React.MutableRefObject<IChartApi | nu
     const currentSpacing = timeScale.options().barSpacing ?? barSpacingRef.current
     const newSpacing = Math.max(currentSpacing - ZOOM_CONFIG.zoomStep, ZOOM_CONFIG.minBarSpacing)
     chartRef.current.applyOptions({
-      timeScale: { barSpacing: newSpacing }
+      timeScale: { barSpacing: newSpacing },
     })
     barSpacingRef.current = newSpacing
     setBarSpacing(newSpacing)

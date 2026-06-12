@@ -1,11 +1,11 @@
 ---
 paths:
-  - "bot-trade/**/*.go"
+  - "backend/**/*.go"
 ---
 
-# Go Architecture Rules (bot-trade)
+# Go Architecture Rules (backend)
 
-> Path-specific quick lookup for any `bot-trade/**/*.go` change.
+> Path-specific quick lookup for any `backend/**/*.go` change.
 > **Canonical patterns**, narrative, and code examples live in [`../../skills/clean-architecture/SKILL.md`](../../skills/clean-architecture/SKILL.md). Read that for: dependency direction prose, aggregate examples, port/repository code, use-case orchestration, thin handler patterns.
 
 ## Dependency direction
@@ -18,7 +18,8 @@ paths:
 |-------|---------|---------------|
 | `domain/` | Core business logic, bounded contexts | ❌ None |
 | `application/` | Use cases, jobs, DTOs, ports | ❌ None (only interfaces) |
-| `infrastructure/` | Handlers, repositories, providers | ✅ Yes |
+| `infrastructure/` | Repositories, providers, external adapters (Mongo, HTTP, Telegram, cron) | ✅ Yes |
+| `presentation/http/` | HTTP handlers, middleware, router | ✅ Yes |
 | `cmd/` | Entrypoint | ✅ Yes |
 | `pkg/` | Shared utilities | ⚠️ Minimal |
 
@@ -35,7 +36,7 @@ paths:
 
 | File | Purpose |
 |------|---------|
-| `cmd/bot-trade/main.go` | Entrypoint |
+| `cmd/server/main.go` | Entrypoint |
 | `wire/wire.go` | Dependency injection (Wire) |
 | `config/` | Env-based configuration |
 | `application/port/inbound/` | Handler interfaces |
@@ -51,8 +52,8 @@ paths:
 | Use cases | `application/usecase/` | `analyze_divergence.go` |
 | Jobs | `application/jobs/` | `refresh_stock_data.go` |
 | DTOs | `application/dto/` | `AnalyzeRequest` |
-| Handlers | `infrastructure/handler/` | `config_handler.go` |
-| Repositories | `infrastructure/repository/` | `config_repository.go` |
+| Handlers | `presentation/http/handler/` | `stock.go`, `config.go` |
+| Repositories | `infrastructure/mongodb/` | `config_repository.go` |
 | Providers | `infrastructure/provider/sources/` | `vietcap.go` |
 
 ## Interface rules (path-specific summary)

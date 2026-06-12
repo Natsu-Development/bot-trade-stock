@@ -1,66 +1,50 @@
 package dto
 
 import (
-	"encoding/json"
-	"fmt"
 	"time"
 
-	metricsagg "bot-trade/domain/metrics/aggregate"
-	filtervo "bot-trade/domain/shared/valueobject/filter"
+	metricsagg "backend/domain/metrics/aggregate"
+	filtervo "backend/domain/shared/valueobject/filter"
 )
 
-// FilterValue accepts both boolean and numeric JSON values.
-// Boolean true → 1.0, false → 0.0.
-type FilterValue float64
-
-func (v *FilterValue) UnmarshalJSON(data []byte) error {
-	var b bool
-	if err := json.Unmarshal(data, &b); err == nil {
-		*v = FilterValue(filtervo.BoolToFloat(b))
-		return nil
-	}
-
-	var f float64
-	if err := json.Unmarshal(data, &f); err != nil {
-		return fmt.Errorf("value must be boolean or number: %w", err)
-	}
-	*v = FilterValue(f)
-	return nil
+// ScreenerStock is one screener-response row: the config-independent base
+// metrics (embedded, so they flatten into the same top-level JSON keys) plus the
+// six per-config signal flags spliced in from the caller's per-config signals. The flag
+// json tags reproduce the historical flat shape exactly, so the frontend is
+// unaffected by the StockMetrics split. The tick-time resistance/support levels
+// are intentionally absent — they are alert-path-only and the screener UI never
+// read them.
+type ScreenerStock struct {
+	*metricsagg.StockMetrics
+	HasBreakoutPotential  bool `json:"has_breakout_potential"`
+	HasBreakoutConfirmed  bool `json:"has_breakout_confirmed"`
+	HasBreakdownPotential bool `json:"has_breakdown_potential"`
+	HasBreakdownConfirmed bool `json:"has_breakdown_confirmed"`
+	HasBullishRSI         bool `json:"has_bullish_rsi"`
+	HasBearishRSI         bool `json:"has_bearish_rsi"`
 }
 
 // StockMetricsResult holds the complete result of stock metrics calculation.
 type StockMetricsResult struct {
-	TotalStocksAnalyzed int                        `json:"total_stocks_analyzed"`
-	StocksMatching      int                        `json:"stocks_matching"`
-	CalculatedAt        time.Time                  `json:"calculated_at"`
-	Stocks              []*metricsagg.StockMetrics `json:"stocks"`
+	TotalStocksAnalyzed int              `json:"total_stocks_analyzed"`
+	StocksMatching      int              `json:"stocks_matching"`
+	CalculatedAt        time.Time        `json:"calculated_at"`
+	Stocks              []*ScreenerStock `json:"stocks"`
 }
 
-// StockFilterRequest is the DTO for stock filter API requests.
-// JSON keys match frontend format ("op" instead of "operator").
+// StockFilterRequest is the flat tree-only DTO for POST /stocks/filter.
+// It embeds the domain StockFilter so the wire shape == the domain shape
+// (match/conditions/groups/exchanges), decoded natively with validating VOs.
 type StockFilterRequest struct {
-	Filters   []FilterConditionRequest `json:"filters"`
-	Logic     string                   `json:"logic"`
-	Exchanges []string                 `json:"exchanges,omitempty"`
+	filtervo.StockFilter
 }
 
-// FilterConditionRequest is the DTO for a single filter condition.
-type FilterConditionRequest struct {
-	Field string      `json:"field"`
-	Op    string      `json:"op"` // Frontend uses "op"
-	Value FilterValue `json:"value"`
-}
-
-// ToDomain converts DTO to domain value object with validation.
-func (r *StockFilterRequest) ToDomain() (*filtervo.StockFilter, error) {
-	conditions := make([]filtervo.FilterCondition, len(r.Filters))
-	for i, fc := range r.Filters {
-		cond, err := filtervo.NewFilterCondition(fc.Field, fc.Op, float64(fc.Value))
-		if err != nil {
-			return nil, err
-		}
-		conditions[i] = cond
+// ToDomain validates the embedded filter and returns it. An empty filter decodes
+// to a return-all filter; validation reports the first structural or cap violation.
+func (r StockFilterRequest) ToDomain() (*filtervo.StockFilter, error) {
+	f := r.StockFilter
+	if err := f.Validate(); err != nil {
+		return nil, err
 	}
-
-	return filtervo.NewStockFilter(conditions, r.Logic, r.Exchanges)
+	return &f, nil
 }

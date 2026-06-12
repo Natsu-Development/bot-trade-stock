@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"bot-trade/config"
+	"backend/config"
 
 	"go.uber.org/zap"
 )
@@ -33,7 +33,7 @@ func New(cfg *config.InfraConfig) (*App, error) {
 	}
 
 	// Presentation layer
-	presentation := NewPresentation(services)
+	presentation := NewPresentation(cfg, services)
 
 	zap.L().Info("Application initialized successfully")
 
@@ -49,7 +49,10 @@ func (a *App) Router() http.Handler {
 	return a.presentation.Router
 }
 
-// StartSchedulers starts the cron schedulers.
+// StartSchedulers starts the cron schedulers. The stock-refresh job runs ONLY on its
+// daily cron — there is no boot sweep. Base metrics are rehydrated from Mongo by
+// LoadFromDB at startup; per-config alert levels stay empty until the first cron
+// refresh, which the watchlist tick handles (zero levels → no fire).
 func (a *App) StartSchedulers() {
 	a.services.Scheduler.Start()
 	zap.L().Info("Job scheduler started")

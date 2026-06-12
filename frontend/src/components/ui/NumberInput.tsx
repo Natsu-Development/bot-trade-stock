@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, InputHTMLAttributes } from 'react'
 
-interface NumberInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> {
+interface NumberInputProps
+  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> {
   value: number
   onChange: (value: number) => void
   debounceMs?: number
@@ -28,22 +29,25 @@ export function NumberInput({
     }
   }, [value])
 
-  const commitValue = useCallback((stringValue: string) => {
-    // If empty, don't auto-fill default - let user clear the field
-    if (stringValue === '') {
-      onChange(0)
-      setLocalValue('')
-      return
-    }
-    const parsed = parseFloat(stringValue)
-    if (isNaN(parsed)) {
-      // Invalid input - restore to current value
-      setLocalValue(value.toString())
-      return
-    }
-    onChange(parsed)
-    setLocalValue(parsed.toString())
-  }, [value, onChange])
+  const commitValue = useCallback(
+    (stringValue: string) => {
+      // If empty, don't auto-fill default - let user clear the field
+      if (stringValue === '') {
+        onChange(0)
+        setLocalValue('')
+        return
+      }
+      const parsed = parseFloat(stringValue)
+      if (isNaN(parsed)) {
+        // Invalid input - restore to current value
+        setLocalValue(value.toString())
+        return
+      }
+      onChange(parsed)
+      setLocalValue(parsed.toString())
+    },
+    [value, onChange]
+  )
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value

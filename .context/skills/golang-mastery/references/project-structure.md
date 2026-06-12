@@ -1,191 +1,85 @@
 # Project Structure
 
-## Standard Layout
+> This project does **not** use the `internal/`-based "standard layout". The Go module
+> (`module backend`, `go 1.23.0`) is organized by **Clean Architecture + DDD layers**.
+> For the layer tree and dependency rules see
+> [`../../clean-architecture/SKILL.md`](../../clean-architecture/SKILL.md) and
+> [`../../../rules/backend/architecture.md`](../../../rules/backend/architecture.md).
+> This file covers the module / DI / build / packaging conventions around that layout.
+
+## Module & toolchain
 
 ```
-myproject/
-├── cmd/
-│   └── server/
-│       └── main.go           # Entry point
-├── internal/                 # Private (cannot be imported externally)
-│   ├── handler/              # HTTP/gRPC handlers
-│   ├── service/              # Business logic
-│   └── repository/           # Data access
-├── pkg/                      # Public library code (optional)
-├── api/                      # API definitions (proto, OpenAPI)
-├── testdata/                 # Test fixtures
-├── go.mod
-├── go.sum
-├── Makefile
-├── Dockerfile
-└── .golangci.yml
+module backend            # short module path — imports are `backend/domain/...`
+go 1.23.0                 # language floor: do NOT use newer features without a go.mod bump
+toolchain go1.23.2        # pinned toolchain
 ```
 
-**Rules:**
-- `internal/` enforced by Go compiler — external packages cannot import
-- `cmd/` for entry points — keep main() thin, inject dependencies
-- Avoid `pkg/` unless you truly have a public API for external consumers
+- Imports use the bare module path: `import "backend/domain/metrics/aggregate"`.
+- Treat `go 1.23.0` as a ceiling. Refuse Go 1.24+ features (e.g. `tool` directives) until the
+  team explicitly bumps `go.mod`.
 
-## go.mod
+## Layer layout (not `internal/`)
 
-```go
-module github.com/myorg/myapp
-
-go 1.24
-
-require (
-    github.com/gin-gonic/gin v1.9.1
-    go.uber.org/zap v1.26.0
-)
-
-// Local development
-replace github.com/myorg/mylib => ../mylib
-
-// Mark bad versions
-retract v1.0.1  // Critical bug
-
-// Tool dependencies (Go 1.24+)
-tool (
-    golang.org/x/tools/cmd/stringer
-    github.com/golang/mock/mockgen
-)
 ```
+backend/
+├── cmd/server/main.go     # thin entrypoint: build wire.App, run, wait for shutdown
+├── domain/                # pure business logic, ZERO external deps (grouped by context)
+├── application/           # use cases, jobs, ports, DTOs
+├── infrastructure/        # Mongo, HTTP providers, Telegram, cron, credentials
+├── presentation/http/     # Gin handlers, middleware, response
+├── wire/                  # MANUAL dependency injection (see below)
+├── config/                # env-based configuration
+└── pkg/                   # shared utilities (keep minimal)
+```
+
+**Why no `internal/`:** the layer packages already encode the boundary, and the module ships as
+a single deployable (not a reusable library), so `internal/` import-fencing adds nothing here.
+
+## Dependency injection — `wire/` is MANUAL
+
+The `wire/` package is **hand-written constructor wiring**, NOT Google Wire codegen (despite the
+name). It builds the three layers bottom-up and exposes the app's `Run()` / `Shutdown()`. Add a
+dependency by threading its constructor through `wire/` — there is no `wire_gen.go` to regenerate.
+Compile-time interface assertions (`var _ Iface = (*Impl)(nil)`) guard the seams.
+
+## Key dependencies (`backend/go.mod`)
+
+| Concern | Library |
+|---|---|
+| HTTP framework | `github.com/gin-gonic/gin v1.9.1` |
+| Logging | `go.uber.org/zap v1.27.0` (global `zap.L()`) |
+| Database | `go.mongodb.org/mongo-driver v1.17.6` (MongoDB) |
+| Scheduling | `github.com/robfig/cron/v3 v3.0.1` |
+| Concurrency | `golang.org/x/sync v0.16.0` (`errgroup`, `singleflight`) |
+
+## go.mod hygiene
 
 ```bash
-go mod tidy       # Add missing, remove unused
-go mod download   # Download deps
-go mod verify     # Verify checksums
-go get -u ./...   # Update all deps
-go mod graph      # Show dependency graph
+go mod tidy       # add missing, drop unused
+go mod verify     # verify checksums
+go mod download   # pre-fetch deps
 ```
 
-## Monorepo with go.work
+## Build & packaging
 
-```
-monorepo/
-├── go.work
-├── services/api/go.mod
-├── services/worker/go.mod
-└── shared/models/go.mod
-```
-
-```go
-// go.work
-go 1.24
-use (
-    ./services/api
-    ./services/worker
-    ./shared/models
-)
-```
-
-## Avoid Package-Level State
-
-```go
-// Bad: global mutable state
-var db *sql.DB
-func init() { db, _ = sql.Open("postgres", os.Getenv("DB")) }
-
-// Good: dependency injection
-type Server struct{ db *sql.DB }
-func NewServer(db *sql.DB) *Server { return &Server{db: db} }
-```
-
-## Package Naming
-
-```go
-package http     // Good: short, lowercase, no underscores
-package user     // Good: singular noun
-package httputil // Good: compound but concise
-
-package utils       // Bad: meaningless
-package userService // Bad: camelCase
-package models      // Bad: plural
-```
-
-## Build Tags
-
-```go
-//go:build integration
-package myapp
-
-func TestIntegration(t *testing.T) { ... }
-// Run: go test -tags=integration ./...
-
-//go:build linux || darwin
-//go:build amd64
-package myapp
-```
-
-## Dockerfile (Multi-Stage)
-
-```dockerfile
-FROM golang:1.24-alpine AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
-
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates
-COPY --from=builder /app/server /server
-EXPOSE 8080
-CMD ["/server"]
-```
-
-## Makefile
-
-```makefile
-.PHONY: build test lint run
-
-build:
-	go build -o bin/server ./cmd/server
-
-test:
-	go test -v -race -coverprofile=coverage.out ./...
-
-lint:
-	golangci-lint run ./...
-
-run:
-	go run ./cmd/server
-
-build-all:
-	GOOS=linux GOARCH=amd64 go build -o bin/server-linux ./cmd/server
-	GOOS=darwin GOARCH=arm64 go build -o bin/server-darwin ./cmd/server
-```
-
-## Version Info via ldflags
-
-```go
-package version
-
-var (
-    Version   = "dev"
-    GitCommit = "none"
-    BuildTime = "unknown"
-)
-```
+Builds go through the root `Makefile`, which includes `makefiles/{common,development,docker}.mk`:
 
 ```bash
-go build -ldflags "-X myapp/version.Version=1.0.0 \
-  -X myapp/version.GitCommit=$(git rev-parse HEAD) \
-  -X myapp/version.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" ./cmd/server
+make golang-build   # build the Go backend (makefiles/development.mk)
+make docker-test    # containerized test run   (makefiles/docker.mk)
+make help           # list all available targets
 ```
 
-## Configuration with envconfig
+- `backend/Dockerfile` and `frontend/Dockerfile` are multi-stage (build → minimal runtime image).
+- Keep `cmd/server/main.go` thin: load config, construct `wire.App`, run, handle signals.
+
+## Package naming
 
 ```go
-type Config struct {
-    Host    string        `envconfig:"SERVER_HOST" default:"0.0.0.0"`
-    Port    int           `envconfig:"SERVER_PORT" default:"8080"`
-    Timeout time.Duration `envconfig:"SERVER_TIMEOUT" default:"30s"`
-    DBURL   string        `envconfig:"DATABASE_URL" required:"true"`
-}
+package handler       // short, lowercase, no underscores
+package valueobject   // singular, domain-meaningful
+package provider
 
-func Load() (*Config, error) {
-    var cfg Config
-    return &cfg, envconfig.Process("", &cfg)
-}
+// avoid: utils, models (plural), userService (camelCase)
 ```

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"sync"
 
-	"bot-trade/infrastructure/provider/contract"
+	"backend/infrastructure/provider/contract"
 )
 
 // ProviderFactory creates a Provider instance.

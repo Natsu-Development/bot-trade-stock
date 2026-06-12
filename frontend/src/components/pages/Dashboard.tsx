@@ -9,6 +9,7 @@ import { ScreenerResultsTable } from '../screener/ScreenerResultsTable'
 import { ColumnSelector } from '../screener/ColumnSelector'
 import { useTableColumns } from '@/hooks/useTableColumns'
 import { api, apiToStock } from '../../lib/api'
+import { formatTimestamp } from '../../lib/utils'
 import type { Stock } from '../../types'
 
 const RS_BULLISH_THRESHOLD = 80
@@ -24,7 +25,7 @@ export function Dashboard() {
     bearishCount: number
   } | null>(null)
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
+  const [recomputing, setRecomputing] = useState(false)
   const [symbolSearch, setSymbolSearch] = useState('')
   const deferredSymbolSearch = useDeferredValue(symbolSearch)
 
@@ -60,8 +61,8 @@ export function Dashboard() {
   const fetchTopStocks = async () => {
     try {
       const response = await api.filterStocks({
-        filters: [{ field: 'rs_52w', op: '>=', value: RS_BULLISH_THRESHOLD }],
-        logic: 'and',
+        match: 'and',
+        conditions: [{ field: 'rs_52w', op: '>=', value: RS_BULLISH_THRESHOLD }],
       })
       const converted = response.stocks.map(apiToStock)
       setStocks(converted.slice(0, TOP_STOCKS_COUNT))
@@ -79,56 +80,59 @@ export function Dashboard() {
     setLoading(false)
   }
 
-  const handleRefresh = async () => {
-    setRefreshing(true)
+  const handleRecompute = async () => {
+    setRecomputing(true)
     try {
-      await api.refreshStocks()
+      await api.recomputeStocks()
       await fetchData()
     } catch (error) {
-      console.error('Failed to refresh:', error)
+      console.error('Failed to recompute:', error)
     }
-    setRefreshing(false)
+    setRecomputing(false)
   }
 
   useEffect(() => {
     fetchData()
   }, [])
 
-  const stats = useMemo(() => [
-    {
-      label: 'Total Stocks',
-      value: cacheInfo?.totalStocks?.toLocaleString() || '-',
-      change: cacheInfo?.cachedAt ? `Updated ${new Date(cacheInfo.cachedAt).toLocaleTimeString()}` : 'No data',
-      variant: 'default' as const,
-      icon: Icons.Users,
-    },
-    {
-      label: 'Bullish Signals',
-      value: stocks.filter(s => s.rs52w >= RS_BULLISH_THRESHOLD).length.toString(),
-      change: `RS 52W >= ${RS_BULLISH_THRESHOLD}`,
-      variant: 'bullish' as const,
-      icon: Icons.TrendUp,
-    },
-    {
-      label: 'Bearish Signals',
-      value: stocks.filter(s => s.rs52w <= RS_BEARISH_THRESHOLD).length.toString(),
-      change: `RS 52W <= ${RS_BEARISH_THRESHOLD}`,
-      variant: 'bearish' as const,
-      icon: Icons.TrendDown,
-    },
-    {
-      label: 'Cache Status',
-      value: cacheInfo ? 'Ready' : 'Empty',
-      change: cacheInfo?.cachedAt ? 'Cached' : 'Call refresh',
-      variant: 'default' as const,
-      icon: Icons.Database,
-    },
-  ], [cacheInfo, stocks])
+  const stats = useMemo(
+    () => [
+      {
+        label: 'Total Stocks',
+        value: cacheInfo?.totalStocks?.toLocaleString() || '-',
+        change: cacheInfo?.cachedAt ? `Updated ${formatTimestamp(cacheInfo.cachedAt)}` : 'No data',
+        variant: 'default' as const,
+        icon: Icons.Users,
+      },
+      {
+        label: 'Bullish Signals',
+        value: stocks.filter((s) => s.rs52w >= RS_BULLISH_THRESHOLD).length.toString(),
+        change: `RS 52W >= ${RS_BULLISH_THRESHOLD}`,
+        variant: 'bullish' as const,
+        icon: Icons.TrendUp,
+      },
+      {
+        label: 'Bearish Signals',
+        value: stocks.filter((s) => s.rs52w <= RS_BEARISH_THRESHOLD).length.toString(),
+        change: `RS 52W <= ${RS_BEARISH_THRESHOLD}`,
+        variant: 'bearish' as const,
+        icon: Icons.TrendDown,
+      },
+      {
+        label: 'Cache Status',
+        value: cacheInfo ? 'Ready' : 'Empty',
+        change: cacheInfo?.cachedAt ? 'Cached' : 'Awaiting data',
+        variant: 'default' as const,
+        icon: Icons.Database,
+      },
+    ],
+    [cacheInfo, stocks]
+  )
 
   const displayStocks = useMemo(() => {
     const q = deferredSymbolSearch.trim().toUpperCase()
     if (!q) return stocks
-    return stocks.filter(s => s.symbol.toUpperCase().includes(q))
+    return stocks.filter((s) => s.symbol.toUpperCase().includes(q))
   }, [stocks, deferredSymbolSearch])
 
   return (
@@ -137,8 +141,8 @@ export function Dashboard() {
         title="Dashboard"
         subtitle="Vietnamese Stock Market Overview"
         actions={
-          <Button icon="Refresh" onClick={handleRefresh} disabled={refreshing}>
-            <span>{refreshing ? 'Refreshing...' : 'Refresh Cache'}</span>
+          <Button icon="Refresh" onClick={handleRecompute} disabled={recomputing}>
+            <span>{recomputing ? 'Recomputing...' : 'Recompute'}</span>
           </Button>
         }
       />
@@ -166,17 +170,19 @@ export function Dashboard() {
 
       {/* Top RS Ratings Table */}
       <Card>
-        <Card.Header action={
-          <div className="flex gap-2">
-            <ColumnSelector
-              columnsByCategory={columnsByCategory}
-              visibleColumns={visibleColumns}
-              onToggle={toggleColumn}
-              onReset={resetColumns}
-            />
-            <Button variant="ghost">View All →</Button>
-          </div>
-        }>
+        <Card.Header
+          action={
+            <div className="flex gap-2">
+              <ColumnSelector
+                columnsByCategory={columnsByCategory}
+                visibleColumns={visibleColumns}
+                onToggle={toggleColumn}
+                onReset={resetColumns}
+              />
+              <Button variant="ghost">View All →</Button>
+            </div>
+          }
+        >
           <Icons.BarChart />
           <span>Top RS Ratings</span>
         </Card.Header>
@@ -191,7 +197,7 @@ export function Dashboard() {
             showCheckbox={false}
             noRowsMessage={
               stocks.length === 0
-                ? 'No stocks found. Click Refresh Cache to load data.'
+                ? 'No stocks yet — the refresh job loads data at startup and daily.'
                 : 'No symbols match your search.'
             }
           />

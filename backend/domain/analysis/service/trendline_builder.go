@@ -2,8 +2,8 @@
 package service
 
 import (
-	"bot-trade/domain/analysis/valueobject"
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	"backend/domain/analysis/valueobject"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // takeRecent returns the last n trendlines.

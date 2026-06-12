@@ -1,7 +1,7 @@
 /* ============================================
    TAILWIND DIRECTIVES
    ============================================ */
-@import "tailwindcss";
+@import 'tailwindcss';
 
 /* ============================================
    CUSTOM THEME (Tailwind CSS v4)
@@ -23,63 +23,126 @@
 
   /* Keyframes */
   @keyframes fade-in {
-    0% { opacity: 0; }
-    100% { opacity: 1; }
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
   }
 
   @keyframes fade-out {
-    0% { opacity: 1; }
-    100% { opacity: 0; }
+    0% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
   }
 
   @keyframes slide-in-from-top {
-    0% { transform: translateY(-20px); opacity: 0; }
-    100% { transform: translateY(0); opacity: 1; }
+    0% {
+      transform: translateY(-20px);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
   }
 
   @keyframes slide-in-from-bottom {
-    0% { transform: translateY(10px); opacity: 0; }
-    100% { transform: translateY(0); opacity: 1; }
+    0% {
+      transform: translateY(10px);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
   }
 
   @keyframes slide-in-from-right {
-    0% { transform: translateX(100%); opacity: 0; }
-    100% { transform: translateX(0); opacity: 1; }
+    0% {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    100% {
+      transform: translateX(0);
+      opacity: 1;
+    }
   }
 
   @keyframes slide-out-to-right {
-    0% { transform: translateX(0); opacity: 1; }
-    100% { transform: translateX(100%); opacity: 0; }
+    0% {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    100% {
+      transform: translateX(100%);
+      opacity: 0;
+    }
   }
 
   @keyframes slide-out-to-top {
-    0% { transform: translateY(0); opacity: 1; }
-    100% { transform: translateY(-20px); opacity: 0; }
+    0% {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(-20px);
+      opacity: 0;
+    }
   }
 
   @keyframes orb-float {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(-10%, 10%) scale(1.1); }
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+    50% {
+      transform: translate(-10%, 10%) scale(1.1);
+    }
   }
 
   @keyframes status-blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
   }
 
   @keyframes logo-pulse {
-    0%, 100% { box-shadow: var(--neon-bull-glow); }
-    50% { box-shadow: 0 0 30px rgba(0, 255, 136, 0.4), 0 0 60px rgba(0, 255, 136, 0.2); }
+    0%,
+    100% {
+      box-shadow: var(--neon-bull-glow);
+    }
+    50% {
+      box-shadow:
+        0 0 30px rgba(0, 255, 136, 0.4),
+        0 0 60px rgba(0, 255, 136, 0.2);
+    }
   }
 
   @keyframes chart-scan {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
   }
 
   @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
   }
 }
 
@@ -131,6 +194,25 @@
     --neon-amber: #ffaa00;
     --neon-purple: #9966ff;
 
+    /* Neon — deep (gradient end-stops) */
+    --neon-bull-deep: #00cc6a;
+    --neon-bear-deep: #cc2952;
+    --neon-cyan-deep: #00a8cc;
+
+    /* Neon — dim fills (low-alpha chip/badge backgrounds) */
+    --neon-purple-dim: rgba(153, 102, 255, 0.13);
+    --neon-amber-dim: rgba(255, 170, 0, 0.13);
+    --neon-amber-soft: rgba(255, 170, 0, 0.06);
+
+    /* Neon — translucent borders */
+    --neon-bull-border: rgba(0, 255, 136, 0.25);
+    --neon-bear-border: rgba(255, 51, 102, 0.25);
+    --neon-amber-border: rgba(255, 170, 0, 0.3);
+    --neon-cyan-border: rgba(0, 212, 255, 0.25);
+
+    /* Overlay — void-tinted modal backdrop */
+    --overlay-void: rgba(6, 6, 10, 0.85);
+
     /* Typography */
     --font-display: 'Outfit', sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
@@ -154,6 +236,29 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+  }
+
+  /* Interactive affordance: every native button is clickable (pointer),
+     disabled buttons read as not-allowed. Covers raw <button> elements across
+     the app so they match the kit's <Button> component without per-file edits. */
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  /* Remove the native number-input spinner arrows (increase/decrease) app-wide.
+     NumberInput already avoids them via type=text; this covers any raw
+     <input type="number"> (e.g. the Query Builder value field). */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
   }
 
   html {
@@ -367,15 +472,17 @@
   }
 
   /* ============================================
-     Stock Alerts — mandatory fixed-column grid.
-     Shared by the column header and every alert row so the eye scans straight
+     Watchlist — mandatory fixed-column grid.
+     Shared by the column header and every watchlist row so the eye scans straight
      down each column (exchange-style table). Expanded detail panels span the
      full width (grid-column: 1 / -1) and pad to align under WATCHING.
      Tracks: SYMBOL | STATUS | WATCHING(1fr) | ON/TOTAL | CHEVRON | ACTIONS.
      ============================================ */
-  .alert-row-grid {
+  .watchlist-row-grid {
     display: grid;
-    grid-template-columns: 7rem 6.5rem minmax(0, 1fr) 4.5rem 2rem 5rem;
+    /* CHEVRON | SYMBOL | STATUS | WATCHING(1fr) | ON/TOTAL | ACTIONS — chevron leads
+       the row so it lines up with the metrics-filter preset cards. */
+    grid-template-columns: 2rem 7rem 6.5rem minmax(0, 1fr) 4.5rem 5rem;
     align-items: center;
     gap: 0.5rem;
   }
@@ -573,7 +680,9 @@
     box-shadow: var(--neon-bull-glow);
   }
   50% {
-    box-shadow: 0 0 30px rgba(0, 255, 136, 0.4), 0 0 60px rgba(0, 255, 136, 0.2);
+    box-shadow:
+      0 0 30px rgba(0, 255, 136, 0.4),
+      0 0 60px rgba(0, 255, 136, 0.2);
   }
 }
 

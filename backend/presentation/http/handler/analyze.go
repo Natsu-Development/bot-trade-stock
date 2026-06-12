@@ -4,10 +4,10 @@ import (
 	"errors"
 	"net/http"
 
-	"bot-trade/application/port/inbound"
-	"bot-trade/domain/config"
-	marketvo "bot-trade/domain/shared/valueobject/market"
-	"bot-trade/presentation/http/response"
+	"backend/application/port/inbound"
+	"backend/domain/config"
+	marketvo "backend/domain/shared/valueobject/market"
+	"backend/presentation/http/response"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -15,13 +15,17 @@ import (
 
 // AnalyzeHandler handles unified analysis HTTP requests.
 type AnalyzeHandler struct {
-	analyzer inbound.Analyzer
+	analyzer   inbound.Analyzer
+	windowBars int
 }
 
 // NewAnalyzeHandler creates a new unified analyze handler.
-func NewAnalyzeHandler(analyzer inbound.Analyzer) *AnalyzeHandler {
+// windowBars is the operator-set bar count (ANALYSIS_WINDOW_BARS), interval-scaled
+// into the fetch span per request.
+func NewAnalyzeHandler(analyzer inbound.Analyzer, windowBars int) *AnalyzeHandler {
 	return &AnalyzeHandler{
-		analyzer: analyzer,
+		analyzer:   analyzer,
+		windowBars: windowBars,
 	}
 }
 
@@ -34,7 +38,8 @@ func NewAnalyzeHandler(analyzer inbound.Analyzer) *AnalyzeHandler {
 //   - end_date (optional): End date for analysis (defaults to today)
 //   - interval (optional): Data interval (defaults to 1D)
 //
-// startDate is automatically calculated as (end_date - config.LookbackDay)
+// startDate is automatically calculated as (end_date - the interval-scaled
+// fetch span for the operator-set window bar count).
 func (h *AnalyzeHandler) Analyze(c *gin.Context) {
 	configID := c.Query("config_id")
 	if configID == "" {
@@ -42,30 +47,23 @@ func (h *AnalyzeHandler) Analyze(c *gin.Context) {
 		return
 	}
 
-	// Fetch config first to get LookbackDay for startDate calculation
-	cfg, err := h.analyzer.GetConfig(c.Request.Context(), configID)
-	if err != nil {
-		response.NotFound(c, "configuration")
-		return
-	}
-
-	// Scale LookbackDay by interval cadence so weekly/monthly fetches return
-	// enough bars for the RSI/pivot/divergence pipeline. See ADR in
-	// .omc/plans/analyze-interval-autoscale.md.
+	// Scale the operator-set window bar count by interval cadence so
+	// weekly/monthly fetches return enough bars for the RSI/pivot/divergence
+	// pipeline.
 	intervalStr := c.DefaultQuery("interval", "1D")
 	interval, err := marketvo.NewInterval(intervalStr)
 	if err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}
-	effectiveLookback := marketvo.EffectiveLookbackDays(interval, cfg.LookbackDay)
+	span := marketvo.FetchSpanForBars(interval, h.windowBars)
 
-	// endDate defaults to today, startDate is calculated from effectiveLookback
-	query, err := marketvo.NewMarketDataQueryFromStrings(
+	// endDate defaults to today, startDate is calculated from the fetch span.
+	query, err := marketvo.NewMarketDataQuery(
 		c.Param("symbol"),
 		c.Query("end_date"),
 		intervalStr,
-		effectiveLookback,
+		span,
 	)
 	if err != nil {
 		response.BadRequest(c, err.Error())

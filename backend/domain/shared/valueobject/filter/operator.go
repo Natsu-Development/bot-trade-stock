@@ -35,6 +35,27 @@ var validOperators = []FilterOperator{
 	OperatorEqual,
 }
 
+// IsOrdering reports whether the operator is an inequality ({>, >=, <, <=}) —
+// i.e. a valid operator that is not equality. Field-vs-field comparisons require
+// an ordering operator (two floats are essentially never exactly equal, so '=' on
+// a field comparison would be a silent always-false footgun).
+func (o FilterOperator) IsOrdering() bool {
+	switch o {
+	case OperatorGreaterThanOrEqual, OperatorLessThanOrEqual, OperatorGreaterThan, OperatorLessThan:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsStrictInequality reports whether the operator is a strict inequality ({>, <}).
+// Continuous-float fields require this: a float never lands exactly on a
+// threshold, so '>=' / '<=' would be indistinguishable from '>' / '<' (the
+// boundary is unreachable) — only the strict forms are offered.
+func (o FilterOperator) IsStrictInequality() bool {
+	return o == OperatorGreaterThan || o == OperatorLessThan
+}
+
 func isValidFilterOperator(op FilterOperator) bool {
 	for _, valid := range validOperators {
 		if valid == op {

@@ -30,7 +30,7 @@ cd scripts
 This interactive script will:
 - ✅ Auto-detect your GitHub repository
 - ✅ Create production environment in GitHub
-- ✅ Set up all environment variables from `bot-trade/env.example`
+- ✅ Set up all environment variables from `backend/env.example`
 - ✅ Show you exactly which secrets to add manually
 
 ### 2. Add Required Secrets
@@ -79,7 +79,7 @@ git push origin master
 ./init-github-env.sh REPO_OWNER REPO_NAME GIT_TOKEN [ENV_FILE] [ENVIRONMENT]
 
 # Example
-./init-github-env.sh myuser trading-app ghp_xxxxx ../bot-trade/env.example production
+./init-github-env.sh myuser trading-app ghp_xxxxx ../backend/env.example production
 ```
 
 ### VPS Setup (Fresh Server)
@@ -155,7 +155,7 @@ chmod +x init-github-env.sh
 ```bash
 # Make sure you're in the scripts directory
 cd scripts
-ls ../bot-trade/env.example  # should exist
+ls ../backend/env.example  # should exist
 ```
 
 ### ❌ "GitHub API error"
@@ -174,7 +174,7 @@ To add new environment variables:
 
 ### Option 1: Use the script again
 ```bash
-# Add new variables to bot-trade/env.example
+# Add new variables to backend/env.example
 cd scripts
 ./init-github-env.sh
 ```

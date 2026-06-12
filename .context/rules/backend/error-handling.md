@@ -2,7 +2,7 @@
 name: backend-error-handling
 description: Go error handling - wrapping, checking, anti-patterns
 paths:
-  - "bot-trade/**/*.go"
+  - "backend/**/*.go"
 ---
 
 # Go Error Handling

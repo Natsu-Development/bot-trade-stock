@@ -1,94 +1,102 @@
-import { memo, useMemo } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Icons } from '../icons/Icons'
-import { FilterPill } from '../screener/FilterPill'
+import { Badge } from '../ui/badge'
+import { apiNodeToTree } from '@/lib/filterSerialize'
+import { FilterFormula } from '../screener/FilterFormula'
+import { countLeaves } from '@/lib/filterTreeOps'
 import type { ScreenerFilterPreset } from '@/lib/api'
-import type { FilterFieldOption, DynamicFilter } from '@/types'
 
 interface FilterPresetCardProps {
   preset: ScreenerFilterPreset
-  fieldOptions: FilterFieldOption[]
   onEdit: (preset: ScreenerFilterPreset) => void
   onDelete: (name: string) => void
 }
 
-export const FilterPresetCard = memo(function FilterPresetCard({ preset, fieldOptions, onEdit, onDelete }: FilterPresetCardProps) {
-  const fieldOptionsMap = useMemo(() => {
-    return new Map<string, FilterFieldOption>(fieldOptions.map(o => [o.value, o]))
-  }, [fieldOptions])
-
-  const dynamicFilters = useMemo(() => {
-    return preset.filters.map((f, index) => ({
-      id: `preset-${index}`,
-      field: f.field,
-      operator: f.op,
-      value: f.value,
-    })) as DynamicFilter[]
-  }, [preset.filters])
+/**
+ * Config-page saved-preset card (R6). Collapsed by default: the header (chevron +
+ * name + condition count + edit/delete) is always shown; the pretty filter
+ * formula and exchanges reveal on expand. Editing opens the shared Query Builder.
+ */
+export const FilterPresetCard = memo(function FilterPresetCard({
+  preset,
+  onEdit,
+  onDelete,
+}: FilterPresetCardProps) {
+  // Hydrate the flat preset tree once, then derive both the pretty formula and the
+  // leaf count from it (one parse per preset change, not two).
+  const { tree, leafCount } = useMemo(() => {
+    const tree = apiNodeToTree(preset)
+    return { tree, leafCount: countLeaves(tree) }
+  }, [preset])
+  const [expanded, setExpanded] = useState(false)
 
   return (
-    <div className="p-4 bg-[var(--bg-elevated)] border border-[var(--border-dim)] rounded-lg hover:border-[var(--border-glow)] transition-all duration-200">
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <h4 className="text-sm font-semibold text-[var(--text-primary)]">{preset.name}</h4>
-          <span
+    <div className="rounded-lg border border-[var(--border-dim)] bg-[var(--bg-elevated)] transition-all duration-200 hover:border-[var(--border-glow)]">
+      {/* Header (always visible) — the chevron+name region toggles collapse. */}
+      <div className="flex items-center justify-between gap-2 p-4">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          <Icons.ChevronRight
             className={cn(
-              'px-2 py-0.5 text-[10px] font-medium rounded uppercase',
-              preset.logic === 'and'
-                ? 'bg-[var(--neon-bull-dim)] text-[var(--neon-bull)]'
-                : 'bg-[var(--neon-bear-dim)] text-[var(--neon-bear)]'
+              'h-4 w-4 flex-shrink-0 text-[var(--text-muted)] transition-transform duration-150',
+              expanded && 'rotate-90'
             )}
-          >
-            {preset.logic === 'and' ? 'All' : 'Any'}
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
+          />
+          <h4 className="truncate text-sm font-semibold text-[var(--text-primary)]">
+            {preset.name}
+          </h4>
+          <Badge variant="cyan" className="flex-shrink-0">
+            {leafCount} {leafCount === 1 ? 'condition' : 'conditions'}
+          </Badge>
+        </button>
+        <div className="flex flex-shrink-0 items-center gap-1">
           <button
-            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--neon-cyan)] hover:bg-[var(--bg-hover)] rounded transition-all duration-150"
+            className="rounded p-1.5 text-[var(--text-muted)] transition-all duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--neon-cyan)]"
             onClick={() => onEdit(preset)}
             type="button"
             aria-label="Edit preset"
           >
-            <Icons.Settings2 className="w-4 h-4" />
+            <Icons.Settings2 className="h-4 w-4" />
           </button>
           <button
-            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--neon-bear)] hover:bg-[var(--bg-hover)] rounded transition-all duration-150"
+            className="rounded p-1.5 text-[var(--text-muted)] transition-all duration-150 hover:bg-[var(--bg-hover)] hover:text-[var(--neon-bear)]"
             onClick={() => onDelete(preset.name)}
             type="button"
             aria-label="Delete preset"
           >
-            <Icons.Trash2 className="w-4 h-4" />
+            <Icons.Trash2 className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* Filter conditions */}
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {dynamicFilters.map((filter) => (
-          <FilterPill
-            key={filter.id}
-            filter={filter}
-            fieldOption={fieldOptionsMap.get(filter.field)}
-            variant="compact"
-            hideActions
-          />
-        ))}
-      </div>
-
-      {/* Exchanges */}
-      {preset.exchanges && preset.exchanges.length > 0 && (
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-[var(--text-muted)]">Exchanges:</span>
-          <div className="flex gap-1">
-            {preset.exchanges.map((exchange) => (
-              <span
-                key={exchange}
-                className="px-1.5 py-0.5 text-[10px] font-medium bg-[var(--bg-deep)] border border-[var(--border-dim)] rounded text-[var(--text-secondary)]"
-              >
-                {exchange}
-              </span>
-            ))}
+      {expanded && (
+        <div className="px-4 pb-4">
+          {/* Preset formula (rendered from {root}) */}
+          <div
+            className="mb-3 rounded-md border border-[var(--border-dim)] border-l-[3px] border-l-[var(--neon-bull)] bg-[var(--bg-deep)] px-3 py-2"
+            data-testid="preset-formula"
+          >
+            <FilterFormula root={tree} />
           </div>
+
+          {/* Exchanges */}
+          {preset.exchanges && preset.exchanges.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-[var(--text-muted)]">Exchanges:</span>
+              <div className="flex gap-1">
+                {preset.exchanges.map((exchange) => (
+                  <Badge key={exchange} variant="outline">
+                    {exchange}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -2,7 +2,7 @@
 package valueobject
 
 import (
-	marketvo "bot-trade/domain/shared/valueobject/market"
+	marketvo "backend/domain/shared/valueobject/market"
 )
 
 // PivotField specifies which value to use for pivot detection.

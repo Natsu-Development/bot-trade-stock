@@ -23,7 +23,7 @@ type JobConfig struct {
 	// regardless of the HoSE intraday session window. Intended for local
 	// development; production should leave this false so ATO (09:00-09:15)
 	// and lunch (11:30-13:00) ticks are skipped. Currently consumed only by
-	// StockAlertJob (env: STOCK_ALERT_IGNORE_SESSION_GATE).
+	// WatchlistJob (env: WATCHLIST_IGNORE_SESSION_GATE).
 	IgnoreSessionGate bool
 }
 
@@ -43,6 +43,18 @@ type InfraConfig struct {
 	MaxProviderRPS     int    // Hard ceiling for adaptive token bucket
 	PrimaryProvider    string // Primary provider name (e.g., "vietcap")
 
+	// Analysis Configuration
+	// AnalysisWindowBars is the operator-set number of bars the analyze pipeline
+	// targets. Interval-scaled into a calendar-day fetch span via
+	// market.FetchSpanForBars. Required (no default) — fail-fast on unset.
+	AnalysisWindowBars int
+
+	// SignalsLRUSize caps the per-config screener signals cache (the Layer-2
+	// SignalComputeUseCase LRU). Operator-set so the working set can be tuned to the
+	// number of active configs without a rebuild. Required (no default) —
+	// fail-fast on unset, like AnalysisWindowBars.
+	SignalsLRUSize int
+
 	// MongoDB Configuration
 	MongoDBURI      string
 	MongoDBDatabase string
@@ -53,7 +65,7 @@ type InfraConfig struct {
 	BreakoutJob  JobConfig
 	BreakdownJob JobConfig
 	StockRefresh JobConfig
-	StockAlert   JobConfig
+	Watchlist    JobConfig
 
 	// Logging Configuration
 	LogLevel    string
@@ -89,6 +101,10 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	cfg.MaxProviderRPS = getNumberEnv("MAX_PROVIDER_RPS", &errors)
 	cfg.PrimaryProvider = getStringEnv("PRIMARY_PROVIDER", &errors)
 
+	// Analysis Configuration (required, no default)
+	cfg.AnalysisWindowBars = getNumberEnv("ANALYSIS_WINDOW_BARS", &errors)
+	cfg.SignalsLRUSize = getNumberEnv("SIGNALS_LRU_SIZE", &errors)
+
 	// MongoDB Configuration
 	cfg.MongoDBURI = getStringEnv("MONGODB_URI", &errors)
 	cfg.MongoDBDatabase = getStringEnv("MONGODB_DATABASE", &errors)
@@ -104,7 +120,7 @@ func LoadInfraFromEnv() (*InfraConfig, error) {
 	cfg.BreakoutJob = loadJobTypeConfig("BREAKOUT", []string{"1H", "1W"}, &errors)
 	cfg.BreakdownJob = loadJobTypeConfig("BREAKDOWN", []string{"1H", "1W"}, &errors)
 	cfg.StockRefresh = loadStockRefreshConfig(&errors)
-	cfg.StockAlert = loadStockAlertConfig(&errors)
+	cfg.Watchlist = loadWatchlistConfig(&errors)
 
 	// Logging Configuration
 	cfg.LogLevel = getLogLevelEnv("LOG_LEVEL", &errors)
@@ -168,15 +184,15 @@ func loadStockRefreshConfig(errors *[]string) JobConfig {
 	}
 }
 
-// loadStockAlertConfig loads stock alert job configuration.
-func loadStockAlertConfig(errors *[]string) JobConfig {
+// loadWatchlistConfig loads watchlist job configuration.
+func loadWatchlistConfig(errors *[]string) JobConfig {
 	return JobConfig{
-		Timeout:           time.Duration(getNumberEnv("STOCK_ALERT_TIMEOUT_MINUTES", errors)) * time.Minute,
-		IgnoreSessionGate: getBoolEnv("STOCK_ALERT_IGNORE_SESSION_GATE", errors),
+		Timeout:           time.Duration(getNumberEnv("WATCHLIST_TIMEOUT_MINUTES", errors)) * time.Minute,
+		IgnoreSessionGate: getBoolEnv("WATCHLIST_IGNORE_SESSION_GATE", errors),
 		Intervals: map[string]IntervalConfig{
 			"default": {
-				Enabled:  getBoolEnv("STOCK_ALERT_ENABLED", errors),
-				Schedule: getStringEnv("STOCK_ALERT_SCHEDULE", errors),
+				Enabled:  getBoolEnv("WATCHLIST_ENABLED", errors),
+				Schedule: getStringEnv("WATCHLIST_SCHEDULE", errors),
 			},
 		},
 	}

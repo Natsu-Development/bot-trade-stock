@@ -10,7 +10,7 @@ interface SidebarProps {
 const navItems = [
   { id: 'dashboard' as Page, icon: Icons.Dashboard, label: 'Dashboard' },
   { id: 'screener' as Page, icon: Icons.Search, label: 'Screener' },
-  { id: 'divergence' as Page, icon: Icons.Chart, label: 'Divergence' },
+  { id: 'analyze' as Page, icon: Icons.Chart, label: 'Analyze' },
   { id: 'config' as Page, icon: Icons.Settings, label: 'Config' },
   { id: 'settings' as Page, icon: Icons.Sliders, label: 'Settings' },
 ]
@@ -27,11 +27,18 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       <nav className="flex flex-col gap-2 flex-1">
         {navItems.map((item) => {
           const isActive = currentPage === item.id
+          const href = item.id === 'dashboard' ? '/' : `/${item.id}`
           return (
-            <button
+            <a
               key={item.id}
-              type="button"
-              onClick={() => onNavigate(item.id)}
+              href={href}
+              onClick={(e) => {
+                // Let the browser handle modified / non-left clicks so Ctrl/Cmd-click
+                // (and middle-click) opens the page in a new tab.
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
+                e.preventDefault()
+                onNavigate(item.id)
+              }}
               aria-label={item.label}
               aria-current={isActive ? 'page' : undefined}
               className={cn(
@@ -43,7 +50,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                   'shadow-[inset_0_0_20px_var(--neon-cyan-dim)]',
                   'before:absolute before:left-[-13px] before:top-1/2 before:-translate-y-1/2',
                   'before:w-[3px] before:h-6 before:bg-[var(--neon-cyan)] before:rounded-r-sm',
-                  'before:shadow-[var(--neon-cyan-glow)]'
+                  'before:shadow-[var(--neon-cyan-glow)]',
                 ]
               )}
             >
@@ -51,7 +58,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
               <span className="absolute left-[60px] px-3 py-1.5 bg-[var(--bg-elevated)] text-[var(--text-primary)] text-xs font-medium whitespace-nowrap rounded-sm border border-[var(--border-glow)] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-[1000]">
                 {item.label}
               </span>
-            </button>
+            </a>
           )
         })}
       </nav>

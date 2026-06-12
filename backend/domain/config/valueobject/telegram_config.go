@@ -1,7 +1,7 @@
 // Package valueobject provides immutable value objects for the config domain.
 package valueobject
 
-import "bot-trade/domain/shared"
+import "backend/domain/shared"
 
 // Telegram holds Telegram notification settings.
 type Telegram struct {

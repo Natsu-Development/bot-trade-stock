@@ -7,6 +7,12 @@ description: Use when designing or modifying React and TypeScript frontend compo
 
 Guidelines for the frontend SPA built with React 18, TypeScript, Tailwind CSS.
 
+> **The design system is authoritative in [`references/ui-kit.md`](references/ui-kit.md)** — design
+> tokens, the `ui/` primitive catalog (Button, Card, Dialog, Select, Table, …), CVA variants, the
+> icon registry, animation utilities, and the **no-hardcoded-colors** lint rule. This file covers the
+> broader app patterns (structure, hooks, API client, state, navigation); defer every component and
+> styling specific to the UI Kit. Code examples below are illustrative, not authoritative.
+
 ## Tech Stack
 
 | Category | Technology |
@@ -129,31 +135,26 @@ export interface Filter {
 export type FilterOperator = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte'
 ```
 
-### Styling with Tailwind
+### Styling
 
-```typescript
-// Use cn() for conditional classes
+Compose classes through `cn()` (`src/lib/utils.ts` = `twMerge(clsx(...))`). Visual variants live
+in a component's `cva()` map — **never** as ad-hoc classes at the call site. Colors / spacing /
+radius / motion come from **design tokens only**: `var(--token)` or the Tailwind alias
+(`bg-surface`, `text-neon-cyan`). Raw hex / `rgb()` in `className` (e.g. `bg-[#00d4ff]`) is a lint
+**error**. Reach for an existing `ui/` primitive before writing markup.
+
+```tsx
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 
-interface ButtonProps {
-  variant?: 'primary' | 'secondary'
-  children: React.ReactNode
-}
+// Use the kit's primitive + its CVA variants — don't hand-roll buttons.
+<Button variant="primary" icon="Save">Save preset</Button>
 
-export function Button({ variant = 'primary', children }: ButtonProps) {
-  return (
-    <button
-      className={cn(
-        'px-4 py-2 rounded-md font-medium',
-        variant === 'primary' && 'bg-cyan-500 text-black',
-        variant === 'secondary' && 'bg-gray-700 text-white'
-      )}
-    >
-      {children}
-    </button>
-  )
-}
+// When composing, merge through cn() and reference tokens, not raw colors.
+<div className={cn('px-4 py-2 rounded-md', isActive && 'text-neon-cyan')} />
 ```
+
+> Tokens, the full primitive catalog, variants, and enforcement: [`references/ui-kit.md`](references/ui-kit.md) §2–§4, §10.
 
 ## State Management
 

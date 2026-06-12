@@ -1,10 +1,10 @@
 package trendline
 
 import (
-	"bot-trade/application/dto"
-	appPrep "bot-trade/application/usecase/analyze/prep"
-	analysisservice "bot-trade/domain/analysis/service"
-	analysisvo "bot-trade/domain/analysis/valueobject"
+	"backend/application/dto"
+	appPrep "backend/application/usecase/analyze/prep"
+	analysisservice "backend/domain/analysis/service"
+	analysisvo "backend/domain/analysis/valueobject"
 )
 
 // BreakoutUseCase detects resistance trendline signals.
@@ -20,24 +20,24 @@ func NewBreakoutUseCase() *BreakoutUseCase {
 // Execute performs resistance trendline analysis on prepared data.
 // Pure analysis - no I/O, receives prepared data directly.
 // Detects Breakout signals from resistance trendlines.
-func (uc *BreakoutUseCase) Execute(data *appPrep.DataPrepare) ([]dto.TrendlineDTO, []dto.SignalDTO, error) {
+func (uc *BreakoutUseCase) Execute(prepared *appPrep.DataPrepare) ([]dto.TrendlineDTO, []dto.SignalDTO, error) {
 	// Call domain services directly
-	pivotPeriod := int(data.Config.PivotPeriod)
+	pivotPeriod := int(prepared.Config.PivotPeriod)
 
 	// Find price high pivots for resistance trendlines
-	priceHighPivots := analysisservice.FindHighPivots(data.DataRecent, analysisvo.FieldHigh, pivotPeriod)
+	priceHighPivots := analysisservice.FindHighPivots(prepared.Data, analysisvo.FieldHigh, pivotPeriod)
 
 	// Build resistance trendlines
-	trendlines := analysisservice.BuildResistanceTrendlines(priceHighPivots, data.Config.Trendline.MaxLines)
+	trendlines := analysisservice.BuildResistanceTrendlines(priceHighPivots, prepared.Config.Trendline.MaxLines)
 
 	// Generate breakout signals
 	signals := analysisservice.GenerateResistanceSignals(
 		trendlines,
-		data.DataRecent,
-		data.Config.Trendline.ProximityDecimal(),
+		prepared.Data,
+		prepared.Config.Trendline.ProximityDecimal(),
 	)
 
-	trendlineDTOs := dto.ToTrendlineDTOs(data.DataRecent, trendlines)
+	trendlineDTOs := dto.ToTrendlineDTOs(prepared.Data, trendlines)
 	signalDTOs := dto.ToSignalDTOs(signals)
 
 	return trendlineDTOs, signalDTOs, nil
