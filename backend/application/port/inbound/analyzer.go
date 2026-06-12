@@ -1,0 +1,21 @@
+// Package inbound defines primary (driving) port interfaces.
+// These represent what the application offers to the outside world.
+// Implemented by use cases, consumed by presentation handlers and schedulers.
+package inbound
+
+import (
+	"context"
+
+	"backend/application/dto"
+	marketvo "backend/domain/shared/valueobject/market"
+)
+
+// Analyzer defines the interface for unified analysis use cases.
+// Combines bullish divergence, bearish divergence, and trendline signals
+// into a single analysis, reducing redundant API calls.
+//
+// Returns a plain DTO containing raw domain data.
+// The presentation layer is responsible for converting to API response format.
+type Analyzer interface {
+	Execute(ctx context.Context, q marketvo.MarketDataQuery, configID string) (*dto.AnalysisResult, error)
+}

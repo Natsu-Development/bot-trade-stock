@@ -9,14 +9,15 @@ const badgeVariants = cva(
     variants: {
       variant: {
         hose: 'bg-[var(--neon-cyan-dim)] text-[var(--neon-cyan)]',
-        hnx: 'bg-[rgba(153,102,255,0.13)] text-[var(--neon-purple)]',
-        upcom: 'bg-[rgba(255,170,0,0.13)] text-[var(--neon-amber)]',
+        hnx: 'bg-[var(--neon-purple-dim)] text-[var(--neon-purple)]',
+        upcom: 'bg-[var(--neon-amber-dim)] text-[var(--neon-amber)]',
         bull: 'bg-[var(--neon-bull-dim)] text-[var(--neon-bull)]',
         bear: 'bg-[var(--neon-bear-dim)] text-[var(--neon-bear)]',
         cyan: 'bg-[var(--neon-cyan-dim)] text-[var(--neon-cyan)]',
-        amber: 'bg-[rgba(255,170,0,0.13)] text-[var(--neon-amber)]',
-        purple: 'bg-[rgba(153,102,255,0.13)] text-[var(--neon-purple)]',
-        default: 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-dim)]',
+        amber: 'bg-[var(--neon-amber-dim)] text-[var(--neon-amber)]',
+        purple: 'bg-[var(--neon-purple-dim)] text-[var(--neon-purple)]',
+        default:
+          'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-dim)]',
         outline: 'border border-[var(--border-dim)] text-[var(--text-secondary)]',
       },
     },
@@ -31,9 +32,7 @@ export interface BadgeProps
     VariantProps<typeof badgeVariants> {}
 
 const Badge = memo(function Badge({ className, variant, ...props }: BadgeProps) {
-  return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
-  )
+  return <div className={cn(badgeVariants({ variant }), className)} {...props} />
 })
 
 export { Badge }

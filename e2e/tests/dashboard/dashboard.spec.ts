@@ -14,8 +14,8 @@ test.describe('Dashboard Page', () => {
       await expect(page.getByText('Vietnamese Stock Market Overview')).toBeVisible()
     })
 
-    test('should display refresh cache button', async ({ page }) => {
-      await expect(page.getByRole('button', { name: /Refresh Cache/i })).toBeVisible()
+    test('should display recompute button', async ({ page }) => {
+      await expect(page.getByRole('button', { name: /Recompute/i })).toBeVisible()
     })
 
     test('should display live clock', async ({ page }) => {
@@ -39,6 +39,21 @@ test.describe('Dashboard Page', () => {
     test('should show cache status as Ready or Empty', async ({ page }) => {
       await expect(page.getByText(/Ready|Empty/)).toBeVisible()
     })
+
+    test('shows the last-refresh time in DD/MM/YYYY (day-first) format', async ({ page }) => {
+      // The Total Stocks card's change line reads `Updated <DD/MM/YYYY, h:mm:ss AM/PM>`
+      // when cache data exists, else 'No data'. The zero-padded day-first date is the
+      // discriminator: the previous toLocaleString() output ('6/7/2026') was single
+      // digit and would NOT satisfy \d{2}/\d{2}/\d{4}.
+      const card = page.getByText('Total Stocks', { exact: true }).locator('..')
+      await expect(card).toBeVisible()
+
+      const change = card.locator('span').last()
+      await expect(change).toHaveText(
+        /^(Updated \d{2}\/\d{2}\/\d{4}, \d{1,2}:\d{2}:\d{2} (AM|PM)|No data)$/,
+        { timeout: 10000 }
+      )
+    })
   })
 
   test.describe('Quick Symbol Search', () => {
@@ -47,12 +62,12 @@ test.describe('Dashboard Page', () => {
     })
 
     test('should have search input', async ({ page }) => {
-      const input = page.getByPlaceholder(/Enter symbol/i)
+      const input = page.getByPlaceholder(/Search symbol/i)
       await expect(input).toBeVisible()
     })
 
     test('should accept text input', async ({ page }) => {
-      const input = page.getByPlaceholder(/Enter symbol/i)
+      const input = page.getByPlaceholder(/Search symbol/i)
       await input.fill('VCB')
       await expect(input).toHaveValue('VCB')
     })
@@ -68,8 +83,10 @@ test.describe('Dashboard Page', () => {
       await expect(page.getByRole('columnheader', { name: 'Exchange' })).toBeVisible()
       await expect(page.getByRole('columnheader', { name: 'RS 52W' })).toBeVisible()
       await expect(page.getByRole('columnheader', { name: 'Price' })).toBeVisible()
-      await expect(page.getByRole('columnheader', { name: 'Change', exact: true })).toBeVisible()
-      await expect(page.getByRole('columnheader', { name: 'Volume' })).toBeVisible()
+      // The price-change column header is now 'Chg%' (was 'Change'); the default
+      // volume column is 'Vol/SMA' (raw 'Volume' is hidden by default).
+      await expect(page.getByRole('columnheader', { name: 'Chg%', exact: true })).toBeVisible()
+      await expect(page.getByRole('columnheader', { name: 'Vol/SMA' })).toBeVisible()
     })
 
     test('should show stock rows when data is loaded', async ({ page }) => {
@@ -84,11 +101,11 @@ test.describe('Dashboard Page', () => {
     })
   })
 
-  test.describe('Refresh Cache', () => {
-    test('should show loading state when refreshing', async ({ page }) => {
-      const refreshBtn = page.getByRole('button', { name: /Refresh Cache/i })
-      await refreshBtn.click()
-      await expect(page.getByText(/Refreshing.../i)).toBeVisible()
+  test.describe('Recompute', () => {
+    test('should show loading state when recomputing', async ({ page }) => {
+      const recomputeBtn = page.getByRole('button', { name: 'Recompute', exact: true })
+      await recomputeBtn.click()
+      await expect(page.getByText(/Recomputing.../i)).toBeVisible()
     })
   })
 })
@@ -100,29 +117,31 @@ test.describe('Navigation', () => {
 
     const nav = page.locator('nav')
     await expect(nav).toBeVisible()
-    await expect(nav.getByRole('button', { name: 'Dashboard' })).toBeVisible()
-    await expect(nav.getByRole('button', { name: 'Screener' })).toBeVisible()
-    await expect(nav.getByRole('button', { name: 'Divergence' })).toBeVisible()
-    await expect(nav.getByRole('button', { name: 'Config' })).toBeVisible()
-    await expect(nav.getByRole('button', { name: 'Settings' })).toBeVisible()
+    // Nav items are <a> links (path routing); the analyze link is labelled "Analyze".
+    await expect(nav.getByRole('link', { name: 'Dashboard' })).toBeVisible()
+    await expect(nav.getByRole('link', { name: 'Screener' })).toBeVisible()
+    await expect(nav.getByRole('link', { name: 'Analyze' })).toBeVisible()
+    await expect(nav.getByRole('link', { name: 'Config' })).toBeVisible()
+    await expect(nav.getByRole('link', { name: 'Settings' })).toBeVisible()
   })
 
   test('should highlight active page in sidebar', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const dashboardBtn = page.locator('nav').getByRole('button', { name: 'Dashboard' })
-    await expect(dashboardBtn).toHaveAttribute('aria-current', 'page')
+    const dashboardLink = page.locator('nav').getByRole('link', { name: 'Dashboard' })
+    await expect(dashboardLink).toHaveAttribute('aria-current', 'page')
   })
 
   test('should navigate between pages', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    await page.locator('nav').getByRole('button', { name: 'Screener' }).click()
-    await expect(page.getByRole('heading', { name: 'Stock Screener' })).toBeVisible({ timeout: 5000 })
+    await page.locator('nav').getByRole('link', { name: 'Screener' }).click()
+    // The screener has no page heading anymore; its filter section signals readiness.
+    await expect(page.getByText('Filter Conditions')).toBeVisible({ timeout: 5000 })
 
-    await page.locator('nav').getByRole('button', { name: 'Dashboard' }).click()
+    await page.locator('nav').getByRole('link', { name: 'Dashboard' }).click()
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 5000 })
   })
 })

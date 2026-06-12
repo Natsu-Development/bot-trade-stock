@@ -10,7 +10,10 @@ const API_BASE = 'http://localhost:8080'
 export const TEST_USERNAME = 'e2e_test_user'
 
 setup('authenticate', async ({ page }) => {
-  // Create config via API first (backend requires at least one symbol)
+  // Create config via API first if one doesn't already exist. Uses the CURRENT
+  // config schema: the legacy bearish_symbols/bullish_symbols fields were removed
+  // in the watchlist rename, so seed a `watchlist` entry with the canonical
+  // condition shape (matches helpers.resetTestConfig + watchlistMutations.seedCondition).
   const response = await fetch(`${API_BASE}/config/${TEST_USERNAME}`)
   if (!response.ok) {
     await fetch(`${API_BASE}/config`, {
@@ -20,12 +23,12 @@ setup('authenticate', async ({ page }) => {
         id: TEST_USERNAME,
         rsi_period: 14,
         pivot_period: 5,
-        lookback_day: 365,
         divergence: { range_min: 30, range_max: 70 },
         trendline: { max_lines: 5, proximity_percent: 3 },
-        indices_recent: 5,
-        bearish_symbols: ['VCB'],
-        bullish_symbols: ['VIC'],
+        signal_days_threshold: 30,
+        watchlist: [
+          { symbol: 'VCB', conditions: [{ type: 'bullish_divergence', threshold: 0, enabled: false }] },
+        ],
         telegram: { enabled: false },
       }),
     })

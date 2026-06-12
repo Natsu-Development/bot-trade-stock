@@ -1,0 +1,249 @@
+// Package aggregate defines trading configuration domain aggregate.
+package aggregate
+
+import (
+	"time"
+
+	"backend/domain/config/valueobject"
+	"backend/domain/shared"
+	"backend/domain/shared/valueobject/market"
+)
+
+const (
+	MinSignalDaysThreshold = 1
+	MaxSignalDaysThreshold = 365
+)
+
+// TradingConfig represents a user's trading configuration.
+// This is the aggregate root for the trading configuration bounded context.
+type TradingConfig struct {
+	ID          valueobject.ConfigID    `bson:"_id"`
+	RSIPeriod   valueobject.RSIPeriod   `bson:"rsi_period"`
+	PivotPeriod valueobject.PivotPeriod `bson:"pivot_period"`
+	Divergence  valueobject.Divergence  `bson:"divergence"`
+	Trendline   valueobject.Trendline   `bson:"trendline"`
+	// SignalDaysThreshold is the configured recency window (in days): a
+	// trendline/RSI-divergence signal only counts when its most recent point falls
+	// within this many days, not across the whole analyzed range.
+	SignalDaysThreshold int                  `bson:"signal_days_threshold"`
+	Telegram            valueobject.Telegram `bson:"telegram"`
+	// MetricsFilter holds user-saved screener filter configurations.
+	// Nil = not set, empty array = user cleared their filters.
+	MetricsFilter []valueobject.MetricsFilter `bson:"metrics_filter,omitempty"`
+	// Watchlist holds user-configured price/volume watchlist items.
+	// Nil = not set, empty array = user cleared their watchlist.
+	Watchlist []valueobject.WatchlistItem `bson:"watchlist,omitempty"`
+	CreatedAt time.Time                   `bson:"created_at"`
+	UpdatedAt time.Time                   `bson:"updated_at"`
+}
+
+// NewTradingConfig creates a new TradingConfig with validation.
+// Requires all configuration parameters to be explicitly provided.
+func NewTradingConfig(
+	id valueobject.ConfigID,
+	rsiPeriod valueobject.RSIPeriod,
+	pivotPeriod valueobject.PivotPeriod,
+	divergence valueobject.Divergence,
+	trendline valueobject.Trendline,
+	signalDaysThreshold int,
+) (*TradingConfig, error) {
+	cfg := &TradingConfig{
+		ID:                  id,
+		RSIPeriod:           rsiPeriod,
+		PivotPeriod:         pivotPeriod,
+		Divergence:          divergence,
+		Trendline:           trendline,
+		SignalDaysThreshold: signalDaysThreshold,
+		Telegram:            valueobject.Telegram{Enabled: false},
+		CreatedAt:           time.Now(),
+		UpdatedAt:           time.Now(),
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
+}
+
+// Merge combines a partial update into this config, returning a new config
+// with all invariants validated. Only non-zero/empty fields from the update
+// override existing values.
+func (c *TradingConfig) Merge(update *TradingConfig) (*TradingConfig, error) {
+	merged := *c // Shallow copy
+
+	// Override primitive VOs if explicitly set
+	var emptyRSI valueobject.RSIPeriod
+	var emptyPivot valueobject.PivotPeriod
+
+	if update.RSIPeriod != emptyRSI {
+		merged.RSIPeriod = update.RSIPeriod
+	}
+	if update.PivotPeriod != emptyPivot {
+		merged.PivotPeriod = update.PivotPeriod
+	}
+	// Zero is the sentinel for "not provided" — matches the pattern used for
+	// every sibling VO above and preserves the partial-PUT semantics promised
+	// by this method's doc comment. An explicit zero would be invalid anyway
+	// (Validate rejects anything outside [MinSignalDaysThreshold, Max]), so
+	// treating it as "absent" loses no legal input.
+	if update.SignalDaysThreshold != 0 {
+		merged.SignalDaysThreshold = update.SignalDaysThreshold
+	}
+
+	// Merge divergence config
+	if update.Divergence.RangeMin > 0 {
+		merged.Divergence.RangeMin = update.Divergence.RangeMin
+	}
+	if update.Divergence.RangeMax > 0 {
+		merged.Divergence.RangeMax = update.Divergence.RangeMax
+	}
+
+	// Merge trendline config
+	if update.Trendline.MaxLines > 0 {
+		merged.Trendline.MaxLines = update.Trendline.MaxLines
+	}
+	if update.Trendline.ProximityPercent > 0 {
+		merged.Trendline.ProximityPercent = update.Trendline.ProximityPercent
+	}
+
+	// Merge telegram config - update if any telegram field is set
+	if update.Telegram.Enabled || update.Telegram.BotToken != "" || update.Telegram.ChatID != "" {
+		merged.Telegram.Enabled = update.Telegram.Enabled
+		if update.Telegram.BotToken != "" {
+			merged.Telegram.BotToken = update.Telegram.BotToken
+		}
+		if update.Telegram.ChatID != "" {
+			merged.Telegram.ChatID = update.Telegram.ChatID
+		}
+	}
+
+	// Always merge metrics_filter if provided (even if empty, to allow clearing)
+	if update.MetricsFilter != nil {
+		merged.MetricsFilter = update.MetricsFilter
+	}
+
+	// Always merge alerts if provided (even if empty, to allow clearing)
+	if update.Watchlist != nil {
+		merged.Watchlist = update.Watchlist
+	}
+
+	merged.UpdatedAt = time.Now()
+
+	if err := merged.Validate(); err != nil {
+		return nil, err
+	}
+
+	return &merged, nil
+}
+
+// SymbolsWithEnabledCondition returns the symbols whose Alerts contain an enabled
+// condition of the given type. Used by the analyze-job factories to derive their
+// symbol set from divergence conditions (wrap in a SymbolSelector closure).
+func (c *TradingConfig) SymbolsWithEnabledCondition(t valueobject.TriggerType) []market.Symbol {
+	var symbols []market.Symbol
+	for _, alert := range c.Watchlist {
+		for _, cond := range alert.Conditions {
+			if cond.Enabled && cond.Type == t {
+				symbols = append(symbols, alert.Symbol)
+				break
+			}
+		}
+	}
+	return symbols
+}
+
+// AlertSubsetSymbols returns the deduplicated symbols that have an enabled
+// trendline breakout OR breakdown condition — the "alert subset" whose
+// tick-time resistance/support levels the watchlist evaluator fires on. The
+// Layer-2 alert-level computation derives its watched-symbol set from this, so
+// the selection rule lives here in the domain rather than in the use case.
+func (c *TradingConfig) AlertSubsetSymbols() []market.Symbol {
+	seen := make(map[market.Symbol]struct{})
+	var out []market.Symbol
+	for _, t := range []valueobject.TriggerType{valueobject.TriggerTypeTrendlineBreakout, valueobject.TriggerTypeTrendlineBreakdown} {
+		for _, sym := range c.SymbolsWithEnabledCondition(t) {
+			if _, ok := seen[sym]; ok {
+				continue
+			}
+			seen[sym] = struct{}{}
+			out = append(out, sym)
+		}
+	}
+	return out
+}
+
+// Validate checks all trading config invariants.
+func (c *TradingConfig) Validate() error {
+	var errs []string
+
+	// Use guard clauses for simple required field checks
+	var emptyRSI valueobject.RSIPeriod
+	if c.RSIPeriod == emptyRSI {
+		return shared.NewValidationError("rsi_period is required")
+	}
+
+	var emptyPivot valueobject.PivotPeriod
+	if c.PivotPeriod == emptyPivot {
+		return shared.NewValidationError("pivot_period is required")
+	}
+
+	if c.SignalDaysThreshold < MinSignalDaysThreshold || c.SignalDaysThreshold > MaxSignalDaysThreshold {
+		errs = append(errs, "signal_days_threshold must be between 1 and 365")
+	}
+
+	// Accumulate errors for nested object validations (may have multiple issues)
+	if err := c.Divergence.Validate(); err != nil {
+		errs = append(errs, err.Error())
+	}
+	if err := c.Trendline.Validate(); err != nil {
+		errs = append(errs, err.Error())
+	}
+	if err := c.Telegram.Validate(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	for _, alert := range c.Watchlist {
+		if err := alert.Validate(); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+
+	if len(errs) > 0 {
+		return shared.NewValidationError(errs...)
+	}
+
+	return nil
+}
+
+// AddWatchlistItem appends or replaces an alert for the given symbol.
+// If an alert for the same symbol already exists, it is replaced.
+func (c *TradingConfig) AddWatchlistItem(alert valueobject.WatchlistItem) error {
+	if err := alert.Validate(); err != nil {
+		return err
+	}
+
+	for i, existing := range c.Watchlist {
+		if existing.Symbol == alert.Symbol {
+			c.Watchlist[i] = alert
+			c.UpdatedAt = time.Now()
+			return nil
+		}
+	}
+	c.Watchlist = append(c.Watchlist, alert)
+	c.UpdatedAt = time.Now()
+	return nil
+}
+
+// RemoveWatchlistItem removes an alert for the given symbol.
+// Idempotent: returns nil if no alert exists for the symbol.
+func (c *TradingConfig) RemoveWatchlistItem(symbol market.Symbol) error {
+	for i, existing := range c.Watchlist {
+		if existing.Symbol == symbol {
+			c.Watchlist = append(c.Watchlist[:i], c.Watchlist[i+1:]...)
+			c.UpdatedAt = time.Now()
+			return nil
+		}
+	}
+	return nil
+}

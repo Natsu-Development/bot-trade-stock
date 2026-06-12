@@ -2,6 +2,13 @@
 
 Single source of truth for **which OMC sub-agent runs at which Ralph phase** and **what policy preamble must be in its Task prompt**. Use with `scripts/delegate.sh` for one-command assembly.
 
+> **Scope note — this file is the deliberate exception.** It is **agent-orchestration tooling**,
+> not tool-agnostic repo knowledge, and is the one place under `.context/` where agent/harness
+> names are expected (because this file *is* the harness wiring). The portable, tool-neutral
+> knowledge lives in the rest of `.context/` and in `wiki/`. Anything reusable across tools belongs
+> in those neutral docs, not here; anything specific to a non-default agent belongs in that agent's
+> own config (`CLAUDE.md`, `AGENTS.md`, …), not in this playbook.
+
 ## How to use
 
 Two paths:
@@ -131,25 +138,25 @@ Task: <TASK_DESCRIPTION>
 **Composed from:**
 - `.context/policies/code-intelligence.md` Delegation contract
 - `.context/skills/golang-mastery/SKILL.md` Delegation contract
-- `.context/rules/backend/*.md` (path-specific, for any touched bot-trade file)
+- `.context/rules/backend/*.md` (path-specific, for any touched backend file)
 - `.context/skills/clean-architecture/SKILL.md` (if layer boundaries touched)
 - `.context/skills/trading-domain/SKILL.md` (if trading logic touched)
 
 <!-- BEGIN PROMPT -->
-Before editing any Go symbol in `bot-trade/**/*.go`:
+Before editing any Go symbol in `backend/**/*.go`:
 1. Run `mcp__gitnexus__impact({target: "<symbolName>", direction: "upstream"})`.
    Report direct callers, affected flows, risk level (LOW/MEDIUM/HIGH/CRITICAL).
 2. Refuse to proceed on HIGH/CRITICAL risk without explicit confirmation.
 3. Use `mcp__plugin_oh-my-claudecode_t__lsp_document_symbols` or `lsp_workspace_symbols` to confirm symbol shape before editing.
 
-Before writing Go code in `bot-trade/`:
+Before writing Go code in `backend/`:
 4. `context.Context` first-arg, never stored in structs.
 5. Wrap errors with `fmt.Errorf("...: %w", err)` only when callers inspect; handle each error once (no log + return).
 6. Prefer `errgroup` for bounded parallelism; channel buffers 0 or 1 unless justified.
 7. Early guard clauses, happy path unindented.
 8. Target `go 1.23.0` toolchain — refuse newer features without explicit `go.mod` change.
 9. Respect layer boundaries: lower layers cannot import higher layers (domain ← application ← infrastructure ← presentation).
-10. Apply the 9 Core Rules in `.context/skills/golang-mastery/SKILL.md`.
+10. Rules 4–9 are the critical inline subset; for the complete 9 Core Rules + decision table, read `.context/skills/golang-mastery/SKILL.md` (non-trivial Go work only).
 
 Before reporting completion:
 11. Run smallest Verification Ladder rung that proves the change:
@@ -158,12 +165,11 @@ Before reporting completion:
 13. Run `mcp__gitnexus__detect_changes()`. Report only the symbols/flows that should have changed; flag anything unexpected.
 14. Report which verification rung you ran with fresh output.
 
-Read these for full context as needed:
-- `.context/policies/code-intelligence.md` (full GitNexus + gopls policy)
-- `.context/skills/golang-mastery/SKILL.md` (full skill + decision table)
-- `.context/rules/backend/{architecture,style,naming,error-handling,concurrency,patterns}.md` for the paths you touch
-- `.context/skills/clean-architecture/SKILL.md` if changing layer boundaries
-- `.context/skills/trading-domain/SKILL.md` if changing RSI / divergence / trendlines / RS Rating / alerts
+Read only if needed — the steps above are the inlined essentials; don't pull these for a scoped edit:
+- `.context/rules/backend/{architecture,style,naming,error-handling,concurrency,patterns}.md` — the rule file(s) for the paths you touch.
+- `.context/policies/code-intelligence.md` — for the full rationale / tool boundaries, or after a HIGH/CRITICAL impact result.
+- `.context/skills/clean-architecture/SKILL.md` — if changing layer boundaries.
+- `.context/skills/trading-domain/SKILL.md` — if changing RSI / divergence / trendlines / RS Rating / alerts.
 
 Task: <TASK_DESCRIPTION>
 <!-- END PROMPT -->
@@ -200,10 +206,10 @@ Before reporting:
 
 If you hit the 3-failure circuit breaker (3 hypotheses fail), STOP and escalate to architect instead of trying variations.
 
-Read these for full context as needed:
-- `.context/policies/code-intelligence.md` (debugging routing matrix)
-- `.context/skills/golang-mastery/SKILL.md` (Go idioms)
-- `.context/skills/trading-domain/SKILL.md` if symptom is in indicator/signal logic
+Read only if needed — the steps above are the inlined essentials:
+- `.context/policies/code-intelligence.md` — for the debugging routing matrix / tool boundaries.
+- `.context/skills/golang-mastery/SKILL.md` — for Go idioms on a non-trivial fix.
+- `.context/skills/trading-domain/SKILL.md` — if the symptom is in indicator / signal logic.
 
 Task: <TASK_DESCRIPTION>
 <!-- END PROMPT -->
@@ -220,7 +226,7 @@ Task: <TASK_DESCRIPTION>
 - TDD discipline already in agent prompt (RED-GREEN-REFACTOR)
 
 <!-- BEGIN PROMPT -->
-You are writing or hardening Go tests for `bot-trade/`. Follow strict TDD if the parent story is greenfield; otherwise add tests that mirror existing patterns.
+You are writing or hardening Go tests for `backend/`. Follow strict TDD if the parent story is greenfield; otherwise add tests that mirror existing patterns.
 
 Constraints:
 1. Match existing test patterns in the package — same framework (`testing` stdlib), table-driven structure, naming convention.

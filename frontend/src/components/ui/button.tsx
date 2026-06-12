@@ -5,17 +5,18 @@ import { cn } from '@/lib/utils'
 import { Icons, type IconName } from '@/components/icons/Icons'
 
 const buttonVariants = cva(
-  'inline-flex items-center gap-2 rounded-md font-display text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neon-cyan)] disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex cursor-pointer items-center gap-2 rounded-md font-display text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neon-cyan)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',
   {
     variants: {
       variant: {
         primary:
-          'bg-gradient-to-br from-[var(--neon-bull)] to-[#00cc6a] text-[var(--bg-void)] border-none shadow-[0_4px_20px_var(--neon-bull-dim)] hover:-translate-y-px hover:shadow-[var(--neon-bull-glow)]',
+          'bg-gradient-to-br from-[var(--neon-bull)] to-[var(--neon-bull-deep)] text-[var(--bg-void)] border-none shadow-[0_4px_20px_var(--neon-bull-dim)] hover:-translate-y-px hover:shadow-[var(--neon-bull-glow)]',
         secondary:
           'bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-glow)] hover:bg-[var(--bg-hover)] hover:border-[var(--neon-cyan)]',
-        ghost: 'bg-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)]',
-        bear: 'bg-gradient-to-br from-[var(--neon-bear)] to-[#cc2952] text-[var(--bg-void)] border-none shadow-[0_4px_20px_var(--neon-bear-dim)] hover:-translate-y-px hover:shadow-[var(--neon-bear-glow)]',
-        cyan: 'bg-gradient-to-br from-[var(--neon-cyan)] to-[#00a8cc] text-[var(--bg-void)] border-none shadow-[0_4px_20px_var(--neon-cyan-dim)] hover:-translate-y-px',
+        ghost:
+          'bg-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)]',
+        bear: 'bg-gradient-to-br from-[var(--neon-bear)] to-[var(--neon-bear-deep)] text-[var(--bg-void)] border-none shadow-[0_4px_20px_var(--neon-bear-dim)] hover:-translate-y-px hover:shadow-[var(--neon-bear-glow)]',
+        cyan: 'bg-gradient-to-br from-[var(--neon-cyan)] to-[var(--neon-cyan-deep)] text-[var(--bg-void)] border-none shadow-[0_4px_20px_var(--neon-cyan-dim)] hover:-translate-y-px',
       },
       size: {
         default: 'h-10 px-5',

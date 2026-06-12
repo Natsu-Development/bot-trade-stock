@@ -98,7 +98,7 @@ export function useConfigId(): UseConfigIdReturn {
     try {
       // Try to get existing config
       await api.getConfig(trimmed)
-    } catch (err) {
+    } catch {
       // Config doesn't exist - create it
       try {
         await api.createConfig(trimmed)

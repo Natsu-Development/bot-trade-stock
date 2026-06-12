@@ -39,54 +39,60 @@ export const CrosshairOverlay = forwardRef<CrosshairOverlayRef, CrosshairOverlay
     const lastInfoRef = useRef<CrosshairInfo>({})
 
     // Expose update method via ref for direct DOM manipulation (no React re-render)
-    useImperativeHandle(ref, () => ({
-      update: (info: CrosshairInfo) => {
-        if (!containerRef.current) return
+    useImperativeHandle(
+      ref,
+      () => ({
+        update: (info: CrosshairInfo) => {
+          if (!containerRef.current) return
 
-        // Show/hide container based on data availability
-        if (!info.OHLC) {
-          containerRef.current.style.display = 'none'
-          lastInfoRef.current = {}
-          return
-        }
-
-        containerRef.current.style.display = 'block'
-
-        // Update date
-        if (dateRef.current && info.time !== lastInfoRef.current.time) {
-          dateRef.current.textContent = formatDate(info.time || '')
-        }
-
-        // Update OHLC values directly via DOM
-        if (info.OHLC) {
-          if (openRef.current && info.OHLC.open !== lastInfoRef.current.OHLC?.open) {
-            openRef.current.textContent = formatPrice(info.OHLC.open)
+          // Show/hide container based on data availability
+          if (!info.OHLC) {
+            containerRef.current.style.display = 'none'
+            lastInfoRef.current = {}
+            return
           }
-          if (highRef.current && info.OHLC.high !== lastInfoRef.current.OHLC?.high) {
-            highRef.current.textContent = formatPrice(info.OHLC.high)
-          }
-          if (lowRef.current && info.OHLC.low !== lastInfoRef.current.OHLC?.low) {
-            lowRef.current.textContent = formatPrice(info.OHLC.low)
-          }
-          if (closeRef.current) {
-            const closeChanged = info.OHLC.close !== lastInfoRef.current.OHLC?.close
-            const directionChanged = lastInfoRef.current.OHLC &&
-              (info.OHLC.close >= info.OHLC.open) !== (lastInfoRef.current.OHLC.close >= lastInfoRef.current.OHLC.open)
 
-            if (closeChanged || directionChanged) {
-              closeRef.current.textContent = formatPrice(info.OHLC.close)
-              // Update color class based on bullish/bearish
-              const isBullish = info.OHLC.close >= info.OHLC.open
-              closeRef.current.className = isBullish
-                ? 'text-[var(--neon-bull)]'
-                : 'text-[var(--neon-bear)]'
+          containerRef.current.style.display = 'block'
+
+          // Update date
+          if (dateRef.current && info.time !== lastInfoRef.current.time) {
+            dateRef.current.textContent = formatDate(info.time || '')
+          }
+
+          // Update OHLC values directly via DOM
+          if (info.OHLC) {
+            if (openRef.current && info.OHLC.open !== lastInfoRef.current.OHLC?.open) {
+              openRef.current.textContent = formatPrice(info.OHLC.open)
+            }
+            if (highRef.current && info.OHLC.high !== lastInfoRef.current.OHLC?.high) {
+              highRef.current.textContent = formatPrice(info.OHLC.high)
+            }
+            if (lowRef.current && info.OHLC.low !== lastInfoRef.current.OHLC?.low) {
+              lowRef.current.textContent = formatPrice(info.OHLC.low)
+            }
+            if (closeRef.current) {
+              const closeChanged = info.OHLC.close !== lastInfoRef.current.OHLC?.close
+              const directionChanged =
+                lastInfoRef.current.OHLC &&
+                info.OHLC.close >= info.OHLC.open !==
+                  lastInfoRef.current.OHLC.close >= lastInfoRef.current.OHLC.open
+
+              if (closeChanged || directionChanged) {
+                closeRef.current.textContent = formatPrice(info.OHLC.close)
+                // Update color class based on bullish/bearish
+                const isBullish = info.OHLC.close >= info.OHLC.open
+                closeRef.current.className = isBullish
+                  ? 'text-[var(--neon-bull)]'
+                  : 'text-[var(--neon-bear)]'
+              }
             }
           }
-        }
 
-        lastInfoRef.current = info
-      }
-    }), [])
+          lastInfoRef.current = info
+        },
+      }),
+      []
+    )
 
     // Initialize hidden state
     useEffect(() => {

@@ -2,7 +2,7 @@
 name: backend-style
 description: Go style guide - principles, configuration, guard clauses
 paths:
-  - "bot-trade/**/*.go"
+  - "backend/**/*.go"
 ---
 
 # Go Style Guide

@@ -1,11 +1,11 @@
 ---
 paths:
-  - "bot-trade/**/*.go"
+  - "backend/**/*.go"
 ---
 
-# Go Concurrency Rules (bot-trade)
+# Go Concurrency Rules (backend)
 
-> Path-specific quick lookup for any concurrency change in `bot-trade/**/*.go`.
+> Path-specific quick lookup for any concurrency change in `backend/**/*.go`.
 > **Canonical patterns** (worker pool, fan-out/in, pipeline, semaphore, rate limiter, sync primitives, full code examples) live in [`../../skills/golang-mastery/references/concurrency.md`](../../skills/golang-mastery/references/concurrency.md). Read that for deep patterns.
 
 ## Channel rules
@@ -28,7 +28,7 @@ paths:
 
 ## Verification gate
 
-For any concurrency change in `bot-trade/**/*.go`:
+For any concurrency change in `backend/**/*.go`:
 
 ```bash
 go test -race -count=1 ./affected/pkg/...

@@ -12,7 +12,7 @@ docker/
 ```
 
 **Note:** Dockerfile is in the service directory:
-- `bot-trade/Dockerfile` - Go trading bot service
+- `backend/Dockerfile` - Go trading bot service
 
 ## 🚀 Quick Start
 
@@ -26,21 +26,21 @@ make docker-down        # Stop all services
 ## 🔧 Services
 
 ### Bot-Trade Service (Go)
-- **File**: `bot-trade/Dockerfile`
+- **File**: `backend/Dockerfile`
 - **Port**: 8080 (HTTP)
 - **Purpose**: Trading analysis and API endpoints
-- **Environment**: Loads from `../bot-trade/.env`
+- **Environment**: Loads from `../backend/.env`
 
 ## ⚙️ Configuration
 
 ### Local Development
-Uses `docker-compose.yml` with environment from `bot-trade/.env` file:
+Uses `docker-compose.yml` with environment from `backend/.env` file:
 
 ```bash
 # Create .env from template
-cp bot-trade/env.example bot-trade/.env
+cp backend/env.example backend/.env
 # Edit with your values
-nano bot-trade/.env
+nano backend/.env
 ```
 
 ### Production Deployment
@@ -61,8 +61,8 @@ services:
 **Security:** Secrets are injected via SSH during deployment, never stored in artifacts.
 
 ### Environment Files
-- `bot-trade/env.example` - Template with all variables
-- `bot-trade/.env` - Local development (git-ignored)
+- `backend/env.example` - Template with all variables
+- `backend/.env` - Local development (git-ignored)
 - `.env.secrets` - Production secrets (created on VM only)
 
 ## 🐳 Docker Commands
@@ -133,7 +133,7 @@ Docker containers read .env.secrets
 **Local Development:**
 ```bash
 # 1. Edit .env file
-nano bot-trade/.env
+nano backend/.env
 
 # 2. Restart services
 make docker-restart
@@ -160,7 +160,7 @@ make docker-clean && make docker-up  # Clean rebuild
 **Environment variables not working:**
 ```bash
 # Local: Check .env file
-cat bot-trade/.env
+cat backend/.env
 
 # Production: Check .env.secrets on VM
 ssh user@server
@@ -180,7 +180,7 @@ cat /opt/trading-app/.env.secrets
 - `TELEGRAM_BOT_TOKEN` - Telegram bot authentication token
 - `TELEGRAM_CHAT_ID` - Telegram chat ID for notifications
 
-See `bot-trade/env.example` for complete list of all variables.
+See `backend/env.example` for complete list of all variables.
 
 ---
 
